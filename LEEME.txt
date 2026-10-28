@@ -1,0 +1,10 @@
+LIBRETA DE VACAS - actualizar la versión publicada en GitHub
+
+1) Descomprimí este zip. Vas a tener 8 archivos sueltos.
+2) Entrá a tu repositorio en github.com (Libreta-syscaw).
+3) "Add file" > "Upload files". Arrastrá los archivos (no la carpeta ni el zip). Si pregunta, confirmá que reemplaza los existentes.
+4) Tocá "Commit changes". En uno o dos minutos la página queda actualizada.
+5) En los celulares, cerrá la app y volvela a abrir. La libreta ya cargada se conserva.
+
+Primera vez: el celular abre el enlace, toca "Elegir archivo" y selecciona el Excel de la libreta.
+Después de cargarla, la app pregunta el nombre del tambo. El logo se agrega en el ícono de ajustes (arriba a la derecha).

@@ -1,0 +1,16 @@
+{
+  "name": "Libreta de vacas",
+  "short_name": "Libreta",
+  "description": "Consulta la situación reproductiva de cada vaca desde tu libreta de Excel.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#14284B",
+  "theme_color": "#14284B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
