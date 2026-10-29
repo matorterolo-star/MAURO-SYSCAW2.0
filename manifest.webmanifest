@@ -1,7 +1,7 @@
 {
   "name": "Libreta de vacas",
   "short_name": "Libreta",
-  "description": "Consulta la situación reproductiva de cada vaca desde tu libreta de Excel.",
+  "description": "Consulta la situación reproductiva de cada animal desde el respaldo de SysCaw o la libreta de Excel.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",

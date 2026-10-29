@@ -1,5 +1,5 @@
-const CACHE = 'libreta-v3';
-const FILES = ['./', 'index.html', 'app.js', 'xlsx.full.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'libreta-v4';
+const FILES = ['./', 'index.html', 'app.js', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js', 'syscaw.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });

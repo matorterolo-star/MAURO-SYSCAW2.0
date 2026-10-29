@@ -1,10 +1,12 @@
 LIBRETA DE VACAS - actualizar la versión publicada en GitHub
 
-1) Descomprimí este zip. Vas a tener 8 archivos sueltos.
-2) Entrá a tu repositorio en github.com (Libreta-syscaw).
+1) Descomprimí este zip. Vas a tener 12 archivos sueltos.
+2) Entrá a tu repositorio en github.com (MAURO-SYSCAW2.0).
 3) "Add file" > "Upload files". Arrastrá los archivos (no la carpeta ni el zip). Si pregunta, confirmá que reemplaza los existentes.
 4) Tocá "Commit changes". En uno o dos minutos la página queda actualizada.
-5) En los celulares, cerrá la app y volvela a abrir. La libreta ya cargada se conserva.
+5) En los celulares, cerrá la app y volvela a abrir (si no cambia, cerrala y abrila una vez más).
 
-Primera vez: el celular abre el enlace, toca "Elegir archivo" y selecciona el Excel de la libreta.
-Después de cargarla, la app pregunta el nombre del tambo. El logo se agrega en el ícono de ajustes (arriba a la derecha).
+Cargar datos: tocá el ícono de ajustes (arriba a la derecha) > "Cargar respaldo o libreta" y elegí:
+ - el respaldo de SysCaw (.rar), que trae vacas, vaquillonas, terneras e historial completo, o
+ - la libreta en Excel (.xls / .xlsx), como antes.
+Después de cargar, la app propone el nombre del tambo. El logo se agrega en ajustes.

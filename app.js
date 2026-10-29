@@ -173,7 +173,7 @@
       if (a.estado === 'prenada' && d.partoProb) {
         var ds = diffDays(d.secado, hoy), dp = diffDays(d.partoProb, hoy);
         if (dp >= 0) {
-          if (ds <= ventana) secar.push({ a: a, dias: ds, fecha: d.secado });
+          if (ds <= ventana && a.cat !== 'vaquillona') secar.push({ a: a, dias: ds, fecha: d.secado });
           if (dp <= ventana) partos.push({ a: a, dias: dp, fecha: d.partoProb });
         }
       }
@@ -221,7 +221,7 @@
     var KEY = 'libreta:v1', KEYP = 'libreta:perfil';
     var DB = { animales: [], cargada: null, archivo: '' };
     var PERFIL = { nombre: '', logo: '' };
-    var state = { tab: 'buscar', q: '', filtro: 'todas', n: 60, rp: null, ventana: 183, abiertas: {}, error: '', persisted: true, draft: null };
+    var state = { tab: 'buscar', q: '', filtro: 'todas', n: 60, rp: null, ventana: 183, abiertas: {}, error: '', persisted: true, draft: null, cat: 'vaca' };
     var $ = function (s) { return document.querySelector(s); };
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
     var today = function () { return A.ymd(new Date()); };
@@ -232,11 +232,36 @@
     var ORDEN = ['prenada', 'servida', 'vacia', 'ciclando', 'apta', 'sin', 'otro'];
 
     /* ----- almacenamiento ----- */
+    function idb() {
+      return new Promise(function (res, rej) {
+        try {
+          var r = indexedDB.open('libreta', 1);
+          r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+          r.onsuccess = function () { res(r.result); };
+          r.onerror = function () { rej(r.error); };
+        } catch (e) { rej(e); }
+      });
+    }
+    function idbGet(k) { return idb().then(function (db) { return new Promise(function (res, rej) { var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); }; }); }); }
+    function idbSet(k, v) { return idb().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = function () { res(); }; tx.onerror = function () { rej(tx.error); }; }); }); }
     function loadAll() {
       try { var r = localStorage.getItem(KEY); if (r) { var o = JSON.parse(r); if (o && Array.isArray(o.animales)) DB = o; } } catch (e) { state.persisted = false; }
       try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
+      try { var c = localStorage.getItem('libreta:cat'); if (c) state.cat = c; } catch (e) {}
+      // la libreta grande (respaldo SysCaw) se guarda en IndexedDB
+      return idbGet('db').then(function (o) {
+        if (o && Array.isArray(o.animales) && o.animales.length && (o.guardada || 0) >= (DB.guardada || 0)) { DB = o; return true; }
+        return false;
+      }, function () { return false; });
     }
-    function saveDB() { try { localStorage.setItem(KEY, JSON.stringify(DB)); state.persisted = true; } catch (e) { state.persisted = false; } }
+    function saveDB() {
+      DB.guardada = Date.now();
+      return idbSet('db', DB).then(function () {
+        state.persisted = true; try { localStorage.removeItem(KEY); } catch (e) {}
+      }, function () {
+        try { localStorage.setItem(KEY, JSON.stringify(DB)); state.persisted = true; } catch (e) { state.persisted = false; }
+      }).then(function () { render(); });
+    }
     function savePerfil() { try { localStorage.setItem(KEYP, JSON.stringify(PERFIL)); } catch (e) {} }
     function byRp(rp) { for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i]; return null; }
     function toast(msg) {
@@ -258,14 +283,33 @@
       var n = f.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\b(copia de|libreta|syscaw|sys caw)\b/gi, '').replace(/[-]+/g, ' ').replace(/\s+/g, ' ').trim();
       return n;
     }
+    function busy(on, msg) { $('#busy').hidden = !on; if (msg) $('#busyMsg').innerHTML = msg; }
+    function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+    function esRar(buf) { var u = new Uint8Array(buf, 0, Math.min(4, buf.byteLength)); return u[0] === 0x52 && u[1] === 0x61 && u[2] === 0x72 && u[3] === 0x21; }
+    function cargarRespaldo(buf, f) {
+      busy(true, 'Leyendo respaldo de SysCaw…<small>Puede tardar unos segundos</small>');
+      setTimeout(function () {
+        root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox }).then(function (d) {
+          DB = { animales: d.animales, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          busy(false);
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
+          try { location.hash = ''; } catch (e) {}
+          render();
+          toast(d.animales.length + ' animales cargados del respaldo');
+          openSheet('Nombre del tambo', d.tambo || PERFIL.nombre);
+        }).catch(function (e) { busy(false); state.error = 'No pude leer el respaldo: ' + (e && e.message || e); render(); });
+      }, 30);
+    }
     function handleFile(f) {
       if (!f) return;
       var fr = new FileReader();
       fr.onload = function () {
+        if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
         try {
           var res = A.parseLibreta(root.XLSX, fr.result);
-          DB = { animales: res.animales, cargada: today(), archivo: f.name };
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar';
+          res.animales.forEach(function (a) { a.cat = 'vaca'; });
+          DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: DB.hist, codes: DB.codes, fecha: DB.fecha };
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
           try { location.hash = ''; } catch (e) {}
           render();
           toast(res.animales.length + ' animales cargados');
@@ -340,30 +384,53 @@
     });
 
     /* ----- piezas comunes ----- */
-    function labelOf(a) { return a.celo ? 'Preñada + celo' : a.estado === 'otro' ? (a.result || 'Otro') : LABEL[a.estado]; }
+    function labelOf(a) {
+      if (a.cat === 'ternera' && a.estado === 'sin') return 'Ternera';
+      if (a.cat === 'vaquillona' && a.estado === 'sin') return 'Sin servicio';
+      return a.celo ? 'Preñada + celo' : a.estado === 'otro' ? (a.result || 'Otro') : LABEL[a.estado];
+    }
     function chip(a) { return '<span class="chip ' + a.estado + '">' + esc(labelOf(a)) + '</span>'; }
     function subDefault(a) {
       var d = A.derive(a, today()), sub = '';
       if (a.estado === 'prenada' && d.partoProb) sub = (d.partoEstimado ? 'Parto estimado ' : 'Parto probable ') + A.fmt(d.partoProb);
+      else if (a.estado === 'servida' && a.sFecha) sub = 'Servicio ' + A.fmt(a.sFecha) + (a.toro && !/^celo/i.test(a.toro) ? ' · ' + a.toro : '');
       else if (a.tFecha) sub = 'Tacto ' + A.fmt(a.tFecha);
       else if (a.sFecha) sub = (/^celo/i.test(a.toro || '') ? 'Celo ' : 'Servicio ') + A.fmt(a.sFecha);
-      return esc(sub) + (a.rech ? ' <span class="dsc">Descarte</span>' : '');
+      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + esc(sub) + (a.rech ? ' <span class="dsc">Descarte</span>' : '');
     }
     function rowHTML(a, o) {
       o = o || {};
       return '<button class="row" data-rp="' + esc(a.rp) + '">' + tagSVG(a.rp, 54) +
         '<span class="who">' + esc(a.nombre || 'Sin nombre') + '</span>' +
         '<span class="rt">' + (o.right != null ? o.right : chip(a)) + '</span>' +
-        '<span class="sub">' + (o.sub != null ? o.sub : subDefault(a)) + '</span></button>';
+        '<span class="sub">' + (o.sub != null ? (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + o.sub : subDefault(a)) + '</span></button>';
     }
     function emptyHTML() {
-      return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá tu libreta</h2>' +
-        '<p>Elegí el archivo Excel (.xls o .xlsx) exportado de SysCaw. Se lee en este teléfono y no se sube a ningún servidor.</p>' +
+      return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá el respaldo</h2>' +
+        '<p>Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
         '<button class="btn primary big" data-a="load">Elegir archivo</button></section>';
     }
     function matchFiltro(a, f) { return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
+    /* ----- categorías (vacas, vaquillonas, terneras) ----- */
+    var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
+    var GL = { vaca: 'Vacas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
+    function grupo(a) { return a.cat === 'seca' ? 'vaca' : (a.cat || 'vaca'); }
+    function grupos() { var g = {}; DB.animales.forEach(function (a) { g[grupo(a)] = (g[grupo(a)] || 0) + 1; }); return g; }
+    function lista() {
+      var g = grupos(), orden = ['vaca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
+      if (orden.indexOf(state.cat) < 0) state.cat = orden[0] || 'vaca';
+      return DB.animales.filter(function (a) { return grupo(a) === state.cat; });
+    }
+    function catsHTML() {
+      var g = grupos(), orden = ['vaca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
+      if (orden.length < 2) return '';
+      return '<div class="cats" role="group" aria-label="Categoría">' + orden.map(function (k) {
+        return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
+      }).join('') + '</div>';
+    }
+    function nombreGrupo(n) { return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : (n === 1 ? 'vaca' : 'vacas'); }
     function ordenar(list, f) {
       var h = today();
       var key = function (a) {
@@ -377,15 +444,15 @@
 
     /* ----- pestaña Buscar ----- */
     function buscarHTML() {
-      var c = A.conteo(DB.animales), nDesc = DB.animales.filter(function (a) { return a.rech; }).length;
-      var fl = [['todas', 'Todas', DB.animales.length]];
-      ORDEN.forEach(function (k) { if (c[k]) fl.push([k, k === 'prenada' ? 'Preñadas' : k === 'servida' ? 'Servidas' : k === 'vacia' ? 'Vacías' : LABEL[k], c[k]]); });
-      var nCelo = DB.animales.filter(function (a) { return a.celo; }).length;
+      var L = lista(), c = A.conteo(L), nDesc = L.filter(function (a) { return a.rech; }).length;
+      var fl = [['todas', 'Todas', L.length]];
+      ORDEN.forEach(function (k) { if (c[k]) fl.push([k, k === 'prenada' ? 'Preñadas' : k === 'servida' ? 'Servidas' : k === 'vacia' ? 'Vacías' : (k === 'sin' && state.cat === 'vaquillona') ? 'Sin servicio' : (k === 'sin' && state.cat === 'ternera') ? 'Sin servicio' : LABEL[k], c[k]]); });
+      var nCelo = L.filter(function (a) { return a.celo; }).length;
       if (nCelo) fl.push(['pcelo', 'Preñada + celo', nCelo]);
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
       return '<div class="searchbox"><label class="sr" for="q">Caravana o nombre</label>' +
         '<svg class="mag" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' +
-        '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana o nombre" value="' + esc(state.q) + '"></div>' +
+        '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana o nombre" value="' + esc(state.q) + '"></div>' + catsHTML() +
         '<div class="filters" role="group" aria-label="Filtrar por estado">' + fl.map(function (f) {
           return '<button class="fchip ' + f[0] + '" data-f="' + f[0] + '" aria-pressed="' + (state.filtro === f[0]) + '">' + f[1] + ' <b>' + f[2] + '</b></button>';
         }).join('') + '</div><div id="results"></div>';
@@ -394,18 +461,18 @@
       var box = $('#results'); if (!box) return;
       var q = state.q.trim(), f = state.filtro, html = '', list;
       if (q) {
-        list = A.search(DB.animales, q).filter(function (a) { return matchFiltro(a, f); });
+        list = A.search(DB.animales, q).filter(function (a) { return f === 'todas' || matchFiltro(a, f); });
         html = list.length
           ? '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('')
           : '<p class="hint">No hay animales con "' + esc(q) + '"' + (f !== 'todas' ? ' en este filtro' : '') + '. Probá con otra caravana o con parte del nombre.</p>';
         if (list.length > 40) html += '<p class="hint">Mostrando 40. Escribí más para acotar.</p>';
       } else if (f !== 'todas') {
-        list = ordenar(DB.animales.filter(function (a) { return matchFiltro(a, f); }), f);
+        list = ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
         var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
-        html = '<h2 class="h">' + list.length + ' vacas' + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
+        html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       } else {
-        html = '<p class="hint">Escribí la caravana de la vaca, o tocá un estado para ver la lista.</p>';
+        html = '<p class="hint">Escribí la caravana del animal, o tocá un estado para ver la lista.</p>';
       }
       box.innerHTML = html;
     }
@@ -423,7 +490,7 @@
       return h + '</section>';
     }
     function tareasHTML() {
-      var t = A.tareas(DB.animales, today(), state.ventana), vtxt = (VENT.filter(function (v) { return v[0] === state.ventana; })[0] || [0, ''])[1];
+      var t = A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), state.ventana), vtxt = (VENT.filter(function (v) { return v[0] === state.ventana; })[0] || [0, ''])[1];
       var chips = '<div class="filters" role="group" aria-label="Ventana de tiempo">' + VENT.map(function (v) {
         return '<button class="fchip plain" data-v="' + v[0] + '" aria-pressed="' + (state.ventana === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
@@ -453,23 +520,23 @@
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes">' + s + '</svg>';
     }
     function rodeoHTML() {
-      var r = A.resumen(DB.animales, today()), c = r.conteo;
+      var L = lista(), r = A.resumen(L, today()), c = r.conteo;
       var seg = ORDEN.filter(function (k) { return c[k]; }).map(function (k) {
         return '<span class="seg ' + k + '" style="flex:' + c[k] + '" title="' + LABEL[k] + '"></span>';
       }).join('');
       var leg = ORDEN.filter(function (k) { return c[k]; }).map(function (k) {
-        return '<button class="lg" data-go="' + k + '"><i class="dot ' + k + '"></i><span class="ln">' + (k === 'prenada' ? 'Preñadas' : k === 'servida' ? 'Servidas' : k === 'vacia' ? 'Vacías' : k === 'otro' ? 'Otros' : LABEL[k]) + '</span><b>' + c[k] + '</b><span class="pc">' + pct(c[k], r.total) + '</span></button>';
+        return '<button class="lg" data-go="' + k + '"><i class="dot ' + k + '"></i><span class="ln">' + (k === 'prenada' ? 'Preñadas' : k === 'servida' ? 'Servidas' : k === 'vacia' ? 'Vacías' : k === 'otro' ? 'Otros' : (k === 'sin' && state.cat !== 'vaca') ? 'Sin servicio' : LABEL[k]) + '</span><b>' + c[k] + '</b><span class="pc">' + pct(c[k], r.total) + '</span></button>';
       }).join('');
-      var nPc = DB.animales.filter(function (a) { return a.celo; }).length;
+      var nPc = L.filter(function (a) { return a.celo; }).length;
       if (nPc) leg += '<button class="lg" data-go="pcelo"><i class="dot prenada"></i><span class="ln">Preñada + celo</span><b>' + nPc + '</b><span class="pc">' + pct(nPc, r.total) + '</span></button>';
       if (r.descarte) leg += '<button class="lg" data-go="descarte"><i class="dot descarte"></i><span class="ln">Descarte programado</span><b>' + r.descarte + '</b><span class="pc">' + pct(r.descarte, r.total) + '</span></button>';
-      var rod = r.rodeos.length > 1 ? '<section class="card"><h2>Por rodeo</h2><table class="tbl"><thead><tr><th>Rodeo</th><th>Vacas</th><th>Preñadas</th></tr></thead><tbody>' + r.rodeos.map(function (x) {
+      var rod = r.rodeos.length > 1 ? '<section class="card"><h2>Por rodeo</h2><table class="tbl"><thead><tr><th>Rodeo</th><th>' + GL[state.cat] + '</th><th>Preñadas</th></tr></thead><tbody>' + r.rodeos.map(function (x) {
         return '<tr><td>' + esc(x.rod) + '</td><td>' + x.n + '</td><td>' + x.pren + ' <small>' + pct(x.pren, x.n) + '</small></td></tr>';
       }).join('') + '</tbody></table></section>' : '';
       var aviso = r.antes ? '<p class="secnote warnnote">' + r.antes + ' preñadas tienen el parto probable vencido.</p>' : '';
-      return '<h1 class="ptitle">Rodeo</h1>' +
-        '<section class="card"><h2>' + nf(r.total) + ' animales</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
-        '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>' +
+      return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
+        '<section class="card"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
+        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod;
     }
 
@@ -499,27 +566,167 @@
       return '<svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Litros por control lechero">' + s + '</svg>' +
         '<p class="cap">Litros por control, del más viejo al más reciente (Pr1).</p>';
     }
+
+    /* ----- historial SysCaw ----- */
+    var EVL = { C: 'Celo', S: 'Servicio' };
+    function hist(rp) { return DB.hist ? DB.hist[rp] || null : null; }
+    function codeName(c) { var k = DB.codes && DB.codes[String(c)]; return k ? k[1] : 'Código ' + c; }
+    function tacClass(c) { return c === 1 ? 'prenada' : (c === 7 || c === 105 || c === 72) ? 'vacia' : ''; }
+    function criaTxt(r) {
+      var m = { M: 'Macho', H: 'Hembra', A: 'Aborto', '?': 'Sin dato' };
+      return String(r || '').split('/').filter(Boolean).map(function (x) { return m[x] || x; }).join(' y ');
+    }
+    function lactaciones(h) {
+      // segmentos: [desde, hasta) por parto; índice 0 = antes del 1er parto
+      var pa = h.pa, segs = [];
+      var bounds = ['0000-00-00'].concat(pa.map(function (p) { return p[0]; })).concat(['9999-99-99']);
+      for (var i = 0; i < bounds.length - 1; i++) {
+        var from = bounds[i], to = bounds[i + 1], parto = i > 0 ? pa[i - 1] : null, next = pa[i] || null;
+        var items = [];
+        h.ev.forEach(function (e) { if (e[0] >= from && e[0] < to && !(parto && e[0] === from && e[1] === 'C')) items.push({ f: e[0], t: e[1], toro: e[2] }); });
+        h.ta.forEach(function (t) { if (t[0] >= from && t[0] < to) items.push({ f: t[0], t: 'T', c: t[1] }); });
+        items.sort(function (a, b) { return a.f < b.f ? -1 : a.f > b.f ? 1 : (b.t === 'T') - (a.t === 'T'); });
+        var conc = next ? next[4] : null, nServ = 0, nServTot = 0;
+        items.forEach(function (it) { if (it.t === 'S') { nServTot++; if (!conc || it.f <= conc) nServ++; if (conc && it.f === conc) it.ok = true; } });
+        segs.push({ parto: parto, next: next, items: items, conc: conc, nServ: conc ? nServ : null, nServTot: nServTot, from: from });
+      }
+      if (!segs[0].items.length) segs.shift();
+      return segs;
+    }
+    function resumenHist(h) {
+      var segs = lactaciones(h), spc = [], iep = [], pcon = [];
+      segs.forEach(function (s) {
+        if (s.parto && s.next && s.conc) {
+          if (s.nServ) spc.push(s.nServ);
+          iep.push(A.diffDays(s.next[0], s.parto[0]));
+          pcon.push(A.diffDays(s.conc, s.parto[0]));
+        }
+      });
+      var avg = function (l) { return l.length ? l.reduce(function (a, b) { return a + b; }, 0) / l.length : null; };
+      return { segs: segs, spc: avg(spc), iep: avg(iep), pcon: avg(pcon), n: iep.length };
+    }
+    function histHTML(a, h) {
+      var t = today(), R = resumenHist(h), segs = R.segs.slice().reverse();
+      var dec = function (x, d) { return x == null ? '–' : x.toLocaleString('es-UY', { maximumFractionDigits: d, minimumFractionDigits: d }); };
+      var sum = R.n ? '<div class="histsum">' +
+        '<div><b>' + dec(R.spc, 1) + '</b><span>Servicios por preñez</span></div>' +
+        '<div><b>' + dec(R.pcon, 0) + '</b><span>Días parto a concepción</span></div>' +
+        '<div><b>' + dec(R.iep, 0) + '</b><span>Intervalo entre partos</span></div></div>' +
+        '<p class="cap" style="margin:-4px 0 8px">Promedio de ' + R.n + (R.n === 1 ? ' lactancia cerrada.' : ' lactancias cerradas.') + '</p>' : '';
+      var body = segs.map(function (s, i) {
+        var title, sub = [];
+        if (s.parto) {
+          title = 'Lactancia ' + s.parto[1];
+          sub.push('Parto ' + A.fmt(s.parto[0]));
+        } else { title = 'Vaquillona'; }
+        if (s.conc) sub.push(s.nServ + ' serv. a preñez');
+        else if (s.nServTot) sub.push(s.nServTot + ' serv.');
+        var li = [];
+        if (s.parto) {
+          var pt = s.parto, cria = criaTxt(pt[2]);
+          li.push('<li class="parto"><span class="f">' + A.fmt(pt[0]) + '</span><span><b>Parto ' + pt[1] + '</b>' + (cria ? ' · ' + esc(cria) : '') + (pt[3] ? ' · ' + esc(pt[3]) : '') + '</span><span class="d"></span></li>');
+        }
+        s.items.forEach(function (it) {
+          var dpp = s.parto ? A.diffDays(it.f, s.parto[0]) : null, cls, txt;
+          if (it.t === 'T') { cls = 'tac ' + tacClass(it.c); txt = 'Tacto: <b>' + esc(codeName(it.c)) + '</b>'; }
+          else if (it.t === 'S') { cls = 'serv' + (it.ok ? ' ok' : ''); txt = '<b>Servicio</b>' + (it.toro ? ' · ' + esc(it.toro) : '') + (it.ok ? '<span class="x">preñó</span>' : ''); }
+          else { cls = 'celo'; txt = 'Celo'; }
+          li.push('<li class="' + cls + '"><span class="f">' + A.fmt(it.f) + '</span><span>' + txt + '</span><span class="d">' + (dpp != null ? dpp + ' dpp' : '') + '</span></li>');
+        });
+        if (s.parto && s.parto[5]) li.push('<li><span class="f">' + A.fmt(s.parto[5]) + '</span><span>Secado</span><span class="d">' + A.diffDays(s.parto[5], s.parto[0]) + ' días</span></li>');
+        if (!s.items.length && !s.parto) return '';
+        return '<details class="lac"' + (i === 0 ? ' open' : '') + '><summary><span class="l"><b>' + title + '</b></span><small>' + sub.join(' · ') + '</small></summary><ul class="tl">' + li.join('') + '</ul></details>';
+      }).join('');
+      return '<section class="card"><h2>Historial reproductivo</h2>' + sum + body + '</section>';
+    }
+    function ctrlChart(ct) {
+      var pts = ct.filter(function (c) { return c[1] != null; });
+      if (pts.length < 2) return '';
+      var W = 300, H = 130, L = 26, Rr = 40, T = 10, B = 22, n = pts.length;
+      var maxL = Math.max.apply(null, pts.map(function (c) { return c[1]; })) * 1.1;
+      var csv = pts.map(function (c) { return c[4]; }).filter(function (v) { return v != null; });
+      var maxC = Math.max(400, csv.length ? Math.max.apply(null, csv) * 1.1 : 0);
+      var bw0 = Math.max(4, Math.min(18, (W - L - Rr) / n * 0.6));
+      var X = function (i) { return L + bw0 / 2 + 4 + (n === 1 ? 0 : i * (W - L - Rr - bw0 - 8) / (n - 1)); };
+      var Y = function (v) { return T + (1 - v / maxL) * (H - T - B); };
+      var YC = function (v) { return T + (1 - v / maxC) * (H - T - B); };
+      var bw = bw0, s = '';
+      s += '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + YC(200).toFixed(1) + '" y2="' + YC(200).toFixed(1) + '" stroke="var(--vacia)" stroke-dasharray="3 3" stroke-width="1" opacity=".6"/>';
+      s += '<text class="lbl" x="' + (W - Rr + 3) + '" y="' + (YC(200) + 3).toFixed(1) + '">200</text>';
+      pts.forEach(function (c, i) {
+        var x = X(i), y = Y(c[1]);
+        s += '<rect class="bar' + (i === n - 1 ? ' last' : '') + '" x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (H - B - y).toFixed(1) + '" rx="2"><title>' + A.fmt(c[0]) + ': ' + c[1] + ' lts</title></rect>';
+        if (i === 0 || i === n - 1 || n <= 8) s += '<text class="lbl" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + c[0].slice(8, 10) + '/' + c[0].slice(5, 7) + '</text>';
+      });
+      s += '<text class="lbl" x="' + (L - 4) + '" y="' + (Y(maxL / 1.1) + 3).toFixed(1) + '" text-anchor="end">' + Math.round(maxL / 1.1) + '</text>';
+      var cp = pts.map(function (c, i) { return c[4] != null ? [X(i), YC(Math.min(c[4], maxC))] : null; }).filter(Boolean);
+      if (cp.length > 1) s += '<polyline class="cs" points="' + cp.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+      cp.forEach(function (p) { s += '<circle class="csd" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.6"/>'; });
+      return '<svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Litros y células somáticas por control">' + s + '</svg>' +
+        '<div class="clegend"><span><i style="background:var(--bar)"></i>Litros/día</span><span><i style="background:var(--vacia)"></i>CS (miles) · punteada = 200</span></div>';
+    }
+    function prodHistHTML(a, h) {
+      var lastP = h.pa.length ? h.pa[h.pa.length - 1][0] : '0000';
+      var cur = h.ct.filter(function (c) { return c[0] >= lastP; });
+      var prev = h.ct.filter(function (c) { return c[0] < lastP; });
+      var d1 = function (v) { return v == null ? '–' : Number(v).toLocaleString('es-UY', { minimumFractionDigits: 1, maximumFractionDigits: 2 }); };
+      var rows = function (l) {
+        return l.slice().reverse().map(function (c) {
+          return '<tr><td>' + A.fmt(c[0]) + '</td><td>' + d1(c[1]) + '</td><td>' + d1(c[2]) + '</td><td>' + d1(c[3]) + '</td><td' + (c[4] != null && c[4] >= 200 ? ' class="hi"' : '') + '>' + (c[4] == null ? '–' : nf(c[4])) + '</td></tr>';
+        }).join('');
+      };
+      var head = '<thead><tr><th>Control</th><th>Lts</th><th>% G</th><th>% P</th><th>CS (miles)</th></tr></thead>';
+      var out = '';
+      if (cur.length) out += ctrlChart(cur) + '<div class="scroll"><table class="htbl">' + head + '<tbody>' + rows(cur) + '</tbody></table></div>';
+      if (prev.length) out += '<details class="lac"><summary><span class="l"><b>Lactancia anterior</b></span><small>' + prev.length + ' controles</small></summary><div class="scroll"><table class="htbl">' + head + '<tbody>' + rows(prev) + '</tbody></table></div></details>';
+      return out;
+    }
+    function lactHTML(h) {
+      if (!h.la.length) return '';
+      var d2 = function (v) { return v == null ? '–' : Number(v).toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var maxN = h.la[h.la.length - 1][0];
+      var rows = h.la.slice().reverse().map(function (l) {
+        return '<tr' + (l[0] === maxN ? ' class="cur"' : '') + '><td>' + l[0] + (l[0] === maxN ? ' (actual)' : '') + '</td><td>' + nf(l[1]) + '</td><td>' + (l[2] ? nf(l[2]) : '–') + '</td><td>' + d2(l[3]) + '</td><td>' + d2(l[4]) + '</td></tr>';
+      }).join('');
+      return '<section class="card"><h2>Lactancias</h2><div class="scroll"><table class="htbl"><thead><tr><th>N°</th><th>Litros</th><th>305 días</th><th>% G</th><th>% P</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        (h.vit ? '<p class="cap">Producción vitalicia: <b>' + nf(h.vit) + ' lts</b></p>' : '') + '</section>';
+    }
+
     function fichaHTML(a) {
       var t = today(), d = A.derive(a, t);
       var toro = a.toro ? (a.toro === '???..' ? 'Sin dato' : esc(a.toro)) : null;
       var tacto = null;
       if (a.tFecha || a.result) tacto = (a.tFecha ? A.fmt(a.tFecha) : '') + (a.result ? (a.tFecha ? ' <small>' : '') + esc(a.result) + (a.tFecha ? '</small>' : '') : '');
       else if (a.partoProb) tacto = 'Preñada <small>parto probable ' + A.fmt(a.partoProb) + '</small>';
+      var h = hist(a.rp);
+      var dLac = a.dLac != null && DB.fuente === 'syscaw' && a.pFecha ? A.diffDays(t, a.pFecha) : a.dLac;
+      var torosLac = null;
+      if (h) {
+        var lp = h.pa.length ? h.pa[h.pa.length - 1][0] : '0000';
+        var sl = h.ev.filter(function (e) { return e[1] === 'S' && e[0] > lp; });
+        if (sl.length > 1) torosLac = sl.map(function (e) { return esc(e[2] || '?'); }).join(', ');
+      }
       var datos = kv([
         ['Fecha de último parto', a.pFecha ? A.fmt(a.pFecha) : null],
-        ['Días en lactancia', a.dLac != null ? nf(a.dLac) : null],
+        ['Días en lactancia', dLac != null ? nf(dLac) : null],
         ['Fecha del último servicio', a.sFecha ? A.fmt(a.sFecha) : null],
         ['Días del último servicio', a.sFecha ? String(A.diffDays(t, a.sFecha)) : null],
         ['Número de servicio', a.sN != null ? String(a.sN) : null],
         ['Toro', toro],
-        ['Último tacto y resultado', tacto]
+        [h && h.pa.length ? 'Toros en esta lactancia' : 'Toros usados', torosLac],
+        ['Último tacto y resultado', tacto],
+        ['Parto probable', a.estado === 'prenada' && d.partoProb ? A.fmt(d.partoProb) + (d.partoEstimado ? ' <small>estimado</small>' : '') : null],
+        ['Secado', a.estado === 'prenada' && d.secado && (a.cat === 'vaca' || a.cat === 'seca' || !a.cat) ? A.fmt(d.secado) : null]
       ]);
+      var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + chip(a) + (a.rech ? '<span class="chip descarte">Descarte programado</span>' : '') + '</div></div></header>' +
-        '<section class="card datos">' + datos + '</section>' +
-        (bars(a.pr) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '') +
-        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)]], 'kvs') + '</section>';
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte programado</span>' : '') + '</div></div></header>' +
+        (datos ? '<section class="card datos">' + datos + '</section>' : '') +
+        (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
+        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
+        (h ? '<p class="src">Historial del respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
 
     /* ----- render ----- */
@@ -539,7 +746,7 @@
         main.innerHTML = emptyHTML(); return;
       }
       nav.hidden = false;
-      $('#meta').textContent = DB.animales.length + ' animales · libreta del ' + A.fmt(DB.cargada) + (state.persisted ? '' : ' (no se guarda en este navegador)');
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)');
       nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
@@ -560,6 +767,7 @@
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
+      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; try { localStorage.setItem('libreta:cat', state.cat); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
@@ -592,8 +800,9 @@
     $('#sheet').addEventListener('click', function (e) { if (e.target.id === 'sheet') closeSheet(); });
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
-    loadAll();
-    (function () { var m = /^#ficha-(\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; })();
-    render();
+    var listo = loadAll();
+    var desdeHash = function () { var m = /^#ficha-(\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
+    desdeHash(); render();
+    listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
   }
 })(typeof window !== 'undefined' ? window : this);

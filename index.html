@@ -181,6 +181,59 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .logobtns{display:flex;flex-wrap:wrap;gap:8px}
 .sheetbtns{display:grid;gap:10px}
 
+/* categorías */
+.cats{display:flex;gap:6px;margin:0 0 10px}
+.cats button{flex:1 1 0;white-space:nowrap;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 6px;font-weight:700;font-size:14px;min-height:44px;cursor:pointer;color:var(--muted)}
+.cats button b{font-weight:600;margin-left:3px;font-variant-numeric:tabular-nums}
+.cats button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:#fff}
+@media (prefers-color-scheme:dark){.cats button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#14233F}}
+.catlbl{font-weight:700;color:var(--ink)}
+.chip.cat{--c:var(--muted)}
+/* carga */
+.busy{position:fixed;inset:0;background:rgba(5,10,22,.55);display:flex;align-items:center;justify-content:center;z-index:70}
+.busy div{background:var(--surface);color:var(--ink);border-radius:16px;padding:20px 24px;font-weight:700;max-width:80vw;text-align:center}
+.busy small{display:block;font-weight:500;color:var(--muted);margin-top:6px}
+/* historial */
+.histsum{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+.histsum div{flex:1 1 90px;background:var(--bg);border-radius:12px;padding:8px 10px}
+.histsum b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.histsum span{font-size:12.5px;color:var(--muted)}
+details.lac{border-top:1px solid var(--line)}
+details.lac:first-of-type{border-top:0}
+details.lac summary{list-style:none;cursor:pointer;padding:11px 0;display:flex;justify-content:space-between;align-items:baseline;gap:10px;min-height:44px}
+details.lac summary::-webkit-details-marker{display:none}
+details.lac summary b{font-size:16px;white-space:nowrap}
+details.lac summary small{color:var(--muted);font-size:13.5px;text-align:right}
+details.lac summary:before{content:"▸";color:var(--muted);margin-right:4px}
+details.lac[open] summary:before{content:"▾"}
+details.lac summary .l{flex:1}
+.tl{list-style:none;margin:0 0 12px;padding:0 0 0 14px;border-left:2px solid var(--line)}
+.tl li{position:relative;padding:5px 0 5px 10px;display:grid;grid-template-columns:86px 1fr auto;gap:8px;align-items:baseline;font-size:15px}
+.tl li:before{content:"";position:absolute;left:-20px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--muted)}
+.tl li.parto:before{background:var(--gold);border-color:var(--gold)}
+.tl li.serv:before{border-color:var(--servida)}
+.tl li.ok:before{background:var(--prenada);border-color:var(--prenada)}
+.tl li.tac.prenada:before{background:var(--prenada);border-color:var(--prenada)}
+.tl li.tac.vacia:before{border-color:var(--vacia)}
+.tl li.celo:before{border-color:var(--ciclando);border-style:dashed}
+.tl .f{font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
+.tl .d{font-size:12.5px;color:var(--muted);text-align:right;white-space:nowrap}
+.tl .x{color:var(--prenada);font-weight:700;font-size:13px;margin-left:4px}
+.htbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14.5px;margin-top:6px}
+.htbl th{font-size:12.5px;color:var(--muted);font-weight:600;text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
+.htbl td{text-align:right;padding:7px 4px;border-bottom:1px solid var(--line)}
+.htbl th:first-child,.htbl td:first-child{text-align:left}
+.htbl tr:last-child td{border-bottom:0}
+.htbl .hi{color:var(--vacia);font-weight:700}
+.htbl .cur td{font-weight:700}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.src{font-size:12.5px;color:var(--muted);margin:2px 0 16px;text-align:center}
+.lnk{background:none;border:0;padding:0;color:var(--link);font-weight:700;cursor:pointer;text-decoration:underline;font-size:inherit}
+.cs{fill:none;stroke:var(--vacia);stroke-width:2}
+.csd{fill:var(--vacia)}
+.clegend{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin-top:2px;flex-wrap:wrap}
+.clegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
 #toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;max-width:90vw}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
@@ -214,16 +267,21 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
     </div>
     <div class="sheetbtns">
       <button class="btn primary big" data-a="guardar">Guardar</button>
-      <button class="btn" data-a="cambiar">Cargar otra libreta</button>
+      <button class="btn" data-a="cambiar">Cargar respaldo o libreta</button>
       <button class="btn" data-a="cerrar">Cancelar</button>
     </div>
   </div>
 </div>
 
-<input id="file" type="file" accept=".xls,.xlsx,.xlsm,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+<input id="file" type="file" hidden>
 <input id="logoFile" type="file" accept="image/*" hidden>
 <div id="toast" role="status" aria-live="polite"></div>
+<div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
+<script src="paradox.js"></script>
+<script src="syscaw.js"></script>
+<script src="unrar.js"></script>
+<script src="unrar-wasm.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
