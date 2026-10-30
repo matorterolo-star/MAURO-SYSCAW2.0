@@ -191,6 +191,9 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .uopt.todas{border-style:dashed}
 @media (prefers-color-scheme:dark){.uopt input{accent-color:var(--gold)}.uopt:has(input:checked){border-color:var(--gold)}}
 .btn:disabled{opacity:.45;cursor:default}
+.ubtn{display:inline-flex;align-items:center;gap:6px;margin-top:6px;border:1.5px solid var(--gold);background:transparent;color:var(--on-navy);border-radius:999px;padding:4px 12px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:32px;max-width:100%}
+.ubtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ubtn svg{flex:none}
 
 /* categorías */
 .cats{display:flex;gap:6px;margin:0 0 10px}
@@ -254,7 +257,7 @@ details.lac summary .l{flex:1}
 <header class="top"><div class="wrap">
   <div class="brand">
     <span class="logo" id="logo"></span>
-    <div style="min-width:0"><p class="firma">Dr. Mauro Torterolo</p><h1 id="nombre">Libreta</h1><p id="meta"></p></div>
+    <div style="min-width:0"><p class="firma">Dr. Mauro Torterolo</p><h1 id="nombre">Libreta</h1><p id="meta"></p><button class="ubtn" id="ubtn" data-a="unidad" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="ubtnTxt">Cambiar unidad</span></button></div>
   </div>
   <button class="iconbtn" data-a="ajustes" aria-label="Ajustes">
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="8" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>

@@ -245,21 +245,24 @@
     function idbGet(k) { return idb().then(function (db) { return new Promise(function (res, rej) { var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); }; }); }); }
     function idbSet(k, v) { return idb().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = function () { res(); }; tx.onerror = function () { rej(tx.error); }; }); }); }
     function loadAll() {
-      try { var r = localStorage.getItem(KEY); if (r) { var o = JSON.parse(r); if (o && Array.isArray(o.animales)) DB = o; } } catch (e) { state.persisted = false; }
+      try { var r = localStorage.getItem(KEY); if (r) { var o = JSON.parse(r); if (o && o.todos) { o.animales = []; } if (o && Array.isArray(o.animales)) { DB = o; aplicarUnidad(); } } } catch (e) { state.persisted = false; }
       try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
       try { var c = localStorage.getItem('libreta:cat'); if (c) state.cat = c; } catch (e) {}
       // la libreta grande (respaldo SysCaw) se guarda en IndexedDB
       return idbGet('db').then(function (o) {
-        if (o && Array.isArray(o.animales) && o.animales.length && (o.guardada || 0) >= (DB.guardada || 0)) { DB = o; return true; }
+        if (o && o.todos && !o.animales) o.animales = [];
+        if (o && Array.isArray(o.animales) && (o.animales.length || (o.todos && o.todos.length)) && (o.guardada || 0) >= (DB.guardada || 0)) { DB = o; aplicarUnidad(); return true; }
         return false;
       }, function () { return false; });
     }
     function saveDB() {
       DB.guardada = Date.now();
-      return idbSet('db', DB).then(function () {
+      var g = DB;
+      if (DB.todos) { g = {}; Object.keys(DB).forEach(function (k) { if (k !== 'animales') g[k] = DB[k]; }); }
+      return idbSet('db', g).then(function () {
         state.persisted = true; try { localStorage.removeItem(KEY); } catch (e) {}
       }, function () {
-        try { localStorage.setItem(KEY, JSON.stringify(DB)); state.persisted = true; } catch (e) { state.persisted = false; }
+        try { localStorage.setItem(KEY, JSON.stringify(g)); state.persisted = true; } catch (e) { state.persisted = false; }
       }).then(function () { render(); });
     }
     function savePerfil() { try { localStorage.setItem(KEYP, JSON.stringify(PERFIL)); } catch (e) {} }
@@ -289,14 +292,15 @@
     function cargarRespaldo(buf, f) {
       busy(true, 'Leyendo respaldo de SysCaw…<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: elegirUnidad }).then(function (d) {
-          var sel = d.unidadesSel || [], parcial = d.unidades && sel.length < d.unidades.length;
-          DB = { animales: d.animales, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw', unidad: parcial ? sel.join(' + ') : '' };
+        root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
+          var sel = d.unidadesSel || [], parcial = !!d.sel;
+          DB = { animales: [], todos: d.animales, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
           try { location.hash = ''; } catch (e) {}
           render();
-          toast(d.animales.length + ' animales cargados del respaldo');
+          toast(DB.animales.length + ' animales cargados del respaldo');
           openSheet('Nombre del tambo', (parcial && sel.length === 1 ? sel[0] : d.tambo) || PERFIL.nombre);
         }).catch(function (e) {
           busy(false);
@@ -307,24 +311,60 @@
     }
     /* ----- elegir unidad del respaldo ----- */
     var uResolve = null;
-    function elegirUnidad(us) {
+    var uCargando = false;
+    function elegirUnidad(us, pre, cargando) {
       return new Promise(function (res) {
-        busy(false); uResolve = res;
+        busy(false); uResolve = res; uCargando = !!cargando;
+        $('#sheetUTitle').textContent = cargando ? '¿Qué unidad cargás?' : 'Cambiar de unidad';
+        $('#sheetU .unote').textContent = cargando ? 'Este respaldo trae más de una unidad. Marcá la que corresponde a esta libreta (podés marcar más de una). Después podés cambiar de unidad sin volver a cargar el archivo.' : 'Elegí qué unidad ver. Podés marcar más de una.';
+        $('#btnU').textContent = cargando ? 'Cargar' : 'Ver';
         var cats = [['vaca', 'vacas', 'vaca'], ['seca', 'secas', 'seca'], ['vaquillona', 'vaquillonas', 'vaquillona'], ['ternera', 'terneras', 'ternera']];
         var det = function (u) { return cats.filter(function (c) { return u[c[0]]; }).map(function (c) { return nf(u[c[0]]) + ' ' + (u[c[0]] === 1 ? c[2] : c[1]); }).join(' · '); };
         var tot = us.reduce(function (s, u) { return s + u.total; }, 0);
         $('#ulist').innerHTML = us.map(function (u) {
           return '<label class="uopt"><input type="checkbox" name="u" value="' + u.id + '"><b>' + esc(u.nombre) + '</b><span>' + nf(u.total) + ' animales · ' + det(u) + '</span></label>';
         }).join('') + '<label class="uopt todas"><input type="checkbox" id="uTodas"><b>Todas las unidades</b><span>' + nf(tot) + ' animales en total</span></label>';
-        $('#btnU').disabled = true;
+        var marc = pre === null && !cargando ? us.map(function (u) { return u.id; }) : (pre || []);
+        Array.prototype.forEach.call(document.querySelectorAll('#ulist input[name=u]'), function (i) { i.checked = marc.indexOf(+i.value) >= 0; });
+        $('#uTodas').checked = marc.length === us.length;
+        $('#btnU').disabled = !marc.length;
         $('#sheetU').hidden = false;
       });
     }
     function cerrarUnidad(ids) {
       $('#sheetU').hidden = true;
       var r = uResolve; uResolve = null;
-      if (ids && ids.length) busy(true, 'Armando la libreta…');
+      if (ids && ids.length && uCargando) busy(true, 'Armando la libreta…');
       if (r) setTimeout(function () { r(ids); }, 30);
+    }
+    function nombreSel(sel) {
+      if (!DB.unidades) return '';
+      var ids = sel || DB.unidades.map(function (u) { return u.id; });
+      if (!sel || ids.length === DB.unidades.length) return 'Todas las unidades';
+      return DB.unidades.filter(function (u) { return ids.indexOf(u.id) >= 0; }).map(function (u) { return u.nombre; }).join(' + ');
+    }
+    // arma la vista (DB.animales) según las unidades elegidas
+    function aplicarUnidad() {
+      if (!DB.todos) return;
+      var s = DB.sel && DB.sel.length ? DB.sel : null;
+      DB.animales = s ? DB.todos.filter(function (a) { return s.indexOf(a.u) >= 0; }) : DB.todos;
+      DB.unidad = DB.unidades && s ? nombreSel(s) : '';
+    }
+    function cambiarUnidad() {
+      if (!DB.unidades) return;
+      var antes = nombreSel(DB.sel);
+      elegirUnidad(DB.unidades, DB.sel, false).then(function (ids) {
+        if (!ids || !ids.length) return;
+        DB.sel = ids.length === DB.unidades.length ? null : ids;
+        aplicarUnidad();
+        var ahora = nombreSel(DB.sel);
+        // si el nombre del tambo era el de la unidad anterior, lo cambia por el de la nueva
+        if (!PERFIL.nombre || PERFIL.nombre === antes) { PERFIL.nombre = ahora === 'Todas las unidades' ? (root.SysCaw.infoFromName(DB.archivo).tambo || ahora) : ahora; savePerfil(); }
+        state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60;
+        try { location.hash = ''; } catch (e) {}
+        saveDB();
+        toast(ahora + ': ' + DB.animales.length + ' animales');
+      });
     }
     function idsMarcados() { return Array.prototype.map.call(document.querySelectorAll('#ulist input[name=u]:checked'), function (i) { return +i.value; }); }
     $('#ulist').addEventListener('change', function (e) {
@@ -777,11 +817,13 @@
       $('#logo').innerHTML = PERFIL.logo ? '<img alt="" src="' + PERFIL.logo + '">' : tagSVG('', 30).replace(/<text.*?<\/text>/, '');
       $('#logo').className = 'logo' + (PERFIL.logo ? ' has' : '');
       if (!DB.animales.length) {
-        $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true;
+        $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = emptyHTML(); return;
       }
       nav.hidden = false;
-      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.unidad ? DB.unidad + ' · ' : '') + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)');
+      $('#ubtn').hidden = !DB.unidades;
+      if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)');
       nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
@@ -818,6 +860,7 @@
       else if (a === 'logo') $('#logoFile').click();
       else if (a === 'quitarlogo') { state.draft.logo = ''; paintLogoPreview(); }
       else if (a === 'cambiar') { closeSheet(); $('#file').click(); }
+      else if (a === 'unidad') cambiarUnidad();
       else if (a === 'uok') cerrarUnidad(idsMarcados());
       else if (a === 'ucancel') cerrarUnidad(null);
     });

@@ -123,7 +123,7 @@
         pFecha: lp ? lp[0] : null, pN: lp ? lp[1] : null, r1: r12[0] || null, r2: r12[1] || null,
         sFecha: le ? le[0] : null, sN: le ? servs.length : null, toro: le ? (le[1] === 'C' ? 'Celo' : (le[2] || null)) : null,
         tFecha: lt ? lt[0] : null, result: res, partoProb: conc ? addDays(conc, GEST) : null, estado: estado,
-        rech: a[8] ? (baja[a[8]] || String(a[8])) : null, pr: pr, celo: estado === 'prenada' && !!le && le[1] === 'C',
+        u: a[11] == null ? 0 : a[11], rech: a[8] ? (baja[a[8]] || String(a[8])) : null, pr: pr, celo: estado === 'prenada' && !!le && le[1] === 'C',
         dLac: lp && (cat === 'vaca' || cat === 'seca') ? diffDays(ref, lp[0]) : null,
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
@@ -164,11 +164,12 @@
     if (us.length > 1 && opts.elegir) {
       ids = await opts.elegir(us);
       if (!ids || !ids.length) { var e = new Error('Carga cancelada.'); e.cancelado = true; throw e; }
-      if (ids.length === us.length) ids = null;
     }
-    var d = build(files, { nombreArchivo: nombre, Paradox: opts.Paradox, unidades: ids });
+    // se arma la libreta con todas las unidades; la app filtra por la selección (y deja cambiarla sin recargar)
+    var d = build(files, { nombreArchivo: nombre, Paradox: opts.Paradox, unidades: opts.todas ? null : ids });
     d.unidades = us;
-    d.unidadesSel = (ids ? us.filter(function (u) { return ids.indexOf(u.id) >= 0; }) : us).map(function (u) { return u.nombre; });
+    d.sel = ids && ids.length < us.length ? ids : null;
+    d.unidadesSel = (d.sel ? us.filter(function (u) { return d.sel.indexOf(u.id) >= 0; }) : us).map(function (u) { return u.nombre; });
     return d;
   }
 
