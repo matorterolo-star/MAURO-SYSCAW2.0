@@ -180,6 +180,16 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .logoprev img{max-width:100%;max-height:100%;object-fit:contain}
 .logobtns{display:flex;flex-wrap:wrap;gap:8px}
 .sheetbtns{display:grid;gap:10px}
+.unote{margin:-6px 0 14px;color:var(--muted);font-size:14.5px}
+.ulist{display:grid;gap:8px;margin-bottom:16px}
+.uopt{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 12px;align-items:center;border:2px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--surface)}
+.uopt input{width:24px;height:24px;margin:0;accent-color:var(--navy);grid-row:span 2}
+.uopt b{font-size:17px;overflow-wrap:anywhere}
+.uopt span{grid-column:2;font-size:14px;color:var(--muted)}
+.uopt:has(input:checked){border-color:var(--navy);background:var(--bg)}
+.uopt.todas{border-style:dashed}
+@media (prefers-color-scheme:dark){.uopt input{accent-color:var(--gold)}.uopt:has(input:checked){border-color:var(--gold)}}
+.btn:disabled{opacity:.45;cursor:default}
 
 /* categorías */
 .cats{display:flex;gap:6px;margin:0 0 10px}
@@ -269,6 +279,18 @@ details.lac summary .l{flex:1}
       <button class="btn primary big" data-a="guardar">Guardar</button>
       <button class="btn" data-a="cambiar">Cargar respaldo o libreta</button>
       <button class="btn" data-a="cerrar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheetU" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetUTitle">
+    <h2 id="sheetUTitle">¿Qué unidad cargás?</h2>
+    <p class="unote">Este respaldo trae más de una unidad. Marcá la que corresponde a esta libreta (podés marcar más de una).</p>
+    <div class="ulist" id="ulist"></div>
+    <div class="sheetbtns">
+      <button class="btn primary big" id="btnU" data-a="uok" disabled>Cargar</button>
+      <button class="btn" data-a="ucancel">Cancelar</button>
     </div>
   </div>
 </div>

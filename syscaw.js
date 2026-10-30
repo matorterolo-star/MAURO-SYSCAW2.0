@@ -7,8 +7,9 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
+  var OPCIONALES = { tambos: 'Tambos.DB' };
   var FIELDS = {
-    ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros'],
+    ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
     partos: ['Vaca', 'Fecha', 'Resultado1', 'Resultado2', 'NroParto', 'Toro', 'FServicio', 'FechaCierreLact'],
     tactos: ['Vaca', 'Fecha', 'Resultado'],
@@ -18,7 +19,8 @@
     codigos: ['ID', 'Alias', 'Nombre', 'ImplicanciaGest'],
     bajas: ['ID', 'Detalle', 'Abrev'],
     rodeos: ['IDTipo', 'IDPropio', 'Abrev3', 'NombreRodeo'],
-    elect: ['IDElectr', 'IdVaca', 'Tipo', 'Obs']
+    elect: ['IDElectr', 'IdVaca', 'Tipo', 'Obs'],
+    tambos: ['ID', 'Nombre']
   };
   var CAT = { 1: 'vaca', 2: 'seca', 3: 'vaquillona', 4: 'ternera' };
   var RES = { '1': 'M', '2': 'H', '4': 'A', '3': '?', '0': '' };
@@ -54,8 +56,10 @@
     T.rodeos.forEach(function (r) { rod[r[0] + ':' + r[1]] = r[2] || r[3]; });
     T.elect.forEach(function (r) { if (r[2] === 1) { var v = String(r[3] || r[0] || '').replace(/^0+/, ''); if (v) el[r[1]] = v; } });
 
+    var sel = null;
+    if (opts.unidades && opts.unidades.length) { sel = {}; opts.unidades.forEach(function (u) { sel[u] = true; }); }
     var byId = {}, act = {};
-    T.ident.forEach(function (r) { byId[r[0]] = r; if (!r[9] && CAT[r[6]]) act[r[0]] = r; });
+    T.ident.forEach(function (r) { byId[r[0]] = r; if (!r[9] && CAT[r[6]] && (!sel || sel[r[11]])) act[r[0]] = r; });
     var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
     var maxF = '0000';
     T.partos.forEach(function (r) {
@@ -131,17 +135,43 @@
     return { animales: animales, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
   }
 
+  // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una
+  function unidades(files, opts) {
+    opts = opts || {};
+    var PX = opts.Paradox || root.Paradox, nom = {};
+    if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: FIELDS.tambos, array: true }).rows.forEach(function (r) { nom[r[0]] = (r[1] || '').trim(); });
+    var U = {};
+    PX.readTable(files[TABLES.ident], { fields: ['Tambo', 'IdTipoRodeo', 'FechaBaja'], array: true }).rows.forEach(function (r) {
+      if (r[2] || !CAT[r[1]]) return;
+      var id = r[0] == null ? 0 : r[0];
+      var u = U[id] || (U[id] = { id: id, nombre: nom[id] || (id ? 'Unidad ' + id : 'Sin unidad'), total: 0, vaca: 0, seca: 0, vaquillona: 0, ternera: 0 });
+      u.total++; u[CAT[r[1]]]++;
+    });
+    return Object.keys(U).map(function (k) { return U[k]; }).sort(function (a, b) { return a.id - b.id; });
+  }
+
+  // opts.elegir(unidades) -> Promise<[ids]> : se llama solo si el respaldo trae más de una unidad con animales
   async function fromRar(arrayBuffer, nombre, opts) {
     var U = opts.unrar, want = {};
     Object.keys(TABLES).forEach(function (k) { want[TABLES[k].toLowerCase()] = TABLES[k]; });
+    Object.keys(OPCIONALES).forEach(function (k) { want[OPCIONALES[k].toLowerCase()] = OPCIONALES[k]; });
     var ex = await U.createExtractorFromData({ data: arrayBuffer, wasmBinary: opts.wasmBinary });
     var list = ex.extract({ files: function (h) { var b = h.name.split(/[\\/]/).pop().toLowerCase(); return !!want[b]; } });
     var files = {};
     for (var f of list.files) { var b = f.fileHeader.name.split(/[\\/]/).pop().toLowerCase(); if (f.extraction) files[want[b]] = f.extraction; }
     if (!files[TABLES.ident]) throw new Error('El archivo no parece un respaldo de SysCaw (no encontré la tabla Identificación).');
-    return build(files, { nombreArchivo: nombre, Paradox: opts.Paradox });
+    var us = unidades(files, { Paradox: opts.Paradox }), ids = null;
+    if (us.length > 1 && opts.elegir) {
+      ids = await opts.elegir(us);
+      if (!ids || !ids.length) { var e = new Error('Carga cancelada.'); e.cancelado = true; throw e; }
+      if (ids.length === us.length) ids = null;
+    }
+    var d = build(files, { nombreArchivo: nombre, Paradox: opts.Paradox, unidades: ids });
+    d.unidades = us;
+    d.unidadesSel = (ids ? us.filter(function (u) { return ids.indexOf(u.id) >= 0; }) : us).map(function (u) { return u.nombre; });
+    return d;
   }
 
-  var api = { build: build, fromRar: fromRar, TABLES: TABLES, infoFromName: infoFromName };
+  var api = { build: build, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SysCaw = api;
 })(typeof window !== 'undefined' ? window : this);

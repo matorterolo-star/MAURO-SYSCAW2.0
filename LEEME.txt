@@ -9,4 +9,5 @@ LIBRETA DE VACAS - actualizar la versión publicada en GitHub
 Cargar datos: tocá el ícono de ajustes (arriba a la derecha) > "Cargar respaldo o libreta" y elegí:
  - el respaldo de SysCaw (.rar), que trae vacas, vaquillonas, terneras e historial completo, o
  - la libreta en Excel (.xls / .xlsx), como antes.
-Después de cargar, la app propone el nombre del tambo. El logo se agrega en ajustes.
+Si el respaldo trae más de una unidad (tambo, recría, campo), la app pregunta cuál cargar; se puede marcar una, varias o todas.
+Después de cargar, la app propone el nombre del tambo (si elegiste una sola unidad, propone el nombre de esa unidad). El logo se agrega en ajustes.
