@@ -490,22 +490,22 @@
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
-    var GL = { vaca: 'Vacas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
-    function grupo(a) { return a.cat === 'seca' ? 'vaca' : (a.cat || 'vaca'); }
+    var GL = { vaca: 'En ordeñe', seca: 'Secas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
+    function grupo(a) { return a.cat || 'vaca'; }
     function grupos() { var g = {}; DB.animales.forEach(function (a) { g[grupo(a)] = (g[grupo(a)] || 0) + 1; }); return g; }
     function lista() {
-      var g = grupos(), orden = ['vaca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
+      var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
       if (orden.indexOf(state.cat) < 0) state.cat = orden[0] || 'vaca';
       return DB.animales.filter(function (a) { return grupo(a) === state.cat; });
     }
     function catsHTML() {
-      var g = grupos(), orden = ['vaca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
+      var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
       if (orden.length < 2) return '';
-      return '<div class="cats" role="group" aria-label="Categoría">' + orden.map(function (k) {
+      return '<div class="cats' + (orden.length === 4 ? ' n4' : '') + '" role="group" aria-label="Categoría">' + orden.map(function (k) {
         return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
       }).join('') + '</div>';
     }
-    function nombreGrupo(n) { return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : (n === 1 ? 'vaca' : 'vacas'); }
+    function nombreGrupo(n) { return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
     function ordenar(list, f) {
       var h = today();
       var key = function (a) {
@@ -600,7 +600,7 @@
         return '<span class="seg ' + k + '" style="flex:' + c[k] + '" title="' + LABEL[k] + '"></span>';
       }).join('');
       var leg = ORDEN.filter(function (k) { return c[k]; }).map(function (k) {
-        return '<button class="lg" data-go="' + k + '"><i class="dot ' + k + '"></i><span class="ln">' + (k === 'prenada' ? 'Preñadas' : k === 'servida' ? 'Servidas' : k === 'vacia' ? 'Vacías' : k === 'otro' ? 'Otros' : (k === 'sin' && state.cat !== 'vaca') ? 'Sin servicio' : LABEL[k]) + '</span><b>' + c[k] + '</b><span class="pc">' + pct(c[k], r.total) + '</span></button>';
+        return '<button class="lg" data-go="' + k + '"><i class="dot ' + k + '"></i><span class="ln">' + (k === 'prenada' ? 'Preñadas' : k === 'servida' ? 'Servidas' : k === 'vacia' ? 'Vacías' : k === 'otro' ? 'Otros' : (k === 'sin' && (state.cat === 'vaquillona' || state.cat === 'ternera')) ? 'Sin servicio' : LABEL[k]) + '</span><b>' + c[k] + '</b><span class="pc">' + pct(c[k], r.total) + '</span></button>';
       }).join('');
       var nPc = L.filter(function (a) { return a.celo; }).length;
       if (nPc) leg += '<button class="lg" data-go="pcelo"><i class="dot prenada"></i><span class="ln">Preñada + celo</span><b>' + nPc + '</b><span class="pc">' + pct(nPc, r.total) + '</span></button>';

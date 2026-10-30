@@ -196,8 +196,9 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .ubtn svg{flex:none}
 
 /* categorías */
-.cats{display:flex;gap:6px;margin:0 0 10px}
-.cats button{flex:1 1 0;white-space:nowrap;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 6px;font-weight:700;font-size:14px;min-height:44px;cursor:pointer;color:var(--muted)}
+.cats{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.cats button{flex:1 1 auto;white-space:nowrap;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 6px;font-weight:700;font-size:14px;min-height:44px;cursor:pointer;color:var(--muted)}
+.cats.n4{display:grid;grid-template-columns:1fr 1fr}
 .cats button b{font-weight:600;margin-left:3px;font-variant-numeric:tabular-nums}
 .cats button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:#fff}
 @media (prefers-color-scheme:dark){.cats button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#14233F}}
