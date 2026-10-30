@@ -536,18 +536,21 @@
       var box = $('#results'); if (!box) return;
       var q = state.q.trim(), f = state.filtro, html = '', list;
       if (q) {
-        list = A.search(DB.animales, q).filter(function (a) { return f === 'todas' || matchFiltro(a, f); });
-        html = list.length
-          ? '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('')
-          : '<p class="hint">No hay animales con "' + esc(q) + '"' + (f !== 'todas' ? ' en este filtro' : '') + '. Probá con otra caravana o con parte del nombre.</p>';
-        if (list.length > 40) html += '<p class="hint">Mostrando 40. Escribí más para acotar.</p>';
-      } else if (f !== 'todas') {
-        list = ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
+        // busca dentro de la categoría elegida; si no está, avisa en qué otra categoría aparece
+        list = A.search(lista(), q).filter(function (a) { return f === 'todas' || matchFiltro(a, f); });
+        if (list.length) {
+          html = '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + ' en ' + GL[state.cat].toLowerCase() + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('');
+          if (list.length > 40) html += '<p class="hint">Mostrando 40. Escribí más para acotar.</p>';
+        } else {
+          var otros = A.search(DB.animales, q).filter(function (a) { return grupo(a) !== state.cat; });
+          html = '<p class="hint">No hay ' + nombreGrupo(2) + ' con "' + esc(q) + '"' + (f !== 'todas' ? ' en este filtro' : '') + '.' + (otros.length ? '' : ' Probá con otra caravana o con parte del nombre.') + '</p>';
+          if (otros.length) html += '<h2 class="h">En otras categorías</h2>' + otros.slice(0, 20).map(function (a) { return rowHTML(a); }).join('');
+        }
+      } else {
+        list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
         var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
         html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
-      } else {
-        html = '<p class="hint">Escribí la caravana del animal, o tocá un estado para ver la lista.</p>';
       }
       box.innerHTML = html;
     }
@@ -869,7 +872,8 @@
     });
     document.addEventListener('keydown', function (e) {
       if (e.target.id === 'q' && e.key === 'Enter') {
-        var res = A.search(DB.animales, state.q).filter(function (a) { return matchFiltro(a, state.filtro); });
+        var res = A.search(lista(), state.q).filter(function (a) { return matchFiltro(a, state.filtro); });
+        if (!res.length) res = A.search(DB.animales, state.q);
         if (res.length) { e.target.blur(); openFicha(res[0].rp); }
       }
       if (e.target.id === 'inNombre' && e.key === 'Enter') guardarSheet();
