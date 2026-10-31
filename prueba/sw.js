@@ -1,4 +1,4 @@
-const CACHE = 'prueba-v38';
+const CACHE = 'prueba-v39';
 const FILES = ['./', 'index.html', 'app.js?v=28', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=28', 'syscaw.js?v=28', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 // al instalar, baja todo de nuevo (sin usar la memoria del navegador) para que no queden archivos de versiones distintas
 self.addEventListener('install', e => {

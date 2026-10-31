@@ -1352,7 +1352,8 @@
         var sl = h.ev.filter(function (e) { return e[1] === 'S' && e[0] > lp; });
         var ult = sl.length ? sl[sl.length - 1] : null;
         if (toro && ult && ult[3] && a.sFecha === ult[0]) toro += ' <small class="insem">' + esc(ult[3]) + '</small>';
-        if (sl.length > 1) torosLac = '<span class="torl">' + sl.map(function (e) { return '<span>' + esc(e[2] || '?') + (e[3] ? ' <small>' + esc(e[3]) + '</small>' : '') + '</span>'; }).join('') + '</span>';
+        // servicios anteriores al último (el último ya está en Toro), numerados desde el 1
+        if (sl.length > 1) torosLac = '<span class="torl">' + sl.slice(0, -1).map(function (e, i) { return '<span><small class="nro">' + (i + 1) + 'º</small> ' + esc(e[2] || '?') + (e[3] ? ' <small>' + esc(e[3]) + '</small>' : '') + '</span>'; }).join('') + '</span>';
       }
       var datos = kv([
         ['Fecha de último parto', a.pFecha ? A.fmt(a.pFecha) : null],
@@ -1361,7 +1362,7 @@
         ['Días del último servicio', a.sFecha ? String(A.diffDays(t, a.sFecha)) : null],
         ['Número de servicio', a.sN != null ? String(a.sN) : null],
         ['Toro', toro],
-        [h && h.pa.length ? 'Toros en esta lactancia' : 'Toros usados', torosLac],
+        [h && h.pa.length ? 'Servicios anteriores en esta lactancia' : 'Servicios anteriores', torosLac],
         ['Último tacto y resultado', tacto],
         ['Parto probable', a.estado === 'prenada' && d.partoProb ? A.fmt(d.partoProb) + (d.partoEstimado ? ' <small>estimado</small>' : '') : null],
         ['Secado', a.estado === 'prenada' && d.secado && (a.cat === 'vaca' || a.cat === 'seca' || !a.cat) ? A.fmt(d.secado) : null]
