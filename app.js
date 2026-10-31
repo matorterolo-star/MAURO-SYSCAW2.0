@@ -244,8 +244,9 @@
 
   /* ---------- reproducción cada 21 días ----------
      animales: [{ h: historial, salida: fecha de baja o null }]; esPren(codigoTacto) -> bool
-     Apta en un ciclo: vaca con parto, que llega al período de espera voluntario antes del día 11 del ciclo,
-     sin preñez al inicio del ciclo y en el rodeo a mitad del ciclo.
+     Apta en un ciclo: vaca con al menos un parto (no vaquillonas), que cumple el período de espera voluntario
+     antes de terminar el ciclo, sin preñez al inicio del ciclo, no marcada como descarte programado antes
+     del inicio del ciclo y en el rodeo a mitad del ciclo.
      Tasa de servicio = aptas servidas / aptas; tasa de preñez = aptas que se preñan en el ciclo / aptas;
      tasa de concepción = servicios que preñaron / servicios con resultado conocido (de todas las vacas). */
   function ciclos21(animales, esPren, inicio, pev, ref) {
@@ -282,7 +283,7 @@
           var luego = L.sv[i + 1] || L.neg.some(function (d) { return d > e[0] && diffDays(d, e[0]) >= 25; });
           if (luego) cy.sMal++; else cy.sPend++;
         });
-        var apta = diffDays(cy.mid, L.p) >= pev && (!L.conc || L.conc >= cy.ini) && (!x.salida || x.salida > cy.mid);
+        var apta = diffDays(cy.fin, L.p) >= pev && (!L.conc || L.conc >= cy.ini) && (!x.salida || x.salida > cy.mid) && !(x.desc && x.desc <= cy.ini);
         if (!apta) return;
         cy.aptas++;
         if (L.sv.some(function (e) { return e[0] >= cy.ini && e[0] <= cy.fin; })) cy.serv++;
@@ -794,8 +795,8 @@
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
-      var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null }; })
-        .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha }; }));
+      var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
+        .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
       var C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, ref) : [];
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
       var T = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 }, nCerr = 0;
@@ -813,7 +814,7 @@
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-          '<p class="cap">Vacas en lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías con ' + pev + ' días posparto o más a mitad del ciclo y en el rodeo. <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     function rodeoTodasHTML() {

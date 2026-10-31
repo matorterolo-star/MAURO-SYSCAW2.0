@@ -9,7 +9,7 @@
   };
   var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB' };
   var FIELDS = {
-    ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle'],
+    ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle', 'DescarteFecha'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
     partos: ['Vaca', 'Fecha', 'Resultado1', 'Resultado2', 'NroParto', 'Toro', 'FServicio', 'FechaCierreLact'],
     tactos: ['Vaca', 'Fecha', 'Resultado'],
@@ -130,7 +130,7 @@
         pFecha: lp ? lp[0] : null, pN: lp ? lp[1] : null, r1: r12[0] || null, r2: r12[1] || null,
         sFecha: le ? le[0] : null, sN: le ? servs.length : null, toro: le ? (le[1] === 'C' ? 'Celo' : (le[2] || null)) : null,
         tFecha: lt ? lt[0] : null, result: res, partoProb: conc ? addDays(conc, GEST) : null, estado: estado,
-        u: a[11] == null ? 0 : a[11], rech: a[8] ? (baja[a[8]] || String(a[8])) : null, pr: pr, celo: estado === 'prenada' && !!le && le[1] === 'C',
+        u: a[11] == null ? 0 : a[11], dFecha: a[8] ? okDate(a[14]) : null, rech: a[8] ? (baja[a[8]] || String(a[8])) : null, pr: pr, celo: estado === 'prenada' && !!le && le[1] === 'C',
         dLac: lp && (cat === 'vaca' || cat === 'seca') ? diffDays(ref, lp[0]) : null,
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
@@ -142,7 +142,7 @@
     Object.keys(bj).forEach(function (id) {
       var r = bj[id], key = 'b' + id, det = bajaDet[r[13]] || null;
       var tipo = r[12] === '1' ? 'muerte' : r[12] === '0' ? 'venta' : (det && det.muerte ? 'muerte' : 'baja');
-      var o = { key: key, rp: String(r[1]), nombre: r[2] || null, cat: CAT[r[6]] || null, u: r[11] == null ? 0 : r[11], bFecha: okDate(r[9]), bTipo: tipo, bCausa: det && det.d && !/sin datos/i.test(det.d) ? det.d : null };
+      var o = { key: key, rp: String(r[1]), nombre: r[2] || null, cat: CAT[r[6]] || null, u: r[11] == null ? 0 : r[11], dFecha: r[8] ? okDate(r[14]) : null, bFecha: okDate(r[9]), bTipo: tipo, bCausa: det && det.d && !/sin datos/i.test(det.d) ? det.d : null };
       bajas.push(o);
       var g = G[id];
       if (g) {
