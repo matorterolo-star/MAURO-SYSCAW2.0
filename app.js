@@ -186,7 +186,8 @@
   // Proyección del rodeo adulto a mitad de cada mes: en ordeñe, secas (secado hasta 30 días antes del parto) y preparto (30 días antes del parto).
   // Vaquillonas preñadas entran al preparto 30 días antes del parto y después pasan a ordeñe. No descuenta descartes ni muertes.
   var PREPARTO = 30;
-  function proyeccion(animales, hoy, nMeses) {
+  // lim: última fecha de parto que ya está confirmada por tacto (fecha de los datos + gestación - días hasta el diagnóstico)
+  function proyeccion(animales, hoy, nMeses, lim) {
     var y = +hoy.slice(0, 4), m = +hoy.slice(5, 7) - 1, out = [];
     var info = animales.map(function (a) {
       var d = derive(a, hoy), P = a.estado === 'prenada' && d.partoProb && d.partoProb >= hoy ? d.partoProb : null;
@@ -194,7 +195,7 @@
     });
     for (var i = 0; i < (nMeses || 12); i++) {
       var yy = y + Math.floor((m + i) / 12), mm = (m + i) % 12, D = i === 0 ? hoy : yy + '-' + pad(mm + 1) + '-15';
-      var r = { label: MESES[mm], anio: yy, ord: 0, sec: 0, pre: 0, preQ: 0 };
+      var r = { label: MESES[mm], anio: yy, ord: 0, sec: 0, pre: 0, preQ: 0, okPre: !lim || addDays(D, PREPARTO) <= lim, okSec: !lim || addDays(D, SECADO) <= lim };
       info.forEach(function (x) {
         var c = x.a.cat || 'vaca';
         if (c === 'ternera') return;
@@ -456,7 +457,7 @@
     var prom = { pe: ref0.pe.m, da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
     return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
-  var api = { indice: indice, ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
+  var api = { MESES: MESES, indice: indice, ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') initUI(api);
 
@@ -992,10 +993,11 @@
 
     /* ----- pestaña Rodeo ----- */
     function mesesChart(meses) {
-      var max = Math.max.apply(null, meses.map(function (m) { return m.n; })); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
+      var max = Math.max.apply(null, meses.map(function (m) { return mesReal(m) ? m.n : 0; })); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
       var W = 320, H = 150, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '';
       meses.forEach(function (m, i) {
         var x = padx + i * (bw + gap), h = m.n ? Math.max(3, m.n / max * (H - 48)) : 0, y = H - 26 - h;
+        if (!mesReal(m)) { s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>'; return; }
         if (m.n) s += '<rect class="mbar" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3"/><text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle">' + m.n + '</text>';
         else s += '<rect class="mzero" x="' + x.toFixed(1) + '" y="' + (H - 28) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"/>';
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>';
@@ -1009,6 +1011,7 @@
       var W = 320, H = 150, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '', k = (H - 48) / max;
       mv.forEach(function (m, i) {
         var x = padx + i * (bw + gap), base = H - 26, hv = m.n * k, hq = mq[i].n * k;
+        if (!mesReal(m)) { s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>'; return; }
         if (tot[i]) {
           if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + m.label + ': ' + m.n + ' vacas</title></rect>';
           if (hq) s += '<rect class="mbq" x="' + x.toFixed(1) + '" y="' + (base - hv - hq).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hq.toFixed(1) + '"><title>' + m.label + ': ' + mq[i].n + ' vaquillonas</title></rect>';
@@ -1045,23 +1048,29 @@
       if (navigator.share) navigator.share({ text: txt }).catch(function () {});
       else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
     }
+    // hasta dónde los datos son reales: preñeces confirmadas por tacto a la fecha de los datos
+    function limReal() { var ref = DB.fuente === 'syscaw' ? (DB.fecha || today()) : (DB.cargada || today()); return A.addDays(ref, A.GEST - A.DX_MIN); }
+    function mesReal(m) { return !m.key || m.key < limReal().slice(0, 7); }
     function proyHTML() {
-      var P = A.proyeccion(DB.animales, today(), 6), N = P.length;
-      var max = Math.max.apply(null, P.map(function (r) { return r.ord + r.sec + r.pre; })); if (!max) return '';
+      var lim = limReal();
+      var P = A.proyeccion(DB.animales, today(), 10, lim).filter(function (r) { return r.okPre; }), N = P.length;
+      if (!N) return '';
+      var max = Math.max.apply(null, P.map(function (r) { return r.okSec ? r.ord + r.sec + r.pre : 0; })); if (!max) return '';
       var W = 320, H = 150, padx = 6, gap = 12, bw = (W - padx * 2 - gap * (N - 1)) / N, s = '', k = (H - 48) / max;
       P.forEach(function (r, i) {
         var x = padx + i * (bw + gap), y = H - 26, tot = r.ord + r.sec + r.pre;
-        [['pord', r.ord], ['psec', r.sec], ['ppre', r.pre - r.preQ], ['pprq', r.preQ]].forEach(function (p) { var h = p[1] * k; if (h) { y -= h; s += '<rect class="' + p[0] + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '"/>'; } });
-        s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle">' + tot + '</text>';
+        if (r.okSec) [['pord', r.ord], ['psec', r.sec], ['ppre', r.pre - r.preQ], ['pprq', r.preQ]].forEach(function (p) { var h = p[1] * k; if (h) { y -= h; s += '<rect class="' + p[0] + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '"/>'; } });
+        if (r.okSec) s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle">' + tot + '</text>';
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + r.label + '</text>';
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
       });
-      var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + r.ord + '</td><td>' + r.sec + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
-      return '<section class="card"><h2>Proyección del rodeo · 6 meses</h2>' +
+      var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? r.ord : '') + '</td><td>' + (r.okSec ? r.sec : '') + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
+      var ult = P[N - 1];
+      return '<section class="card"><h2>Proyección del rodeo · hasta ' + ult.label + ' ' + String(ult.anio).slice(2) + '</h2>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">A mitad de cada mes. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe.</p></section>';
+        '<p class="cap">A mitad de cada mes. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe. Solo con preñeces confirmadas por tacto: lo que todavía depende de vacas sin diagnóstico queda en blanco.</p></section>';
     }
     /* ----- reproducción cada 21 días ----- */
     var PEVS = [40, 45, 50, 60];
@@ -1134,7 +1143,7 @@
       var aviso = '';
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
         '<section class="card"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
-        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
+        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
         (state.cat === 'vaca' || state.cat === 'seca' ? idxCardHTML() : '');
     }
