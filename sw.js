@@ -1,11 +1,11 @@
-const CACHE = 'libreta-v28';
-const FILES = ['./', 'index.html', 'app.js?v=28', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=28', 'syscaw.js?v=28', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'libreta-v29';
+const FILES = ['./', 'index.html', 'app.js?v=29', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=29', 'syscaw.js?v=29', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 // al instalar, baja todo de nuevo (sin usar la memoria del navegador) para que no queden archivos de versiones distintas
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('libreta-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 // con conexión: siempre pregunta al servidor si hay versión nueva; sin conexión: usa la copia guardada
 self.addEventListener('fetch', e => {

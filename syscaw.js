@@ -7,7 +7,7 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
-  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB' };
+  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB' };
   var FIELDS = {
     ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle', 'DescarteFecha'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
@@ -55,6 +55,16 @@
     var bajaDet = {};
     T.bajas.forEach(function (r) { baja[r[0]] = r[2] || r[1]; bajaDet[r[0]] = { d: r[1], muerte: r[3] === true }; });
     T.rodeos.forEach(function (r) { rod[r[0] + ':' + r[1]] = r[2] || r[3]; });
+    // inseminador de cada servicio: campo Responsable, con el nombre de la Agenda de SysCaw
+    var insServ = {};
+    try {
+      var insNom = {};
+      if (files[OPCIONALES.agenda]) PX.readTable(files[OPCIONALES.agenda], { fields: ['Id', 'Nombre', 'Abrev'], array: true }).rows.forEach(function (r) { var n = (r[1] || r[2] || '').trim(); if (n) insNom[r[0]] = n; });
+      PX.readTable(files[TABLES.serv], { fields: ['Vaca', 'Fecha', 'Evento', 'Responsable'], array: true }).rows.forEach(function (r) {
+        if (r[2] === 1 || r[3] == null) return;
+        var n = insNom[r[3]]; if (n) insServ[r[0] + '|' + r[1]] = n;
+      });
+    } catch (e) { insServ = {}; }
     T.elect.forEach(function (r) { if (r[2] === 1) { var v = String(r[3] || r[0] || '').replace(/^0+/, ''); if (v) el[r[1]] = v; } });
 
     var sel = null;
@@ -65,18 +75,19 @@
     var bj = {}, refB = (infoFromName(opts.nombreArchivo).fecha || '9999');
     var desdeHist = refB === '9999' ? '0000' : addDays(refB, -730);
     T.ident.forEach(function (r) { if ((r[9] || r[13]) && (!sel || sel[r[11]])) bj[r[0]] = r; });
-    var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
+    var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [] }; });
     // historial completo solo para las bajas de los últimos 2 años (para no agrandar la libreta)
     Object.keys(bj).forEach(function (id) { var f = okDate(bj[id][9]); if (!f || f >= desdeHist) G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
     var maxF = '0000';
     T.partos.forEach(function (r) {
-      var g = G[r[0]], f = okDate(r[1]); if (!g || !f || !(r[4] > 0)) return;
+      var g = G[r[0]], f = okDate(r[1]); if (!g || !f) return;
+      if (!(r[4] > 0)) { if (RES[r[2]] === 'A' && g.ab) g.ab.push(f); return; } // abortos que no abren lactancia
       var res = (RES[r[2]] || '') + (r[3] && r[3] !== '0' ? '/' + (RES[r[3]] || '') : '');
       g.pa.push([f, r[4], res, toro[r[5]] || '', okDate(r[6]), okDate(r[7])]); if (f > maxF) maxF = f;
     });
     T.serv.forEach(function (r) {
       var g = G[r[0]], f = okDate(r[1]); if (!g || !f) return;
-      var t = r[2] === 1 ? 'C' : 'S'; g.ev.push([f, t, t === 'S' ? (toro[r[3]] || '') : '']); if (f > maxF) maxF = f;
+      var t = r[2] === 1 ? 'C' : 'S'; g.ev.push([f, t, t === 'S' ? (toro[r[3]] || '') : '', t === 'S' ? (insServ[r[0] + '|' + r[1]] || null) : null]); if (f > maxF) maxF = f;
     });
     T.tactos.forEach(function (r) { var g = G[r[0]], f = okDate(r[1]); if (g && f) { g.ta.push([f, r[2]]); if (f > maxF) maxF = f; } });
     T.lact.forEach(function (r) {
@@ -130,12 +141,12 @@
         pFecha: lp ? lp[0] : null, pN: lp ? lp[1] : null, r1: r12[0] || null, r2: r12[1] || null,
         sFecha: le ? le[0] : null, sN: le ? servs.length : null, toro: le ? (le[1] === 'C' ? 'Celo' : (le[2] || null)) : null,
         tFecha: lt ? lt[0] : null, result: res, partoProb: conc ? addDays(conc, GEST) : null, estado: estado,
-        u: a[11] == null ? 0 : a[11], dFecha: a[8] ? okDate(a[14]) : null, rech: a[8] ? (baja[a[8]] || String(a[8])) : null, pr: pr, celo: estado === 'prenada' && !!le && le[1] === 'C',
+        u: a[11] == null ? 0 : a[11], dFecha: a[8] ? okDate(a[14]) : null, rech: a[8] ? (baja[a[8]] || String(a[8])) : null, rechDet: a[8] && bajaDet[a[8]] ? (bajaDet[a[8]].d || null) : null, pr: pr, celo: estado === 'prenada' && !!le && le[1] === 'C',
         dLac: lp && (cat === 'vaca' || cat === 'seca') ? diffDays(ref, lp[0]) : null,
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
       var m = byId[a[4]];
-      hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
+      hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
     var bajas = [];

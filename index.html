@@ -78,7 +78,7 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .bajabox{border:2px solid var(--vacia);border-radius:16px;padding:14px 16px;margin:0 0 12px;background:var(--surface)}
 .bajabox b{display:block;font-size:20px;color:var(--vacia);letter-spacing:.02em}
 .bajabox span{color:var(--muted);font-size:14.5px}
-.fh.baja .nm{text-decoration:line-through;text-decoration-color:var(--vacia)}
+
 .eartag .tgnum{fill:var(--tag-ink);font-family:var(--sans);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 
 /* búsqueda */
@@ -99,10 +99,10 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .error{color:var(--vacia);font-weight:600;margin:0 0 12px}
 
 /* filas de vacas */
-.row{display:grid;grid-template-columns:54px minmax(0,1fr) auto;grid-template-areas:"tag who rt" "tag sub sub";gap:3px 14px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 14px 10px 12px;margin-bottom:8px;cursor:pointer;min-height:78px}
+.row{display:grid;grid-template-columns:54px minmax(0,1fr) auto;grid-template-areas:"tag sub rt";gap:3px 14px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 14px 10px 12px;margin-bottom:8px;cursor:pointer;min-height:78px}
 .row:active{background:var(--bg)}
 .row .eartag{grid-area:tag;--hole:var(--surface)}
-.row .who{grid-area:who;font-size:17px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .who{grid-area:who;font-size:14.5px;font-weight:600;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .rt{grid-area:rt;justify-self:end}
 .row .sub{grid-area:sub;font-size:14px;color:var(--muted)}
 .chip{display:inline-block;font-size:13px;font-weight:700;border-radius:999px;padding:2px 11px;white-space:nowrap;color:var(--c,var(--sin));border:1.5px solid currentColor;background:transparent}
@@ -123,7 +123,20 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 
 /* tareas */
 .sec{margin-bottom:22px}
-.sechead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px}
+.sechead{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:2px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:56px}
+.sechead h2{flex:1}
+.sechead .chev{flex:none;color:var(--muted);transition:transform .15s}
+.sec.open .sechead{margin-bottom:10px}
+.sec.open .sechead .chev{transform:rotate(180deg)}
+.sec{margin-bottom:10px}
+.card.plg .plgh{display:flex;align-items:center;gap:10px;cursor:pointer;margin:0}
+.card.plg .plgh h2{flex:1;margin:0}
+.card.plg .ixhead.plgh h2{flex:1}
+.card.plg .plgh .chev{flex:none;margin-left:auto;color:var(--muted);transition:transform .15s}
+.card.plg.open .plgh{margin-bottom:10px}
+.card.plg.open .plgh .chev{transform:rotate(180deg)}
+.card.plg:not(.open)>:not(.plgh){display:none}
+.card.plg{padding-top:14px;padding-bottom:14px}
 .sechead h2{font-size:19px;margin:0}
 .count{min-width:30px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;background:var(--navy);color:#fff;border-radius:999px;padding:1px 10px;font-size:14px}
 @media (prefers-color-scheme:dark){.count{background:var(--gold);color:#14233F}}
@@ -186,8 +199,30 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .fh{display:flex;align-items:center;gap:18px;margin:4px 0 18px}
 .fhtag{flex:none;--hole:var(--bg)}
 .fhinfo{min-width:0}
-.fh .nm{font-size:21px;font-weight:700;line-height:1.15;overflow-wrap:anywhere;margin-bottom:10px}
+.fh .nm{font-size:16px;font-weight:700;line-height:1.2;overflow-wrap:anywhere;margin-bottom:8px;color:var(--muted)}
 .fhchips{display:flex;flex-wrap:wrap;gap:6px}
+.kv dd .torl,.torl{display:grid;gap:2px;justify-items:end;font-size:13px;font-weight:600;line-height:1.25}
+.torl small{font-weight:500;color:var(--muted);font-size:12px}
+.insem{font-weight:500;color:var(--muted);font-size:13px}
+.medalla{margin-left:auto;align-self:flex-start;flex:none;display:grid;justify-items:center;gap:2px;color:var(--gold);text-align:center}
+.medalla svg{width:34px;height:34px}
+.medalla b{font-size:12px;letter-spacing:.03em;color:var(--ink);white-space:nowrap}
+.medalla.peor{color:var(--vacia)}.medalla.peor b{color:var(--vacia);border:1.5px solid var(--vacia);border-radius:8px;padding:2px 6px}
+.medalla .ixb{font-size:26px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.medalla:not(.peor):not(.neutro) .ixb{color:var(--prenada)}.medalla.peor .ixb{color:var(--vacia)}
+.medalla .lbl{color:var(--muted);font-weight:600}
+.ixn{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink)}
+.ixn.ix-top{color:var(--prenada)}.ixn.ix-peor{color:var(--vacia)}
+.ixhead{display:flex;justify-content:space-between;align-items:baseline}.ixhead .ixn{font-size:28px}
+.ixc{margin:10px 0 0}
+.ixl{display:flex;justify-content:space-between;gap:10px;font-size:14.5px}
+.ixl small{color:var(--muted)}
+.ixl .up{color:var(--prenada)}.ixl .dn{color:var(--vacia)}
+.perd{color:var(--vacia);font-weight:700}
+.ixt{position:relative;height:8px;border-radius:4px;background:var(--bg);margin-top:5px}
+.ixt::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1.5px;background:var(--muted)}
+.ixt i{position:absolute;top:0;bottom:0;border-radius:4px}
+.ixt i.up{background:var(--prenada)}.ixt i.dn{background:var(--vacia)}
 .kv{margin:0}
 .kv>div{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:13px 0;border-top:1px solid var(--line)}
 .kv>div:first-child{border-top:0;padding-top:2px}
@@ -195,6 +230,9 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .kv dt{color:var(--muted);font-size:15px}
 .kv dd{margin:0;text-align:right;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
 .kv dd small{display:block;font-size:14px;font-weight:600;color:var(--muted)}
+.kv dd small.insem,.kv dd .torl small{display:inline;margin-left:6px;font-size:13px;font-weight:500}
+.kv dd .torl small.nro{margin:0 4px 0 0;font-weight:600}
+.kv dd .torl>span{white-space:nowrap}
 .kvs>div{padding:10px 0}
 .kvs dt{font-size:14px}
 .kvs dd{font-size:15px;font-weight:600;overflow-wrap:anywhere}
@@ -368,10 +406,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=28"></script>
-<script src="syscaw.js?v=28"></script>
+<script src="paradox.js?v=29"></script>
+<script src="syscaw.js?v=29"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=28"></script>
+<script src="app.js?v=29"></script>
 </body>
 </html>
