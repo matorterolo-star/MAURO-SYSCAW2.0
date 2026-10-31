@@ -1362,7 +1362,7 @@
         ['Días del último servicio', a.sFecha ? String(A.diffDays(t, a.sFecha)) : null],
         ['Número de servicio', a.sN != null ? String(a.sN) : null],
         ['Toro', toro],
-        [h && h.pa.length ? 'Servicios anteriores en esta lactancia' : 'Servicios anteriores', torosLac],
+        ['Servicios anteriores', torosLac],
         ['Último tacto y resultado', tacto],
         ['Parto probable', a.estado === 'prenada' && d.partoProb ? A.fmt(d.partoProb) + (d.partoEstimado ? ' <small>estimado</small>' : '') : null],
         ['Secado', a.estado === 'prenada' && d.secado && (a.cat === 'vaca' || a.cat === 'seca' || !a.cat) ? A.fmt(d.secado) : null]
