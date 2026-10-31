@@ -479,7 +479,7 @@
       else if (a.estado === 'servida' && a.sFecha) sub = 'Servicio ' + A.fmt(a.sFecha) + (a.toro && !/^celo/i.test(a.toro) ? ' · ' + a.toro : '');
       else if (a.tFecha) sub = 'Tacto ' + A.fmt(a.tFecha);
       else if (a.sFecha) sub = (/^celo/i.test(a.toro || '') ? 'Celo ' : 'Servicio ') + A.fmt(a.sFecha);
-      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + esc(sub) + (a.rech ? (paraVenta(a) ? ' <span class="vta">VENTA</span>' : ' <span class="dsc">Descarte</span>') : '');
+      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + (paraVenta(a) ? esc(nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche') + ' <span class="vta">VENTA</span>' : esc(sub) + (a.rech ? ' <span class="dsc">Descarte</span>' : ''));
     }
     function rowBajaHTML(a) {
       return '<button class="row baja" data-rp="' + esc(a.key) + '">' + tagSVG(a.rp, 54, true) +
@@ -540,6 +540,7 @@
         if (f === 'prenada') { var d = A.derive(a, h); return d.partoProb || '9999'; }
         if (f === 'servida') return a.sFecha || '9999';
         if (f === 'venta') return ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5);
+        if (f === 'descarte') return paraVenta(a) ? '0' + ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5) : '1';
         if (f === 'vacia' || f === 'ciclando' || f === 'apta' || f === 'otro') return a.tFecha || '9999';
         return '';
       };
