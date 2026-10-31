@@ -131,6 +131,14 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .pc{color:var(--muted);text-align:right;font-size:14px;font-variant-numeric:tabular-nums}
 .mchart{width:100%;height:auto}
 .mbar{fill:var(--prenada)}.mzero{fill:var(--line)}
+.mbv{fill:var(--navy)}.mbq{fill:var(--gold)}
+@media (prefers-color-scheme:dark){.mbv{fill:#7FA8EE}}
+.mleg{display:flex;flex-wrap:wrap;gap:6px 16px;margin:4px 0 8px;font-size:14px}
+.mleg span{display:inline-flex;align-items:center;gap:6px}
+.mleg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.mleg i.v{background:var(--navy)}.mleg i.q{background:var(--gold)}
+@media (prefers-color-scheme:dark){.mleg i.v{background:#7FA8EE}}
+.cats .todas{grid-column:1/-1}
 .mval{font-size:11px;fill:var(--ink);font-weight:700}.mlbl{font-size:10.5px;fill:var(--muted)}.myear{font-size:9px;fill:var(--muted)}
 .tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .tbl th,.tbl td{padding:9px 4px;text-align:right;border-top:1px solid var(--line)}

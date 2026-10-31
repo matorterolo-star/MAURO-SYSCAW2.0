@@ -495,15 +495,20 @@
     function grupos() { var g = {}; DB.animales.forEach(function (a) { g[grupo(a)] = (g[grupo(a)] || 0) + 1; }); return g; }
     function lista() {
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
+      if (state.cat === 'todas' && state.tab === 'rodeo' && !state.rp) return DB.animales;
       if (orden.indexOf(state.cat) < 0) state.cat = orden[0] || 'vaca';
       return DB.animales.filter(function (a) { return grupo(a) === state.cat; });
     }
     function catsHTML() {
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
       if (orden.length < 2) return '';
-      return '<div class="cats' + (orden.length === 4 ? ' n4' : '') + '" role="group" aria-label="Categoría">' + orden.map(function (k) {
-        return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
-      }).join('') + '</div>';
+      // en Rodeo se agrega "Todas" (partos proyectados de vacas y vaquillonas juntos)
+      var conTodas = state.tab === 'rodeo';
+      return '<div class="cats' + (orden.length === 4 || conTodas ? ' n4' : '') + '" role="group" aria-label="Categoría">' +
+        (conTodas ? '<button class="todas" data-cat="todas" aria-pressed="' + (state.cat === 'todas') + '">Todas <b>' + DB.animales.length + '</b></button>' : '') +
+        orden.map(function (k) {
+          return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
+        }).join('') + '</div>';
     }
     function nombreGrupo(n) { return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
     function ordenar(list, f) {
@@ -597,7 +602,41 @@
       });
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes">' + s + '</svg>';
     }
+    function mesesStack(mv, mq) {
+      var tot = mv.map(function (m, i) { return m.n + mq[i].n; });
+      var max = Math.max.apply(null, tot); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
+      var W = 320, H = 150, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '', k = (H - 48) / max;
+      mv.forEach(function (m, i) {
+        var x = padx + i * (bw + gap), base = H - 26, hv = m.n * k, hq = mq[i].n * k;
+        if (tot[i]) {
+          if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + m.label + ': ' + m.n + ' vacas</title></rect>';
+          if (hq) s += '<rect class="mbq" x="' + x.toFixed(1) + '" y="' + (base - hv - hq).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hq.toFixed(1) + '"><title>' + m.label + ': ' + mq[i].n + ' vaquillonas</title></rect>';
+          s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (base - hv - hq - 4).toFixed(1) + '" text-anchor="middle">' + tot[i] + '</text>';
+        } else s += '<rect class="mzero" x="' + x.toFixed(1) + '" y="' + (H - 28) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"/>';
+        s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>';
+        if (m.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(m.anio).slice(2) + '</text>';
+      });
+      return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes, vacas y vaquillonas">' + s + '</svg>';
+    }
+    function rodeoTodasHTML() {
+      var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
+      var rv = A.resumen(V, h), rq = A.resumen(Q, h);
+      var sv = rv.meses.reduce(function (s, m) { return s + m.n; }, 0), sq = rq.meses.reduce(function (s, m) { return s + m.n; }, 0);
+      var antes = rv.antes + rq.antes, despues = rv.despues + rq.despues;
+      var g = grupos(), filas = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; }).map(function (k) {
+        var L = DB.animales.filter(function (a) { return grupo(a) === k; }), p = L.filter(function (a) { return a.estado === 'prenada'; }).length;
+        return '<tr><td>' + GL[k] + '</td><td>' + nf(L.length) + '</td><td>' + (k === 'ternera' ? '' : nf(p) + ' <small>' + pct(p, L.length) + '</small>') + '</td></tr>';
+      }).join('');
+      return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
+        '<section class="card"><h2>Partos probables por mes</h2>' +
+        '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
+        mesesStack(rv.meses, rq.meses) +
+        (antes ? '<p class="secnote warnnote">' + antes + ' preñadas tienen el parto probable vencido.</p>' : '') +
+        (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
+        '<section class="card"><h2>' + nf(DB.animales.length) + ' animales</h2><table class="tbl"><thead><tr><th>Categoría</th><th>Animales</th><th>Preñadas</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
+    }
     function rodeoHTML() {
+      if (state.cat === 'todas') return rodeoTodasHTML();
       var L = lista(), r = A.resumen(L, today()), c = r.conteo;
       var seg = ORDEN.filter(function (k) { return c[k]; }).map(function (k) {
         return '<span class="seg ' + k + '" style="flex:' + c[k] + '" title="' + LABEL[k] + '"></span>';
