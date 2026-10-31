@@ -378,6 +378,9 @@
       V.raw = sw ? s / sw : null;
     });
     vacas = vacas.filter(function (V) { return V.raw != null; });
+    // vaca probada: con 1 lactancia evaluada el índice cuenta 60%, con 2 el 80% y desde 3 entero (el resto se acerca al promedio)
+    var m0 = idxMedia(vacas.map(function (V) { return V.raw; }));
+    vacas.forEach(function (V) { V.conf = V.nLac >= 3 ? 1 : V.nLac === 2 ? 0.8 : 0.6; V.raw = m0 + V.conf * (V.raw - m0); Object.keys(V.z).forEach(function (k) { if (V.z[k] != null) V.z[k] *= V.conf; }); });
     var rs = vacas.map(function (V) { return V.raw; }), mr = idxMedia(rs), sr = idxDesv(rs, mr) || 1;
     vacas.forEach(function (V) {
       V.idx = Math.round(100 + 10 * (V.raw - mr) / sr);
@@ -1118,7 +1121,7 @@
       var u = r.usaSol ? ' kg sól.' : ' L';
       return [V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, V.mle != null ? nf(V.mle) + u : null].filter(Boolean).join(' · ');
     }
-    function idxNum(V) { return '<b class="ixn ' + (V.tier || '') + '">' + V.idx + '</b>'; }
+    function idxNum(V) { return '<b class="ixn' + (V.tier ? ' ix-' + V.tier : '') + '">' + V.idx + '</b>'; }
     var MEDALLA = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 2h8l-2 6h-4z" fill="currentColor" opacity=".55"/><circle cx="12" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 12l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z" fill="currentColor"/></svg>';
     function idxCardHTML() {
       var r = IDX(); if (!r) return '';
@@ -1151,7 +1154,7 @@
           '<div class="ixt"><i class="' + (p >= 0 ? 'up' : 'dn') + '" style="' + (p >= 0 ? 'left:50%' : 'right:50%') + ';width:' + w.toFixed(1) + '%"></i></div></div>';
       }).join('');
       return '<section class="card"><div class="ixhead"><h2>Índice del tambo</h2>' + idxNum(V) + '</div>' +
-        '<p class="cap" style="margin:-4px 0 8px">Puesto ' + V.puesto + ' de ' + r.n + (V.mejorQue != null ? ' · mejor que el ' + V.mejorQue + '% de las vacas del tambo' : '') + ' · ' + V.nLac + (V.nLac === 1 ? ' lactancia evaluada' : ' lactancias evaluadas') + '</p>' + bar +
+        '<p class="cap" style="margin:-4px 0 8px">Puesto ' + V.puesto + ' de ' + r.n + (V.mejorQue != null ? ' · mejor que el ' + Math.min(99, V.mejorQue) + '% de las vacas del tambo' : '') + ' · ' + V.nLac + (V.nLac === 1 ? ' lactancia evaluada' : ' lactancias evaluadas') + (V.conf < 1 ? ' (cuenta ' + Math.round(V.conf * 100) + '% hasta tener 3)' : '') + '</p>' + bar +
         '<p class="cap">Puntos que suma o resta cada dato. La línea del medio es el promedio del tambo.</p></section>';
     }
     function idxBadge(a) {
