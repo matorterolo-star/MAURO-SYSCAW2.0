@@ -283,7 +283,11 @@
           var luego = L.sv[i + 1] || L.neg.some(function (d) { return d > e[0] && diffDays(d, e[0]) >= 25; });
           if (luego) cy.sMal++; else cy.sPend++;
         });
-        var apta = diffDays(cy.fin, L.p) >= pev && (!L.conc || L.conc >= cy.ini) && (!x.salida || x.salida > cy.mid) && !(x.desc && x.desc <= cy.ini);
+        // servida en un ciclo anterior y todavía sin resultado (sin tacto vacía ni nuevo servicio): no es apta
+        // hasta que se la vuelva a servir; si después el tacto da vacía, cuenta para atrás
+        var prev = null; L.sv.forEach(function (e) { if (e[0] < cy.ini) prev = e[0]; });
+        var pendiente = prev && !L.conc && !L.sv.some(function (e) { return e[0] > prev; }) && !L.neg.some(function (d) { return d > prev && diffDays(d, prev) >= 25; });
+        var apta = !pendiente && diffDays(cy.fin, L.p) >= pev && (!L.conc || L.conc >= cy.ini) && (!x.salida || x.salida > cy.mid) && !(x.desc && x.desc <= cy.ini);
         if (!apta) return;
         cy.aptas++;
         if (L.sv.some(function (e) { return e[0] >= cy.ini && e[0] <= cy.fin; })) cy.serv++;
@@ -814,7 +818,7 @@
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     function rodeoTodasHTML() {
