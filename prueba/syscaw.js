@@ -7,7 +7,7 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
-  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB' };
+  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB' };
   var FIELDS = {
     ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle', 'DescarteFecha'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
@@ -55,25 +55,15 @@
     var bajaDet = {};
     T.bajas.forEach(function (r) { baja[r[0]] = r[2] || r[1]; bajaDet[r[0]] = { d: r[1], muerte: r[3] === true }; });
     T.rodeos.forEach(function (r) { rod[r[0] + ':' + r[1]] = r[2] || r[3]; });
-    // inseminador de cada servicio: el campo y su tabla se buscan por nombre (cambian entre versiones de SysCaw)
+    // inseminador de cada servicio: campo Responsable, con el nombre de la Agenda de SysCaw
     var insServ = {};
     try {
-      var SV = PX.readTable(files[TABLES.serv], {}), nm = SV.names;
-      var fIns = nm.filter(function (n) { return /insem/i.test(n); })[0];
-      if (fIns) {
-        var insNom = {};
-        Object.keys(files).forEach(function (k) {
-          if (!/insem/i.test(k)) return;
-          var IT = PX.readTable(files[k], {}), n2 = IT.names;
-          var fId = n2.filter(function (n) { return /^id/i.test(n); })[0] || n2[0];
-          var fLb = n2.filter(function (n) { return /alias|abrev|sigla|inic/i.test(n); })[0] || n2.filter(function (n) { return /nomb/i.test(n); })[0] || n2[1];
-          IT.rows.forEach(function (r) { if (r[fId] != null && r[fLb]) insNom[r[fId]] = String(r[fLb]).trim(); });
-        });
-        SV.rows.forEach(function (r) {
-          var v = r[fIns]; if (v == null || v === '' || v === 0) return;
-          insServ[r.Vaca + '|' + r.Fecha] = typeof v === 'number' ? (insNom[v] || null) : String(v).trim();
-        });
-      }
+      var insNom = {};
+      if (files[OPCIONALES.agenda]) PX.readTable(files[OPCIONALES.agenda], { fields: ['Id', 'Nombre', 'Abrev'], array: true }).rows.forEach(function (r) { var n = (r[1] || r[2] || '').trim(); if (n) insNom[r[0]] = n; });
+      PX.readTable(files[TABLES.serv], { fields: ['Vaca', 'Fecha', 'Evento', 'Responsable'], array: true }).rows.forEach(function (r) {
+        if (r[2] === 1 || r[3] == null) return;
+        var n = insNom[r[3]]; if (n) insServ[r[0] + '|' + r[1]] = n;
+      });
     } catch (e) { insServ = {}; }
     T.elect.forEach(function (r) { if (r[2] === 1) { var v = String(r[3] || r[0] || '').replace(/^0+/, ''); if (v) el[r[1]] = v; } });
 
@@ -207,10 +197,9 @@
     Object.keys(TABLES).forEach(function (k) { want[TABLES[k].toLowerCase()] = TABLES[k]; });
     Object.keys(OPCIONALES).forEach(function (k) { want[OPCIONALES[k].toLowerCase()] = OPCIONALES[k]; });
     var ex = await U.createExtractorFromData({ data: arrayBuffer, wasmBinary: opts.wasmBinary });
-    var esIns = function (b) { return /insem/i.test(b) && /\.db$/i.test(b); };
-    var list = ex.extract({ files: function (h) { var b = h.name.split(/[\\/]/).pop().toLowerCase(); return !!want[b] || esIns(b); } });
+    var list = ex.extract({ files: function (h) { var b = h.name.split(/[\\/]/).pop().toLowerCase(); return !!want[b]; } });
     var files = {};
-    for (var f of list.files) { var b = f.fileHeader.name.split(/[\\/]/).pop().toLowerCase(); if (f.extraction) files[want[b] || b] = f.extraction; }
+    for (var f of list.files) { var b = f.fileHeader.name.split(/[\\/]/).pop().toLowerCase(); if (f.extraction) files[want[b]] = f.extraction; }
     if (!files[TABLES.ident]) throw new Error('El archivo no parece un respaldo de SysCaw (no encontré la tabla Identificación).');
     var us = unidades(files, { Paradox: opts.Paradox }), ids = null;
     if (us.length > 1 && opts.elegir) {

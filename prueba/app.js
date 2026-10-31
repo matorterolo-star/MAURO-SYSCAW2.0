@@ -335,15 +335,18 @@
         if (spc) V.spc.push(Math.min(spc, 6));
         if (pc != null && pc > 0) V.pc.push(Math.min(pc, 150));
         var l = null; h.la.forEach(function (x) { if (x[0] === p[1]) l = x; });
-        if (l && l[2] && (np || (l[5] || 0) >= 3)) {
+        // leche: a 305 días; si la lactancia cerró antes de 305 días SysCaw no lo calcula y se usa su total. La lactancia en curso cuenta solo con 305 días cumplidos
+        var lit305 = l ? (l[2] || (np ? l[1] : null)) : null;
+        if (lit305) {
           // análisis de sólidos: los controles del respaldo cubren la lactancia actual y la anterior
           var nAn = null;
           if (h.ct && h.ct.length && i >= h.pa.length - 2) nAn = h.ct.filter(function (c) { return c[0] >= p[0] && c[0] < hasta && c[2] > 0 && c[3] > 0; }).length;
-          var r = { v: V, nro: p[1], lit: l[2], nAn: nAn, sol: l[3] != null && l[4] != null ? l[2] * (l[3] + l[4]) / 100 : null };
+          var pctOk = l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
+          var r = { v: V, nro: p[1], lit: lit305, nAn: nAn, sol: pctOk ? lit305 * (l[3] + l[4]) / 100 : null };
           lacs.push(r); V.le.push(r);
         }
       });
-      if (V.da.length) vacas.push(V);
+      if (V.da.length && V.le.length) vacas.push(V); // hace falta al menos una lactancia con leche cerrada
     });
     // leche: kg de sólidos si casi todas las lactancias tienen grasa y proteína; si no, litros. Comparada dentro de 1ª, 2ª y 3ª o más lactancia
     // sólidos solo si el tambo hace análisis regular: la mayoría de las vacas con 4 o más controles con grasa y proteína
@@ -1159,7 +1162,7 @@
     function idxFichaHTML(a) {
       var r = IDX(); if (!r || !(a.cat === 'vaca' || a.cat === 'seca' || !a.cat)) return '';
       var V = r.por[a.rp];
-      if (!V) return '<section class="card"><h2>Índice del tambo</h2><p class="cap" style="margin:0">Sin índice: le falta al menos una lactancia con datos de reproducción completos.</p></section>';
+      if (!V) return '<section class="card"><h2>Índice del tambo</h2><p class="cap" style="margin:0">Sin índice todavía: le falta cerrar al menos una lactancia con datos de reproducción y de leche.</p></section>';
       var comp = [
         ['da', 'Días abiertos', nf1(V.m.da) + ' d', nf(r.prom.da)],
         ['spc', 'Servicios por concepción', nf(V.m.spc, 1), nf(r.prom.spc, 1)],
