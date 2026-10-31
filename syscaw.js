@@ -7,7 +7,7 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
-  var OPCIONALES = { tambos: 'Tambos.DB' };
+  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB' };
   var FIELDS = {
     ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
@@ -51,7 +51,7 @@
     });
     var toro = {}, cod = {}, codes = {}, baja = {}, rod = {}, el = {};
     T.toros.forEach(function (r) { toro[r[0]] = (r[1] || r[2] || '').trim(); });
-    T.codigos.forEach(function (r) { cod[r[0]] = { alias: r[1], nombre: r[2], gest: r[3] }; codes[r[0]] = [r[1], r[2]]; });
+    T.codigos.forEach(function (r) { cod[r[0]] = { alias: r[1], nombre: r[2], gest: r[3] }; codes[r[0]] = [r[1], r[2], r[3]]; });
     var bajaDet = {};
     T.bajas.forEach(function (r) { baja[r[0]] = r[2] || r[1]; bajaDet[r[0]] = { d: r[1], muerte: r[3] === true }; });
     T.rodeos.forEach(function (r) { rod[r[0] + ':' + r[1]] = r[2] || r[3]; });
@@ -155,7 +155,15 @@
     });
     bajas.sort(function (x, y) { return (y.bFecha || '') < (x.bFecha || '') ? -1 : 1; });
     var c = {}; animales.forEach(function (x) { c[x.cat] = (c[x.cat] || 0) + 1; });
-    return { animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
+    // configuración del tambo en SysCaw: período de espera voluntario (días al 1er servicio) y días de secado
+    var config = {};
+    if (files[OPCIONALES.llaves]) {
+      try {
+        var ll = PX.readTable(files[OPCIONALES.llaves], { fields: ['Delta1erServVacas', 'Delta1erServVaq', 'DiasPreSecado'], array: true }).rows[0];
+        if (ll) { if (ll[0] > 0) config.pev = ll[0]; if (ll[1] > 0) config.pevVaq = ll[1]; if (ll[2] > 0) config.secado = ll[2]; }
+      } catch (e) {}
+    }
+    return { config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una

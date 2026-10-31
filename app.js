@@ -242,8 +242,57 @@
     return r;
   }
 
+  /* ---------- reproducción cada 21 días ----------
+     animales: [{ h: historial, salida: fecha de baja o null }]; esPren(codigoTacto) -> bool
+     Apta en un ciclo: vaca con parto, que llega al período de espera voluntario antes del día 11 del ciclo,
+     sin preñez al inicio del ciclo y en el rodeo a mitad del ciclo.
+     Tasa de servicio = aptas servidas / aptas; tasa de preñez = aptas que se preñan en el ciclo / aptas;
+     tasa de concepción = servicios que preñaron / servicios con resultado conocido (de todas las vacas). */
+  function ciclos21(animales, esPren, inicio, pev, ref) {
+    var C = [], ultTacto = '0000';
+    animales.forEach(function (x) { if (x.h && x.h.ta) x.h.ta.forEach(function (t) { if (t[0] > ultTacto && t[0] <= ref) ultTacto = t[0]; }); });
+    // un ciclo está cerrado cuando el último tacto del rodeo es al menos 28 días posterior al fin del ciclo
+    for (var c = inicio, k = 1; c <= ref; c = addDays(c, 21), k++) C.push({ n: k, ini: c, fin: addDays(c, 20), mid: addDays(c, 10), aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0, sPend: 0, cerrado: addDays(c, 20 + 28) <= ultTacto });
+    C.ultTacto = ultTacto;
+    animales.forEach(function (x) {
+      var h = x.h; if (!h || !h.pa || !h.pa.length) return;
+      var pa = h.pa, servs = h.ev.filter(function (e) { return e[1] === 'S'; });
+      // fecha de concepción de cada lactancia
+      var lac = pa.map(function (p, i) {
+        var np = pa[i + 1] || null, conc = null, hasta = np ? np[0] : '9999';
+        var sv = servs.filter(function (e) { return e[0] > p[0] && e[0] < hasta; });
+        if (np) {
+          conc = np[4] || null;
+          if (!conc) { var est = addDays(np[0], -GEST), best = null; sv.forEach(function (e) { var d = Math.abs(diffDays(e[0], est)); if (d <= 15 && (!best || d < best[1])) best = [e[0], d]; }); conc = best ? best[0] : est; }
+        } else {
+          var pos = h.ta.filter(function (t) { return t[0] > p[0] && esPren(t[1]); });
+          if (pos.length) { var T = pos[pos.length - 1][0], antes = sv.filter(function (e) { return e[0] <= T; }); conc = antes.length ? antes[antes.length - 1][0] : null; }
+        }
+        var neg = h.ta.filter(function (t) { return t[0] > p[0] && t[0] < hasta && !esPren(t[1]); }).map(function (t) { return t[0]; });
+        return { p: p[0], np: np ? np[0] : null, conc: conc, sv: sv, neg: neg };
+      });
+      C.forEach(function (cy) {
+        // lactancia en curso al inicio del ciclo
+        var L = null; lac.forEach(function (l) { if (l.p <= cy.ini) L = l; });
+        if (!L) return;
+        // servicios del ciclo y su resultado
+        L.sv.forEach(function (e, i) {
+          if (e[0] < cy.ini || e[0] > cy.fin) return;
+          if (L.conc) { if (e[0] === L.conc) cy.sOk++; else if (e[0] < L.conc) cy.sMal++; return; }
+          var luego = L.sv[i + 1] || L.neg.some(function (d) { return d > e[0] && diffDays(d, e[0]) >= 25; });
+          if (luego) cy.sMal++; else cy.sPend++;
+        });
+        var apta = diffDays(cy.mid, L.p) >= pev && (!L.conc || L.conc >= cy.ini) && (!x.salida || x.salida > cy.mid);
+        if (!apta) return;
+        cy.aptas++;
+        if (L.sv.some(function (e) { return e[0] >= cy.ini && e[0] <= cy.fin; })) cy.serv++;
+        if (L.conc && L.conc >= cy.ini && L.conc <= cy.fin) cy.pren++;
+      });
+    });
+    return C;
+  }
   function setSecado(n) { SECADO = n; api.SECADO = n; }
-  var api = { setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
+  var api = { ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') initUI(api);
 
@@ -333,7 +382,7 @@
       setTimeout(function () {
         root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
           var sel = d.unidadesSel || [], parcial = !!d.sel;
-          DB = { animales: [], todos: d.animales, bajasT: d.bajas || [], unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          DB = { animales: [], todos: d.animales, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
@@ -732,6 +781,41 @@
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Preparto</th></tr></thead><tbody>' + filas + '</tbody></table>' +
         '<p class="cap">A mitad de cada mes. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe.</p></section>';
     }
+    /* ----- reproducción cada 21 días ----- */
+    var PEVS = [40, 45, 50, 60];
+    function pevActual() { return state.pev || (DB.config && DB.config.pev) || 45; }
+    function inicio21() {
+      var f = state.ini21;
+      if (!f) { try { f = localStorage.getItem('libreta:ini21'); } catch (e) {} }
+      if (!f) { var h = today(), y = +h.slice(0, 4); if (h.slice(5) < '05-22') y--; f = y + '-05-22'; }
+      return (state.ini21 = f);
+    }
+    function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
+    function repHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
+      var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null }; })
+        .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha }; }));
+      var C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, ref) : [];
+      var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
+      var T = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 }, nCerr = 0;
+      C.forEach(function (c) { if (!c.cerrado) return; nCerr++; ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { T[k] += c[k]; }); });
+      var filas = C.map(function (c) {
+        return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
+          '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
+          (c.cerrado ? '<td>' + p(c.sOk, c.sOk + c.sMal) + '<small>' + c.sOk + '/' + (c.sOk + c.sMal) + '</small></td><td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
+            : '<td colspan="2" class="enc">en curso</td>') + '</tr>';
+      }).join('');
+      var pevTxt = DB.config && DB.config.pev ? 'SysCaw: ' + DB.config.pev : 'sin dato en SysCaw';
+      return '<section class="card rep"><h2>Reproducción cada 21 días</h2>' +
+        '<label class="secfecha">Inicio de servicios <input type="date" id="ini21" value="' + ini + '" max="' + ref + '"></label>' +
+        '<div class="secsel"><span>Espera voluntaria</span>' + PEVS.map(function (n) { return '<button class="fchip plain" data-pev="' + n + '" aria-pressed="' + (pev === n) + '">' + n + '</button>'; }).join('') + '<span>días <small>(' + pevTxt + ')</small></span></div>' +
+        (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
+          '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
+          '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+          '<p class="cap">Vacas en lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías con ' + pev + ' días posparto o más a mitad del ciclo y en el rodeo. <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
+    }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
       var rv = A.resumen(V, h), rq = A.resumen(Q, h);
@@ -746,7 +830,7 @@
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
-        proyHTML() +
+        proyHTML() + repHTML() +
         '<section class="card"><h2>' + nf(DB.animales.length) + ' animales</h2><table class="tbl"><thead><tr><th>Categoría</th><th>Animales</th><th>Preñadas</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
     }
     function rodeoHTML() {
@@ -1024,6 +1108,7 @@
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; try { localStorage.setItem('libreta:cat', state.cat); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
+      if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
@@ -1045,6 +1130,7 @@
       else if (a === 'ucancel') cerrarUnidad(null);
     });
     document.addEventListener('change', function (e) {
+      if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; try { localStorage.setItem('libreta:ini21', state.ini21); } catch (x) {} render(); }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; try { localStorage.setItem('libreta:fsec', state.fsec); } catch (x) {} render(); }
     });
     document.addEventListener('input', function (e) {

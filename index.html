@@ -157,6 +157,16 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .mleg i.pord{background:var(--navy)}.mleg i.psec{background:#9FB0CC}.mleg i.ppre{background:var(--gold)}
 @media (prefers-color-scheme:dark){.mleg i.pord{background:#7FA8EE}.mleg i.psec{background:#43577F}}
 .ptbl{margin-top:8px;font-size:14.5px}.ptbl td,.ptbl th{padding:6px 4px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 2px}
+.kpis div{background:var(--bg);border-radius:12px;padding:10px 8px;text-align:center}
+.kpis b{display:block;font-size:24px;font-variant-numeric:tabular-nums}
+.kpis span{font-size:12.5px;color:var(--muted);font-weight:600}
+.kpis .tp b{color:var(--prenada)}
+.rtbl{margin-top:8px;font-size:15px}.rtbl td,.rtbl th{padding:7px 3px}
+.rtbl td small{display:block;font-size:11.5px;color:var(--muted);font-weight:500}
+.rtbl td:first-child small{display:inline}
+.rtbl tr.abierto td{color:var(--muted)}
+.rtbl td.enc{text-align:center;font-style:italic;font-size:13.5px}
 .secfecha{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-weight:700;font-size:15px;margin:6px 0 4px}
 .secfecha input{min-height:46px;font-size:17px;font-weight:600;padding:6px 12px;border:2px solid var(--navy);border-radius:12px;background:var(--surface);color:var(--ink)}
 @media (prefers-color-scheme:dark){.secfecha input{border-color:var(--gold);color-scheme:dark}}
@@ -338,10 +348,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=22"></script>
-<script src="syscaw.js?v=22"></script>
+<script src="paradox.js?v=23"></script>
+<script src="syscaw.js?v=23"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>
