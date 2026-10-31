@@ -1178,8 +1178,10 @@
         ' Puntos que suma o resta cada dato; la línea del medio es el promedio del tambo.</p></section>';
     }
     function idxBadge(a) {
-      var V = idxDe(a); if (!V || !V.tier) return '';
-      return V.tier === 'top' ? '<span class="medalla" title="Entre el 10% mejor del tambo">' + MEDALLA + '<b>Top 10%</b></span>' : '<span class="medalla peor" title="Entre el 10% más bajo del tambo"><b>10% más bajo</b></span>';
+      var V = idxDe(a); if (!V) return '';
+      var cls = V.tier === 'top' ? '' : V.tier === 'peor' ? ' peor' : ' neutro';
+      return '<span class="medalla' + cls + '" title="Índice del tambo: ' + V.idx + '">' + (V.tier === 'top' ? MEDALLA : '') + '<span class="ixb">' + V.idx + '</span>' +
+        (V.tier === 'top' ? '<b>Top 10%</b>' : V.tier === 'peor' ? '<b>10% inferior</b>' : '<b class="lbl">Índice</b>') + '</span>';
     }
     function codeName(c) { var k = DB.codes && DB.codes[String(c)]; return k ? k[1] : 'Código ' + c; }
     function tacClass(c) { return c === 1 ? 'prenada' : (c === 7 || c === 105 || c === 72) ? 'vacia' : ''; }
