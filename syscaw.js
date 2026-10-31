@@ -9,7 +9,7 @@
   };
   var OPCIONALES = { tambos: 'Tambos.DB' };
   var FIELDS = {
-    ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo'],
+    ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
     partos: ['Vaca', 'Fecha', 'Resultado1', 'Resultado2', 'NroParto', 'Toro', 'FServicio', 'FechaCierreLact'],
     tactos: ['Vaca', 'Fecha', 'Resultado'],
@@ -17,7 +17,7 @@
     lact: ['Vaca', 'Parto', 'Controles', 'LitrosProd', 'LitrosProd305', 'GrasaProd', 'ProtProd'],
     toros: ['ID', 'Alias', 'Nombre'],
     codigos: ['ID', 'Alias', 'Nombre', 'ImplicanciaGest'],
-    bajas: ['ID', 'Detalle', 'Abrev'],
+    bajas: ['ID', 'Detalle', 'Abrev', 'Tipo'],
     rodeos: ['IDTipo', 'IDPropio', 'Abrev3', 'NombreRodeo'],
     elect: ['IDElectr', 'IdVaca', 'Tipo', 'Obs'],
     tambos: ['ID', 'Nombre']
@@ -52,7 +52,8 @@
     var toro = {}, cod = {}, codes = {}, baja = {}, rod = {}, el = {};
     T.toros.forEach(function (r) { toro[r[0]] = (r[1] || r[2] || '').trim(); });
     T.codigos.forEach(function (r) { cod[r[0]] = { alias: r[1], nombre: r[2], gest: r[3] }; codes[r[0]] = [r[1], r[2]]; });
-    T.bajas.forEach(function (r) { baja[r[0]] = r[2] || r[1]; });
+    var bajaDet = {};
+    T.bajas.forEach(function (r) { baja[r[0]] = r[2] || r[1]; bajaDet[r[0]] = { d: r[1], muerte: r[3] === true }; });
     T.rodeos.forEach(function (r) { rod[r[0] + ':' + r[1]] = r[2] || r[3]; });
     T.elect.forEach(function (r) { if (r[2] === 1) { var v = String(r[3] || r[0] || '').replace(/^0+/, ''); if (v) el[r[1]] = v; } });
 
@@ -60,7 +61,13 @@
     if (opts.unidades && opts.unidades.length) { sel = {}; opts.unidades.forEach(function (u) { sel[u] = true; }); }
     var byId = {}, act = {};
     T.ident.forEach(function (r) { byId[r[0]] = r; if (!r[9] && CAT[r[6]] && (!sel || sel[r[11]])) act[r[0]] = r; });
+    // dados de baja (vendidos / muertos): no cuentan en la libreta, pero se pueden buscar por caravana
+    var bj = {}, refB = (infoFromName(opts.nombreArchivo).fecha || '9999');
+    var desdeHist = refB === '9999' ? '0000' : addDays(refB, -730);
+    T.ident.forEach(function (r) { if ((r[9] || r[13]) && (!sel || sel[r[11]])) bj[r[0]] = r; });
     var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
+    // historial completo solo para las bajas de los últimos 2 años (para no agrandar la libreta)
+    Object.keys(bj).forEach(function (id) { var f = okDate(bj[id][9]); if (!f || f >= desdeHist) G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
     var maxF = '0000';
     T.partos.forEach(function (r) {
       var g = G[r[0]], f = okDate(r[1]); if (!g || !f || !(r[4] > 0)) return;
@@ -131,8 +138,21 @@
       hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
+    var bajas = [];
+    Object.keys(bj).forEach(function (id) {
+      var r = bj[id], key = 'b' + id, det = bajaDet[r[13]] || null;
+      var tipo = r[12] === '1' ? 'muerte' : r[12] === '0' ? 'venta' : (det && det.muerte ? 'muerte' : 'baja');
+      var o = { key: key, rp: String(r[1]), nombre: r[2] || null, cat: CAT[r[6]] || null, u: r[11] == null ? 0 : r[11], bFecha: okDate(r[9]), bTipo: tipo, bCausa: det && det.d && !/sin datos/i.test(det.d) ? det.d : null };
+      bajas.push(o);
+      var g = G[id];
+      if (g) {
+        var m = byId[r[4]];
+        hist[key] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
+      } else hist[key] = { pa: [], ev: [], ta: [], la: [], ct: [], fn: okDate(r[3]), ma: byId[r[4]] ? String(byId[r[4]][1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null, corto: true };
+    });
+    bajas.sort(function (x, y) { return (y.bFecha || '') < (x.bFecha || '') ? -1 : 1; });
     var c = {}; animales.forEach(function (x) { c[x.cat] = (c[x.cat] || 0) + 1; });
-    return { animales: animales, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
+    return { animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una

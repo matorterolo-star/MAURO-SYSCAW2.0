@@ -258,7 +258,7 @@
     function saveDB() {
       DB.guardada = Date.now();
       var g = DB;
-      if (DB.todos) { g = {}; Object.keys(DB).forEach(function (k) { if (k !== 'animales') g[k] = DB[k]; }); }
+      if (DB.todos) { g = {}; Object.keys(DB).forEach(function (k) { if (k !== 'animales' && k !== 'bajas') g[k] = DB[k]; }); }
       return idbSet('db', g).then(function () {
         state.persisted = true; try { localStorage.removeItem(KEY); } catch (e) {}
       }, function () {
@@ -266,19 +266,26 @@
       }).then(function () { render(); });
     }
     function savePerfil() { try { localStorage.setItem(KEYP, JSON.stringify(PERFIL)); } catch (e) {} }
-    function byRp(rp) { for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i]; return null; }
+    function byRp(rp) {
+      for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i];
+      var B = DB.bajas || []; for (i = 0; i < B.length; i++) if (B[i].key === rp) return B[i];
+      return null;
+    }
+    var BAJA = { muerte: 'Muerta', venta: 'Vendida', baja: 'Dada de baja' };
+    function bajaTxt(a) { return BAJA[a.bTipo] + (a.bFecha ? ' el ' + A.fmt(a.bFecha) : ''); }
     function toast(msg) {
       var t = $('#toast'); t.textContent = msg; t.classList.add('on');
       clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove('on'); }, 3200);
     }
 
     /* ----- caravana (silueta con el número) ----- */
-    function tagSVG(rp, w) {
+    function tagSVG(rp, w, tachada) {
       var s = String(rp), n = s.length, fs = n <= 3 ? 40 : n === 4 ? 34 : n === 5 ? 28 : 23;
-      return '<svg class="eartag" width="' + w + '" height="' + Math.round(w * 1.3) + '" viewBox="0 0 100 130" role="img" aria-label="Caravana ' + esc(s) + '">' +
+      return '<svg class="eartag' + (tachada ? ' baja' : '') + '" width="' + w + '" height="' + Math.round(w * 1.3) + '" viewBox="0 0 100 130" role="img" aria-label="Caravana ' + esc(s) + '">' +
         '<path class="tg" d="M38 14 L62 14 L62 33 C62 46 96 42 96 60 L96 119 Q96 127 88 127 L12 127 Q4 127 4 119 L4 60 C4 42 38 46 38 33 Z"/>' +
         '<circle class="tbtn" cx="50" cy="13" r="11"/><circle class="tbtn2" cx="50" cy="13" r="6"/><circle class="tbtn3" cx="50" cy="13" r="2.4"/>' +
-        '<text class="tgnum" x="50" y="' + (96 + fs * 0.18).toFixed(1) + '" text-anchor="middle" font-size="' + fs + '">' + esc(s) + '</text></svg>';
+        '<text class="tgnum" x="50" y="' + (96 + fs * 0.18).toFixed(1) + '" text-anchor="middle" font-size="' + fs + '">' + esc(s) + '</text>' +
+        (tachada ? '<path class="tx" d="M10 58 L90 122M90 58 L10 122"/>' : '') + '</svg>';
     }
 
     /* ----- archivo ----- */
@@ -294,7 +301,7 @@
       setTimeout(function () {
         root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
           var sel = d.unidadesSel || [], parcial = !!d.sel;
-          DB = { animales: [], todos: d.animales, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          DB = { animales: [], todos: d.animales, bajasT: d.bajas || [], unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
@@ -348,6 +355,7 @@
       if (!DB.todos) return;
       var s = DB.sel && DB.sel.length ? DB.sel : null;
       DB.animales = s ? DB.todos.filter(function (a) { return s.indexOf(a.u) >= 0; }) : DB.todos;
+      DB.bajas = s ? (DB.bajasT || []).filter(function (a) { return s.indexOf(a.u) >= 0; }) : (DB.bajasT || []);
       DB.unidad = DB.unidades && s ? nombreSel(s) : '';
     }
     function cambiarUnidad() {
@@ -454,7 +462,7 @@
       render();
     }
     window.addEventListener('hashchange', function () {
-      var m = /^#ficha-(\d+)$/.exec(location.hash);
+      var m = /^#ficha-(b?\d+)$/.exec(location.hash);
       state.rp = m && byRp(m[1]) ? m[1] : null; render();
     });
 
@@ -473,7 +481,14 @@
       else if (a.sFecha) sub = (/^celo/i.test(a.toro || '') ? 'Celo ' : 'Servicio ') + A.fmt(a.sFecha);
       return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + esc(sub) + (a.rech ? ' <span class="dsc">Descarte</span>' : '');
     }
+    function rowBajaHTML(a) {
+      return '<button class="row baja" data-rp="' + esc(a.key) + '">' + tagSVG(a.rp, 54, true) +
+        '<span class="who">' + esc(a.nombre || 'Sin nombre') + '</span>' +
+        '<span class="rt"><span class="chip ' + a.bTipo + '">' + BAJA[a.bTipo] + '</span></span>' +
+        '<span class="sub">' + (a.cat ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + esc(bajaTxt(a)) + (a.bCausa ? ' · ' + esc(a.bCausa) : '') + '</span></button>';
+    }
     function rowHTML(a, o) {
+      if (a.bTipo) return rowBajaHTML(a);
       o = o || {};
       return '<button class="row" data-rp="' + esc(a.rp) + '">' + tagSVG(a.rp, 54) +
         '<span class="who">' + esc(a.nombre || 'Sin nombre') + '</span>' +
@@ -551,6 +566,10 @@
           html = '<p class="hint">No hay ' + nombreGrupo(2) + ' con "' + esc(q) + '"' + (f !== 'todas' ? ' en este filtro' : '') + '.' + (otros.length ? '' : ' Probá con otra caravana o con parte del nombre.') + '</p>';
           if (otros.length) html += '<h2 class="h">En otras categorías</h2>' + otros.slice(0, 20).map(function (a) { return rowHTML(a); }).join('');
         }
+        // muertas y vendidas: solo aparecen si se busca la caravana
+        var bj = A.search(DB.bajas || [], q).filter(function (a) { return a.rp === q || a.rp.indexOf(q) === 0 || q.length >= 3; });
+        if (bj.length) html += '<h2 class="h">Dadas de baja (muertas o vendidas)</h2>' + bj.slice(0, 15).map(rowBajaHTML).join('');
+        if (bj.length > 15) html += '<p class="hint">Hay ' + (bj.length - 15) + ' bajas más con ese número. Escribí la caravana completa.</p>';
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
         var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
@@ -750,7 +769,7 @@
           else { cls = 'celo'; txt = 'Celo'; }
           li.push('<li class="' + cls + '"><span class="f">' + A.fmt(it.f) + '</span><span>' + txt + '</span><span class="d">' + (dpp != null ? dpp + ' dpp' : '') + '</span></li>');
         });
-        if (s.parto && s.parto[5]) li.push('<li><span class="f">' + A.fmt(s.parto[5]) + '</span><span>Secado</span><span class="d">' + A.diffDays(s.parto[5], s.parto[0]) + ' días</span></li>');
+        if (s.parto && s.parto[5]) li.push('<li><span class="f">' + A.fmt(s.parto[5]) + '</span><span>' + (a.bTipo && a.bFecha && s.parto[5] >= a.bFecha ? 'Fin de lactancia (' + (a.bTipo === 'muerte' ? 'muerte' : a.bTipo === 'venta' ? 'venta' : 'baja') + ')' : 'Secado') + '</span><span class="d">' + A.diffDays(s.parto[5], s.parto[0]) + ' días</span></li>');
         if (!s.items.length && !s.parto) return '';
         return '<details class="lac"' + (i === 0 ? ' open' : '') + '><summary><span class="l"><b>' + title + '</b></span><small>' + sub.join(' · ') + '</small></summary><ul class="tl">' + li.join('') + '</ul></details>';
       }).join('');
@@ -809,7 +828,29 @@
         (h.vit ? '<p class="cap">Producción vitalicia: <b>' + nf(h.vit) + ' lts</b></p>' : '') + '</section>';
     }
 
+    function fichaBajaHTML(a) {
+      var h = hist(a.key);
+      var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
+      var lp = h && h.pa.length ? h.pa[h.pa.length - 1] : null;
+      var ls = h && h.ev.length ? h.ev[h.ev.length - 1] : null, lt = h && h.ta.length ? h.ta[h.ta.length - 1] : null;
+      var codes = DB.codes || {};
+      return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
+        '<header class="fh baja"><div class="fhtag">' + tagSVG(a.rp, 118, true) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
+        '<div class="fhchips">' + (a.cat ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + '<span class="chip ' + a.bTipo + '">' + BAJA[a.bTipo] + '</span></div></div></header>' +
+        '<div class="bajabox"><b>' + esc(bajaTxt(a).toUpperCase()) + '</b><span>' + (a.bCausa ? 'Causa: ' + esc(a.bCausa) + ' · ' : '') + 'No cuenta en la libreta ni en los números.</span></div>' +
+        '<section class="card datos">' + kv([
+          ['Último parto', lp ? A.fmt(lp[0]) + ' <small>parto ' + lp[1] + '</small>' : null],
+          ['Último celo o servicio', ls ? A.fmt(ls[0]) + ' <small>' + (ls[1] === 'C' ? 'celo' : esc(ls[2] || 'servicio')) + '</small>' : null],
+          ['Último tacto', lt ? A.fmt(lt[0]) + (codes[lt[1]] ? ' <small>' + esc(codes[lt[1]][0]) + '</small>' : '') : null]
+        ]) + '</section>' +
+        (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
+        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : '') +
+        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
+        '<p class="src">Respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
+    }
     function fichaHTML(a) {
+      if (a.bTipo) return fichaBajaHTML(a);
       var t = today(), d = A.derive(a, t);
       var toro = a.toro ? (a.toro === '???..' ? 'Sin dato' : esc(a.toro)) : null;
       var tacto = null;
@@ -913,6 +954,7 @@
       if (e.target.id === 'q' && e.key === 'Enter') {
         var res = A.search(lista(), state.q).filter(function (a) { return matchFiltro(a, state.filtro); });
         if (!res.length) res = A.search(DB.animales, state.q);
+        if (!res.length) res = A.search(DB.bajas || [], state.q);
         if (res.length) { e.target.blur(); openFicha(res[0].rp); }
       }
       if (e.target.id === 'inNombre' && e.key === 'Enter') guardarSheet();
@@ -925,7 +967,7 @@
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
     var listo = loadAll();
-    var desdeHash = function () { var m = /^#ficha-(\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
+    var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
   }
