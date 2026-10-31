@@ -829,7 +829,7 @@
       else if (a.estado === 'servida' && a.sFecha) sub = 'Servicio ' + A.fmt(a.sFecha) + (a.toro && !/^celo/i.test(a.toro) ? ' · ' + a.toro : '');
       else if (a.tFecha) sub = 'Tacto ' + A.fmt(a.tFecha);
       else if (a.sFecha) sub = (/^celo/i.test(a.toro || '') ? 'Celo ' : 'Servicio ') + A.fmt(a.sFecha);
-      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + (paraVenta(a) ? esc(nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche') + ' <span class="vta">VENTA</span>' : esc(sub) + (a.rech ? ' <span class="dsc">Descarte' + (a.rechDet ? ': ' + esc(a.rechDet) : '') + '</span>' : ''));
+      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + (paraVenta(a) ? esc(nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche') + ' <span class="vta">VENTA</span>' : esc(sub) + (a.rech ? ' <span class="dsc">Descarte' + ': ' + esc(a.rechDet || a.rech) + '</span>' : ''));
     }
     function rowBajaHTML(a) {
       return '<button class="row baja" data-rp="' + esc(a.key) + '">' + tagSVG(a.rp, 54, true) +
@@ -1184,7 +1184,7 @@
     function idxDe(a) { var r = IDX(); return r ? r.por[a.rp] || null : null; }
     function nf1(n) { return n == null ? '–' : nf(n, n < 10 ? 1 : 0); }
     function idxMini(V, r) {
-      return [V.a.rech ? '<b class="perd">Descarte' + (V.a.rechDet ? ': ' + esc(V.a.rechDet) : '') + '</b>' : null, V.perd ? '<b class="perd">' + V.perd + (V.perd === 1 ? ' pérdida' : ' pérdidas') + '</b>' : null, V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, lecheTxt(V, r)].filter(Boolean).join(' · ');
+      return [V.a.rech ? '<b class="perd">Descarte' + ': ' + esc(V.a.rechDet || V.a.rech) + '</b>' : null, V.perd ? '<b class="perd">' + V.perd + (V.perd === 1 ? ' pérdida' : ' pérdidas') + '</b>' : null, V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, lecheTxt(V, r)].filter(Boolean).join(' · ');
     }
     function lecheTxt(V, r) {
       if (V.mlit == null) return null;
@@ -1410,7 +1410,7 @@
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet ? ': ' + esc(a.rechDet) : ' programado') + '</span>' : '') + (paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
