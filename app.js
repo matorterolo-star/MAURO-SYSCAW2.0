@@ -1361,7 +1361,7 @@
         ['Fecha del último servicio', a.sFecha ? A.fmt(a.sFecha) : null],
         ['Días del último servicio', a.sFecha ? String(A.diffDays(t, a.sFecha)) : null],
         ['Número de servicio', a.sN != null ? String(a.sN) : null],
-        ['Toro', toro],
+        ['Toro / Insem.', toro],
         ['Servicios anteriores', torosLac],
         ['Último tacto y resultado', tacto],
         ['Parto probable', a.estado === 'prenada' && d.partoProb ? A.fmt(d.partoProb) + (d.partoEstimado ? ' <small>estimado</small>' : '') : null],
