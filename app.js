@@ -310,6 +310,14 @@
     animales.forEach(function (a) {
       var h = hist[a.rp]; if (!h || !h.pa.length) return;
       var V = { a: a, da: [], spc: [], pc: [], le: [], nLac: 0, detalle: [] };
+      // vaquillona (lactancia 0): servicios hasta la preñez que terminó en el primer parto
+      var p1 = h.pa[0];
+      if (p1 && p1[1] === 1 && p1[0] >= minEv) {
+        var svq = h.ev.filter(function (e) { return e[1] === 'S' && e[0] < p1[0]; });
+        var estq = addDays(p1[0], -GEST), bq = null;
+        svq.forEach(function (e) { var d = Math.abs(diffDays(e[0], estq)); if (d <= 15 && (!bq || d < bq[1])) bq = [e[0], d]; });
+        if (bq) { V.spcVaq = svq.filter(function (e) { return e[0] <= bq[0]; }).length; V.spc.push(Math.min(V.spcVaq, 6)); }
+      }
       h.pa.forEach(function (p, i) {
         if (p[0] < minEv) return; // lactancias anteriores a los registros de servicios
         var np = h.pa[i + 1], hasta = np ? np[0] : '9999';
@@ -1165,7 +1173,7 @@
       if (!V) return '<section class="card"><h2>Índice del tambo</h2><p class="cap" style="margin:0">Sin índice todavía: le falta cerrar al menos una lactancia con datos de reproducción y de leche.</p></section>';
       var comp = [
         ['da', 'Días abiertos', nf1(V.m.da) + ' d', nf(r.prom.da)],
-        ['spc', 'Servicios por concepción', nf(V.m.spc, 1), nf(r.prom.spc, 1)],
+        ['spc', 'Servicios por concepción' + (V.spcVaq ? ' <small>(de vaquillona: ' + V.spcVaq + ')</small>' : ''), nf(V.m.spc, 1), nf(r.prom.spc, 1)],
         ['pc', 'Parto a primer celo', nf1(V.m.pc) + ' d', nf(r.prom.pc)],
         ['le', 'Leche 305 días', lecheTxt(V, r) || '–', nf(r.prom.lit) + ' L' + (r.prom.sol != null && r.hayAn ? ' · ' + nf(r.prom.sol) + ' kg' : '')]
       ].filter(function (c) { return V.pts[c[0]] != null; });
@@ -1326,7 +1334,7 @@
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult ? '<p class="hint">De las bajas se guarda solo la última lactancia. El historial completo está en SysCaw.</p>' : '') +
-        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
+        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
         '<p class="src">Respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }
     function fichaHTML(a) {
@@ -1366,7 +1374,7 @@
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         idxFichaHTML(a) +
-        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
+        '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
         (h ? '<p class="src">Historial del respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
 
