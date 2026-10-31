@@ -152,6 +152,15 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .mleg i.v{background:var(--navy)}.mleg i.q{background:var(--gold)}
 @media (prefers-color-scheme:dark){.mleg i.v{background:#7FA8EE}}
 .cats .todas{grid-column:1/-1}
+.pord{fill:var(--navy)}.psec{fill:#9FB0CC}.ppre{fill:var(--gold)}
+@media (prefers-color-scheme:dark){.pord{fill:#7FA8EE}.psec{fill:#43577F}}
+.mleg i.pord{background:var(--navy)}.mleg i.psec{background:#9FB0CC}.mleg i.ppre{background:var(--gold)}
+@media (prefers-color-scheme:dark){.mleg i.pord{background:#7FA8EE}.mleg i.psec{background:#43577F}}
+.ptbl{margin-top:8px;font-size:14.5px}.ptbl td,.ptbl th{padding:6px 4px}
+.secsel{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 8px;font-size:14px;color:var(--muted);font-weight:600}
+.secsel .fchip{min-height:36px;padding:5px 12px}
+.btn.share{display:inline-flex;align-items:center;gap:8px;margin:4px 0 12px;border-color:#1F9D55;color:#1F7A45;font-weight:700}
+@media (prefers-color-scheme:dark){.btn.share{color:#5FCB92;border-color:#5FCB92}}
 .mval{font-size:11px;fill:var(--ink);font-weight:700}.mlbl{font-size:10.5px;fill:var(--muted)}.myear{font-size:9px;fill:var(--muted)}
 .tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .tbl th,.tbl td{padding:9px 4px;text-align:right;border-top:1px solid var(--line)}
@@ -326,10 +335,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=17"></script>
-<script src="syscaw.js?v=17"></script>
+<script src="paradox.js?v=18"></script>
+<script src="syscaw.js?v=18"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
