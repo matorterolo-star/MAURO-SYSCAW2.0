@@ -1339,7 +1339,7 @@
       if (h) {
         var lp = h.pa.length ? h.pa[h.pa.length - 1][0] : '0000';
         var sl = h.ev.filter(function (e) { return e[1] === 'S' && e[0] > lp; });
-        if (sl.length > 1) torosLac = sl.map(function (e) { return esc(e[2] || '?'); }).join(', ');
+        if (sl.length > 1) torosLac = '<span class="torl">' + sl.map(function (e) { return '<span>' + esc(e[2] || '?') + (e[3] ? ' <small>' + esc(e[3]) + '</small>' : '') + '</span>'; }).join('') + '</span>';
       }
       var datos = kv([
         ['Fecha de último parto', a.pFecha ? A.fmt(a.pFecha) : null],
