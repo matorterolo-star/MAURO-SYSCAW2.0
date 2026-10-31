@@ -479,7 +479,7 @@
       else if (a.estado === 'servida' && a.sFecha) sub = 'Servicio ' + A.fmt(a.sFecha) + (a.toro && !/^celo/i.test(a.toro) ? ' · ' + a.toro : '');
       else if (a.tFecha) sub = 'Tacto ' + A.fmt(a.tFecha);
       else if (a.sFecha) sub = (/^celo/i.test(a.toro || '') ? 'Celo ' : 'Servicio ') + A.fmt(a.sFecha);
-      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + esc(sub) + (a.rech ? ' <span class="dsc">Descarte</span>' : '');
+      return (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span>' + (sub ? ' · ' : '') : '') + esc(sub) + (a.rech ? (paraVenta(a) ? ' <span class="vta">VENTA</span>' : ' <span class="dsc">Descarte</span>') : '');
     }
     function rowBajaHTML(a) {
       return '<button class="row baja" data-rp="' + esc(a.key) + '">' + tagSVG(a.rp, 54, true) +
@@ -501,7 +501,15 @@
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
         '<button class="btn primary big" data-a="load">Elegir archivo</button></section>';
     }
-    function matchFiltro(a, f) { return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'pcelo' ? !!a.celo : a.estado === f); }
+    // Para venta: descarte programado + más de 300 días en leche + menos de 15 litros en el último control
+    var VTA_DEL = 300, VTA_LTS = 15;
+    function delDe(a) { return a.pFecha && (a.cat === 'vaca' || !a.cat) ? (DB.fuente === 'syscaw' ? A.diffDays(today(), a.pFecha) : a.dLac) : null; }
+    function paraVenta(a) {
+      if (!a.rech || (a.cat && a.cat !== 'vaca')) return false;
+      var d = delDe(a), l = a.pr && a.pr[0];
+      return d != null && d > VTA_DEL && typeof l === 'number' && l < VTA_LTS;
+    }
+    function matchFiltro(a, f) { return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
@@ -531,6 +539,7 @@
       var key = function (a) {
         if (f === 'prenada') { var d = A.derive(a, h); return d.partoProb || '9999'; }
         if (f === 'servida') return a.sFecha || '9999';
+        if (f === 'venta') return ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5);
         if (f === 'vacia' || f === 'ciclando' || f === 'apta' || f === 'otro') return a.tFecha || '9999';
         return '';
       };
@@ -545,6 +554,8 @@
       var nCelo = L.filter(function (a) { return a.celo; }).length;
       if (nCelo) fl.push(['pcelo', 'Preñada + celo', nCelo]);
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
+      var nVta = L.filter(paraVenta).length;
+      if (nVta) fl.push(['venta', 'Para venta', nVta]);
       return '<div class="searchbox"><label class="sr" for="q">Caravana o nombre</label>' +
         '<svg class="mag" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' +
         '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana o nombre" value="' + esc(state.q) + '"></div>' + catsHTML() +
@@ -572,7 +583,7 @@
         if (bj.length > 15) html += '<p class="hint">Hay ' + (bj.length - 15) + ' bajas más con ese número. Escribí la caravana completa.</p>';
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
-        var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
+        var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
         html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       }
@@ -605,7 +616,10 @@
         }, 'Ninguna vaca para secar en los próximos ' + vtxt + '.') +
         secTareas('partos', 'Próximos partos', 'Partos probables en los próximos ' + vtxt + '.', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
-        }, 'Ningún parto probable en los próximos ' + vtxt + '.');
+        }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
+        secTareas('venta', 'Para venta', 'Descarte programado, más de ' + VTA_DEL + ' días en leche y menos de ' + VTA_LTS + ' litros en el último control.', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
+          return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rech) : '') });
+        }, 'Ninguna vaca de descarte cumple las condiciones de venta.');
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -879,7 +893,7 @@
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte programado</span>' : '') + '</div></div></header>' +
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte programado</span>' : '') + (paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div></header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
