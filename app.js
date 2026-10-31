@@ -688,7 +688,7 @@
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes, vacas y vaquillonas">' + s + '</svg>';
     }
     function compartirSecar() {
-      var L = state.secarLista || [], h = today();
+      var L = (state.secarLista || []).slice().sort(function (x, y) { return numRp(x.a, y.a); }), h = today();
       var txt = '*Vacas para secar' + (PERFIL.nombre ? ' — ' + PERFIL.nombre : '') + '*\n' +
         'Próximos ' + state.vtxt + ' · secado ' + A.SECADO + ' días antes del parto\n\n' +
         L.map(function (x) { return (x.dias < 0 ? 'Atrasada' : A.fmt(x.fecha).slice(0, 5)) + ' · *' + x.a.rp + '* · parto ' + A.fmt(A.addDays(x.fecha, A.SECADO)).slice(0, 5); }).join('\n') +
