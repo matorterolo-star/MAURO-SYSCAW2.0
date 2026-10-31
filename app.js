@@ -845,7 +845,7 @@
         ]) + '</section>' +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
-        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : '') +
+        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult ? '<p class="hint">De las bajas se guarda solo la última lactancia. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
         '<p class="src">Respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }

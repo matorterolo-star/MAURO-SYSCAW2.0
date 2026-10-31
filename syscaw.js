@@ -147,7 +147,10 @@
       var g = G[id];
       if (g) {
         var m = byId[r[4]];
-        hist[key] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
+        // de las bajas se guarda solo la última lactancia (desde el último parto)
+        var lpB = g.pa.length ? g.pa[g.pa.length - 1] : null, desdeB = lpB ? lpB[0] : '0000';
+        var desdeEv = function (e) { return e[0] >= desdeB; };
+        hist[key] = { pa: lpB ? [lpB] : [], ev: g.ev.filter(desdeEv), ta: g.ta.filter(desdeEv), la: lpB ? g.la.filter(function (l) { return l[0] === lpB[1]; }) : [], ct: g.ct.filter(desdeEv), ult: true, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
       } else hist[key] = { pa: [], ev: [], ta: [], la: [], ct: [], fn: okDate(r[3]), ma: byId[r[4]] ? String(byId[r[4]][1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null, corto: true };
     });
     bajas.sort(function (x, y) { return (y.bFecha || '') < (x.bFecha || '') ? -1 : 1; });
