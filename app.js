@@ -285,7 +285,7 @@
         '<path class="tg" d="M38 14 L62 14 L62 33 C62 46 96 42 96 60 L96 119 Q96 127 88 127 L12 127 Q4 127 4 119 L4 60 C4 42 38 46 38 33 Z"/>' +
         '<circle class="tbtn" cx="50" cy="13" r="11"/><circle class="tbtn2" cx="50" cy="13" r="6"/><circle class="tbtn3" cx="50" cy="13" r="2.4"/>' +
         '<text class="tgnum" x="50" y="' + (96 + fs * 0.18).toFixed(1) + '" text-anchor="middle" font-size="' + fs + '">' + esc(s) + '</text>' +
-        (tachada ? '<path class="tx" d="M10 58 L90 122M90 58 L10 122"/>' : '') + '</svg>';
+        (tachada ? '<path class="tx" d="M40 50 L60 70M60 50 L40 70"/>' : '') + '</svg>';
     }
 
     /* ----- archivo ----- */
@@ -837,7 +837,7 @@
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh baja"><div class="fhtag">' + tagSVG(a.rp, 118, true) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
         '<div class="fhchips">' + (a.cat ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + '<span class="chip ' + a.bTipo + '">' + BAJA[a.bTipo] + '</span></div></div></header>' +
-        '<div class="bajabox"><b>' + esc(bajaTxt(a).toUpperCase()) + '</b><span>' + (a.bCausa ? 'Causa: ' + esc(a.bCausa) + ' · ' : '') + 'No cuenta en la libreta ni en los números.</span></div>' +
+        '<div class="bajabox"><b>' + esc(bajaTxt(a).toUpperCase()) + '</b>' + (a.bCausa ? '<span>Causa: ' + esc(a.bCausa) + '</span>' : '') + '</div>' +
         '<section class="card datos">' + kv([
           ['Último parto', lp ? A.fmt(lp[0]) + ' <small>parto ' + lp[1] + '</small>' : null],
           ['Último celo o servicio', ls ? A.fmt(ls[0]) + ' <small>' + (ls[1] === 'C' ? 'celo' : esc(ls[2] || 'servicio')) + '</small>' : null],
