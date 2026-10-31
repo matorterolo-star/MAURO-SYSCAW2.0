@@ -306,6 +306,9 @@
     var KEY = 'libreta:v1', KEYP = 'libreta:perfil';
     var DB = { animales: [], cargada: null, archivo: '' };
     var PERFIL = { nombre: '', logo: '' };
+    // varios tambos guardados en el teléfono: la lista va en localStorage y cada libreta en IndexedDB ('db:<id>')
+    var KEYT = 'libreta:tambos';
+    var TAMBOS = { activo: null, lista: [] };
     var state = { tab: 'buscar', q: '', filtro: 'todas', n: 60, rp: null, ventana: 183, abiertas: {}, error: '', persisted: true, draft: null, cat: 'vaca' };
     var $ = function (s) { return document.querySelector(s); };
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -329,29 +332,122 @@
     }
     function idbGet(k) { return idb().then(function (db) { return new Promise(function (res, rej) { var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); }; }); }); }
     function idbSet(k, v) { return idb().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = function () { res(); }; tx.onerror = function () { rej(tx.error); }; }); }); }
-    function loadAll() {
-      try { var r = localStorage.getItem(KEY); if (r) { var o = JSON.parse(r); if (o && o.todos) { o.animales = []; } if (o && Array.isArray(o.animales)) { DB = o; aplicarUnidad(); } } } catch (e) { state.persisted = false; }
-      try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
-      try { var c = localStorage.getItem('libreta:cat'); if (c) state.cat = c; } catch (e) {}
-      try { var sc = +localStorage.getItem('libreta:secado'); if (SECS.indexOf(sc) >= 0) A.setSecado(sc); } catch (e) {}
-      // la libreta grande (respaldo SysCaw) se guarda en IndexedDB
-      return idbGet('db').then(function (o) {
+    function idbDel(k) { return idb().then(function (db) { return new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete = function () { res(); }; tx.onerror = function () { res(); }; }); }, function () {}); }
+    function dbKey(id) { return 'db:' + id; }
+    function saveTambos() { try { localStorage.setItem(KEYT, JSON.stringify(TAMBOS)); } catch (e) {} }
+    function tamboAct() { for (var i = 0; i < TAMBOS.lista.length; i++) if (TAMBOS.lista[i].id === TAMBOS.activo) return TAMBOS.lista[i]; return null; }
+    function nuevoTambo(nombre) {
+      var t = { id: 't' + Date.now().toString(36) + Math.floor(Math.random() * 1e3), nombre: nombre || '', logo: '' };
+      TAMBOS.lista.push(t); return t;
+    }
+    function normNom(n) { return String(n || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+    function tamboPorNombre(n) { var k = normNom(n); if (!k) return null; for (var i = 0; i < TAMBOS.lista.length; i++) if (normNom(TAMBOS.lista[i].nombre) === k) return TAMBOS.lista[i]; return null; }
+    // ajustes que dependen del tambo (inicio de ciclos, fecha de secado, categoría abierta)
+    function getP(k) { var v = null; try { v = localStorage.getItem('libreta:' + k + ':' + TAMBOS.activo); if (v == null && TAMBOS.lista.length < 2) v = localStorage.getItem('libreta:' + k); } catch (e) {} return v; }
+    function setP(k, v) { try { localStorage.setItem('libreta:' + k + ':' + TAMBOS.activo, v); } catch (e) {} }
+    function leerDB(id) {
+      return idbGet(dbKey(id)).then(function (o) { return o; }, function () { return null; }).then(function (o) {
+        if (!o) { try { var r = localStorage.getItem(KEY + ':' + id); if (r) o = JSON.parse(r); } catch (e) {} }
         if (o && o.todos && !o.animales) o.animales = [];
-        if (o && Array.isArray(o.animales) && (o.animales.length || (o.todos && o.todos.length)) && (o.guardada || 0) >= (DB.guardada || 0)) { DB = o; aplicarUnidad(); return true; }
-        return false;
-      }, function () { return false; });
+        return o && Array.isArray(o.animales) ? o : null;
+      });
+    }
+    // deja activo un tambo: carga su libreta y sus ajustes
+    function abrirTambo(id) {
+      TAMBOS.activo = id; saveTambos();
+      var t = tamboAct() || { nombre: '', logo: '' };
+      PERFIL = { nombre: t.nombre || '', logo: t.logo || '' };
+      DB = { animales: [], cargada: null, archivo: '' };
+      state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'buscar';
+      state.ini21 = null; state.fsec = null; state.pev = null; state.abiertas = {};
+      state.cat = getP('cat') || 'vaca';
+      try { if (location.hash) location.hash = ''; } catch (e) {}
+      return leerDB(id).then(function (o) { if (o && TAMBOS.activo === id) { DB = o; aplicarUnidad(); } return true; });
+    }
+    function loadAll() {
+      try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
+      try { var sc = +localStorage.getItem('libreta:secado'); if (SECS.indexOf(sc) >= 0) A.setSecado(sc); } catch (e) {}
+      try { var t = JSON.parse(localStorage.getItem(KEYT)); if (t && Array.isArray(t.lista)) TAMBOS = t; } catch (e) {}
+      if (TAMBOS.lista.length) {
+        if (!tamboAct()) TAMBOS.activo = TAMBOS.lista[0].id;
+        return abrirTambo(TAMBOS.activo);
+      }
+      // versión anterior (un solo tambo): se pasa a la lista de tambos sin perder nada
+      var viejo = null;
+      try { var r = localStorage.getItem(KEY); if (r) { viejo = JSON.parse(r); } } catch (e) { state.persisted = false; }
+      return idbGet('db').then(function (o) { return o || viejo; }, function () { return viejo; }).then(function (o) {
+        if (o && o.todos && !o.animales) o.animales = [];
+        if (!o || !Array.isArray(o.animales) || !(o.animales.length || (o.todos && o.todos.length))) return false;
+        var t = nuevoTambo(PERFIL.nombre); t.logo = PERFIL.logo;
+        TAMBOS.activo = t.id;
+        try { var c = localStorage.getItem('libreta:cat'); if (c) state.cat = c; } catch (e) {}
+        DB = o; aplicarUnidad();
+        return saveDB().then(function () { idbDel('db'); try { localStorage.removeItem(KEY); } catch (e) {} return true; });
+      });
     }
     function saveDB() {
+      if (!tamboAct()) { TAMBOS.activo = nuevoTambo(PERFIL.nombre).id; }
+      var t = tamboAct();
       DB.guardada = Date.now();
-      var g = DB;
+      t.n = DB.animales.length; t.fuente = DB.fuente; t.fecha = DB.fuente === 'syscaw' ? DB.fecha : DB.cargada;
+      saveTambos();
+      var g = DB, k = dbKey(t.id);
       if (DB.todos) { g = {}; Object.keys(DB).forEach(function (k) { if (k !== 'animales' && k !== 'bajas') g[k] = DB[k]; }); }
-      return idbSet('db', g).then(function () {
-        state.persisted = true; try { localStorage.removeItem(KEY); } catch (e) {}
+      return idbSet(k, g).then(function () {
+        state.persisted = true; try { localStorage.removeItem(KEY + ':' + t.id); } catch (e) {}
       }, function () {
-        try { localStorage.setItem(KEY, JSON.stringify(g)); state.persisted = true; } catch (e) { state.persisted = false; }
+        try { localStorage.setItem(KEY + ':' + t.id, JSON.stringify(g)); state.persisted = true; } catch (e) { state.persisted = false; }
       }).then(function () { render(); });
     }
-    function savePerfil() { try { localStorage.setItem(KEYP, JSON.stringify(PERFIL)); } catch (e) {} }
+    function savePerfil() {
+      var t = tamboAct(); if (t) { t.nombre = PERFIL.nombre; t.logo = PERFIL.logo; saveTambos(); }
+      try { localStorage.setItem(KEYP, JSON.stringify(PERFIL)); } catch (e) {}
+    }
+    // a qué tambo va un archivo nuevo. 'nuevo' = agregar tambo; si no, el tambo abierto.
+    // Si el respaldo es de otro tambo que ya está guardado, va a ese; si es de uno que no está, se agrega (nunca pisa otro tambo).
+    function prepararDestino(nombre) {
+      var act = tamboAct(), igual = tamboPorNombre(nombre), cambio = '';
+      if (igual) { if (!act || igual.id !== act.id) cambio = 'actualizado'; TAMBOS.activo = igual.id; }
+      else if (state.destino === 'nuevo' || !act || (nombre && act.n && normNom(act.nombre) && normNom(act.nombre) !== normNom(nombre))) {
+        var t = nuevoTambo(nombre); TAMBOS.activo = t.id; cambio = act && act.n ? 'nuevo' : '';
+      }
+      state.destino = null;
+      var t2 = tamboAct();
+      PERFIL = { nombre: t2.nombre || nombre || '', logo: t2.logo || '' };
+      state.ini21 = null; state.fsec = null; state.pev = null;
+      return cambio;
+    }
+    function quitarTambo(id) {
+      var t = null; TAMBOS.lista.forEach(function (x) { if (x.id === id) t = x; });
+      if (!t || !confirm('¿Quitar ' + (t.nombre || 'este tambo') + ' de este teléfono? Se borra su libreta; la podés volver a cargar con el respaldo.')) return;
+      TAMBOS.lista = TAMBOS.lista.filter(function (x) { return x.id !== id; });
+      idbDel(dbKey(id)); try { localStorage.removeItem(KEY + ':' + id); } catch (e) {}
+      ['cat', 'ini21', 'fsec'].forEach(function (k) { try { localStorage.removeItem('libreta:' + k + ':' + id); } catch (e) {} });
+      if (TAMBOS.activo === id) {
+        if (TAMBOS.lista.length) abrirTambo(TAMBOS.lista[0].id).then(function () { render(); tambosSheet(); });
+        else { TAMBOS.activo = null; saveTambos(); PERFIL = { nombre: '', logo: '' }; DB = { animales: [], cargada: null, archivo: '' }; savePerfil(); closeSheetT(); render(); }
+      } else { saveTambos(); tambosSheet(); }
+      toast((t.nombre || 'Tambo') + ' quitado');
+    }
+    /* ----- elegir tambo ----- */
+    function tambosSheet() {
+      var L = TAMBOS.lista.slice().sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || '', 'es'); });
+      $('#tlist').innerHTML = L.length ? L.map(function (t) {
+        var act = t.id === TAMBOS.activo;
+        return '<div class="topt' + (act ? ' act' : '') + '"><button class="tsel" data-tambo="' + t.id + '"' + (act ? ' aria-current="true"' : '') + '><b>' + esc(t.nombre || 'Sin nombre') + '</b><span>' +
+          (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + (t.fuente === 'syscaw' ? 'respaldo del ' : 'libreta del ') + A.fmt(t.fecha) : '') + (act ? ' · abierto' : '') + '</span></button>' +
+          '<button class="tdel" data-tdel="' + t.id + '" aria-label="Quitar ' + esc(t.nombre || 'tambo') + '"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>';
+      }).join('') : '<p class="hint">Todavía no hay tambos cargados.</p>';
+      closeSheet();
+      $('#sheetT').hidden = false;
+    }
+    function closeSheetT() { $('#sheetT').hidden = true; }
+    function elegirTambo(id) {
+      closeSheetT();
+      if (id === TAMBOS.activo) return;
+      busy(true, 'Abriendo tambo…');
+      abrirTambo(id).then(function () { busy(false); render(); window.scrollTo(0, 0); toast((PERFIL.nombre || 'Tambo') + ': ' + DB.animales.length + ' animales'); });
+    }
     function byRp(rp) {
       for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i];
       var B = DB.bajas || []; for (i = 0; i < B.length; i++) if (B[i].key === rp) return B[i];
@@ -387,17 +483,19 @@
       setTimeout(function () {
         root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
           var sel = d.unidadesSel || [], parcial = !!d.sel;
+          var nom = d.tambo || nombreDesdeArchivo(f.name) || '', cambio = prepararDestino(nom);
           DB = { animales: [], todos: d.animales, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
           try { location.hash = ''; } catch (e) {}
           render();
-          toast(DB.animales.length + ' animales cargados del respaldo');
           // el nombre queda fijo: el que trae el respaldo
-          PERFIL.nombre = d.tambo || nombreDesdeArchivo(f.name) || PERFIL.nombre; savePerfil(); render();
+          PERFIL.nombre = nom || PERFIL.nombre; savePerfil(); render();
+          toast((cambio === 'nuevo' ? 'Tambo nuevo: ' : cambio === 'actualizado' ? 'Actualizado: ' : '') + (PERFIL.nombre ? PERFIL.nombre + ' · ' : '') + DB.animales.length + ' animales');
         }).catch(function (e) {
           busy(false);
+          state.destino = null;
           if (e && e.cancelado) { toast('Carga cancelada. La libreta anterior sigue igual.'); return; }
           state.error = 'No pude leer el respaldo: ' + (e && e.message || e); render();
         });
@@ -476,7 +574,11 @@
         try {
           var res = A.parseLibreta(root.XLSX, fr.result);
           res.animales.forEach(function (a) { a.cat = 'vaca'; });
-          DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: DB.hist, codes: DB.codes, fecha: DB.fecha };
+          var mismo = state.destino !== 'nuevo' && tamboAct();
+          var prev = mismo ? DB : {};
+          if (!mismo) prepararDestino(nombreDesdeArchivo(f.name));
+          state.destino = null;
+          DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: prev.hist, codes: prev.codes, fecha: prev.fecha };
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
           try { location.hash = ''; } catch (e) {}
           render();
@@ -486,7 +588,7 @@
         } catch (e) { state.error = e.message || 'No pude leer el archivo.'; }
         render();
       };
-      fr.onerror = function () { state.error = 'No pude abrir el archivo.'; render(); };
+      fr.onerror = function () { state.destino = null; state.error = 'No pude abrir el archivo.'; render(); };
       fr.readAsArrayBuffer(f);
     }
 
@@ -747,7 +849,7 @@
     // Para secar en una fecha: vacas preñadas (no secas) que ese día están a SECADO días o menos del parto
     function fechaSecado() {
       var f = state.fsec;
-      if (!f) { try { f = localStorage.getItem('libreta:fsec'); } catch (e) {} }
+      if (!f) f = getP('fsec');
       if (!f || f < today()) f = today();
       return (state.fsec = f);
     }
@@ -793,7 +895,7 @@
     function pevActual() { return state.pev || (DB.config && DB.config.pev) || 45; }
     function inicio21() {
       var f = state.ini21;
-      if (!f) { try { f = localStorage.getItem('libreta:ini21'); } catch (e) {} }
+      if (!f) f = getP('ini21');
       if (!f) { var h = today(), y = +h.slice(0, 4); if (h.slice(5) < '05-22') y--; f = y + '-05-22'; }
       return (state.ini21 = f);
     }
@@ -1085,6 +1187,9 @@
       document.title = PERFIL.nombre ? 'Libreta ' + PERFIL.nombre : 'Libreta de vacas';
       $('#logo').innerHTML = PERFIL.logo ? '<img alt="" src="' + PERFIL.logo + '">' : tagSVG('', 30).replace(/<text.*?<\/text>/, '');
       $('#logo').className = 'logo' + (PERFIL.logo ? ' has' : '');
+      $('#tbtn').hidden = TAMBOS.lista.length < 2;
+      if (TAMBOS.lista.length > 1) $('#tbtnTxt').textContent = TAMBOS.lista.length + ' tambos · cambiar';
+      $('#nTambos').textContent = TAMBOS.lista.length > 1 ? 'Tambos (' + TAMBOS.lista.length + ')' : 'Agregar otro tambo';
       if (!DB.animales.length) {
         $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = emptyHTML(); return;
@@ -1109,11 +1214,14 @@
 
     /* ----- eventos ----- */
     document.addEventListener('click', function (e) {
+      var tb = e.target.closest('[data-tambo]');
+      if (tb) { elegirTambo(tb.dataset.tambo); return; }
+      if ((tb = e.target.closest('[data-tdel]'))) { quitarTambo(tb.dataset.tdel); return; }
       var row = e.target.closest('[data-rp]');
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
-      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; try { localStorage.setItem('libreta:cat', state.cat); } catch (x) {} render(); return; }
+      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; setP('cat', state.cat); render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
@@ -1122,7 +1230,7 @@
       if ((el = e.target.closest('[data-k]'))) { state.abiertas[el.dataset.k] = !state.abiertas[el.dataset.k]; render(); return; }
       var b = e.target.closest('[data-a]'); if (!b) return;
       var a = b.dataset.a;
-      if (a === 'load') $('#file').click();
+      if (a === 'load') { state.destino = tamboAct() ? null : 'nuevo'; $('#file').click(); }
       else if (a === 'back') back();
       else if (a === 'mas') { state.n += 60; updateResults(); }
       else if (a === 'ajustes') openSheet('Ajustes');
@@ -1130,15 +1238,18 @@
       else if (a === 'guardar') guardarSheet();
       else if (a === 'logo') $('#logoFile').click();
       else if (a === 'quitarlogo') { state.draft.logo = ''; paintLogoPreview(); }
-      else if (a === 'cambiar') { closeSheet(); $('#file').click(); }
+      else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
+      else if (a === 'tambos') tambosSheet();
+      else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
+      else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
       else if (a === 'uok') cerrarUnidad(idsMarcados());
       else if (a === 'ucancel') cerrarUnidad(null);
     });
     document.addEventListener('change', function (e) {
-      if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; try { localStorage.setItem('libreta:ini21', state.ini21); } catch (x) {} render(); }
-      if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; try { localStorage.setItem('libreta:fsec', state.fsec); } catch (x) {} render(); }
+      if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
+      if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
     document.addEventListener('input', function (e) {
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
@@ -1152,11 +1263,13 @@
       }
       if (e.target.id === 'inNombre' && e.key === 'Enter') guardarSheet();
       if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
+      if (e.key === 'Escape' && !$('#sheetT').hidden) closeSheetT();
       if (e.key === 'Escape' && !$('#sheetU').hidden) cerrarUnidad(null);
     });
     $('#file').addEventListener('change', function (e) { handleFile(e.target.files[0]); e.target.value = ''; });
     $('#logoFile').addEventListener('change', function (e) { procesarLogo(e.target.files[0]); e.target.value = ''; });
     $('#sheet').addEventListener('click', function (e) { if (e.target.id === 'sheet') closeSheet(); });
+    $('#sheetT').addEventListener('click', function (e) { if (e.target.id === 'sheetT') closeSheetT(); });
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
     var listo = loadAll();

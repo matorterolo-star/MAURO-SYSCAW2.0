@@ -237,6 +237,13 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .ubtn{display:inline-flex;align-items:center;gap:6px;margin-top:6px;border:1.5px solid var(--gold);background:transparent;color:var(--on-navy);border-radius:999px;padding:4px 12px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:32px;max-width:100%}
 .ubtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ubtn svg{flex:none}
+.topt{display:flex;align-items:stretch;gap:8px}
+.tsel{flex:1;min-width:0;display:grid;gap:2px;text-align:left;border:2px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--surface);color:var(--ink);font:inherit}
+.tsel b{font-size:17px;overflow-wrap:anywhere}
+.tsel span{font-size:14px;color:var(--muted)}
+.topt.act .tsel{border-color:var(--navy);background:var(--bg)}
+.tdel{flex:none;width:48px;border:2px solid var(--line);border-radius:14px;background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+@media (prefers-color-scheme:dark){.topt.act .tsel{border-color:var(--gold)}}
 
 /* categorías */
 .cats{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
@@ -301,7 +308,7 @@ details.lac summary .l{flex:1}
 <header class="top"><div class="wrap">
   <div class="brand">
     <span class="logo" id="logo"></span>
-    <div style="min-width:0"><p class="firma">Dr. Mauro Torterolo</p><h1 id="nombre">Libreta</h1><p id="meta"></p><button class="ubtn" id="ubtn" data-a="unidad" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="ubtnTxt">Cambiar unidad</span></button></div>
+    <div style="min-width:0"><p class="firma">Dr. Mauro Torterolo</p><h1 id="nombre">Libreta</h1><p id="meta"></p><button class="ubtn" id="ubtn" data-a="unidad" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="ubtnTxt">Cambiar unidad</span></button> <button class="ubtn" id="tbtn" data-a="tambos" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 20V10l9-6 9 6v10M9 20v-6h6v6" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="tbtnTxt">Cambiar de tambo</span></button></div>
   </div>
   <button class="iconbtn" data-a="ajustes" aria-label="Ajustes">
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="8" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>
@@ -325,7 +332,8 @@ details.lac summary .l{flex:1}
     </div>
     <div class="sheetbtns">
       <button class="btn primary big" data-a="guardar">Guardar</button>
-      <button class="btn" data-a="cambiar">Cargar respaldo o libreta</button>
+      <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
+      <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
       <button class="btn" data-a="cerrar">Cancelar</button>
     </div>
   </div>
@@ -343,15 +351,27 @@ details.lac summary .l{flex:1}
   </div>
 </div>
 
+<div class="sheet" id="sheetT" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetTTitle">
+    <h2 id="sheetTTitle">Tambos</h2>
+    <p class="unote">Cada tambo guarda su propia libreta en este teléfono. Tocá uno para abrirlo.</p>
+    <div class="ulist" id="tlist"></div>
+    <div class="sheetbtns">
+      <button class="btn primary big" data-a="tnuevo">Agregar tambo (cargar respaldo)</button>
+      <button class="btn" data-a="tcerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <input id="file" type="file" hidden>
 <input id="logoFile" type="file" accept="image/*" hidden>
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=27"></script>
-<script src="syscaw.js?v=27"></script>
+<script src="paradox.js?v=28"></script>
+<script src="syscaw.js?v=28"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=27"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

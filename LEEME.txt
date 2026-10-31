@@ -11,3 +11,11 @@ Cargar datos: tocá el ícono de ajustes (arriba a la derecha) > "Cargar respald
  - la libreta en Excel (.xls / .xlsx), como antes.
 Si el respaldo trae más de una unidad (tambo, recría, campo), la app pregunta cuál cargar; se puede marcar una, varias o todas.
 Después de cargar, la app propone el nombre del tambo (si elegiste una sola unidad, propone el nombre de esa unidad). El logo se agrega en ajustes.
+
+VARIOS TAMBOS (nuevo)
+La app guarda varios tambos en el mismo teléfono, cada uno con su libreta.
+ - Para sumar uno: ajustes > "Agregar otro tambo" > "Agregar tambo (cargar respaldo)".
+ - Para pasar de uno a otro: tocá el botón "N tambos · cambiar" debajo del nombre (no hay que volver a cargar el respaldo).
+ - Para actualizar el tambo abierto: ajustes > "Actualizar este tambo". Si el respaldo es de otro tambo que ya está guardado, se actualiza ese; si es de uno que no está, se agrega como tambo nuevo (nunca pisa otro tambo).
+ - Para quitar uno: en la lista de tambos, el tachito.
+Los productores que tienen un solo tambo ven la app igual que antes. La libreta que ya tenían cargada se conserva.
