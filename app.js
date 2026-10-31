@@ -336,15 +336,26 @@
         if (pc != null && pc > 0) V.pc.push(Math.min(pc, 150));
         var l = null; h.la.forEach(function (x) { if (x[0] === p[1]) l = x; });
         if (l && l[2] && (np || (l[5] || 0) >= 3)) {
-          var r = { v: V, nro: p[1], lit: l[2], sol: l[3] != null && l[4] != null ? l[2] * (l[3] + l[4]) / 100 : null };
+          // análisis de sólidos: los controles del respaldo cubren la lactancia actual y la anterior
+          var nAn = null;
+          if (h.ct && h.ct.length && i >= h.pa.length - 2) nAn = h.ct.filter(function (c) { return c[0] >= p[0] && c[0] < hasta && c[2] > 0 && c[3] > 0; }).length;
+          var r = { v: V, nro: p[1], lit: l[2], nAn: nAn, sol: l[3] != null && l[4] != null ? l[2] * (l[3] + l[4]) / 100 : null };
           lacs.push(r); V.le.push(r);
         }
       });
       if (V.da.length) vacas.push(V);
     });
     // leche: kg de sólidos si casi todas las lactancias tienen grasa y proteína; si no, litros. Comparada dentro de 1ª, 2ª y 3ª o más lactancia
+    // sólidos solo si el tambo hace análisis regular: la mayoría de las vacas con 4 o más controles con grasa y proteína
+    var MIN_AN = 4;
     var conSol = lacs.filter(function (r) { return r.sol != null; }).length;
-    var usaSol = lacs.length > 0 && conSol / lacs.length >= 0.7;
+    var ultAn = vacas.map(function (V) { var k = null; V.le.forEach(function (r) { if (r.nAn != null) k = r.nAn; }); return k; }).filter(function (k) { return k != null; });
+    var regulares = ultAn.filter(function (k) { return k >= MIN_AN; }).length;
+    var usaSol = lacs.length > 0 && conSol / lacs.length >= 0.7 && ultAn.length > 0 && regulares / ultAn.length >= 0.5;
+    // lactancias con pocos análisis: los sólidos se estiman con los litros y el % promedio del tambo
+    var buenas = lacs.filter(function (r) { return r.sol != null && (r.nAn == null || r.nAn >= MIN_AN); });
+    var pctT = buenas.length ? idxMedia(buenas.map(function (r) { return r.sol / r.lit * 100; })) : null;
+    lacs.forEach(function (r) { if (pctT && (r.sol == null || (r.nAn != null && r.nAn < MIN_AN))) { r.sol = r.lit * pctT / 100; r.est = true; } });
     var grupos = { 1: [], 2: [], 3: [] };
     lacs.forEach(function (r) { r.val = usaSol ? r.sol : r.lit; if (r.val != null) grupos[Math.min(3, r.nro || 1)].push(r); });
     Object.keys(grupos).forEach(function (g) {
@@ -360,6 +371,9 @@
       var zs = V.le.map(function (r) { return r.z; }).filter(function (z) { return z != null; });
       V.zle = zs.length ? idxMedia(zs) : null;
       V.mle = V.le.length ? idxMedia(V.le.map(function (r) { return r.val; }).filter(function (x) { return x != null; })) : null;
+      V.mlit = V.le.length ? idxMedia(V.le.map(function (r) { return r.lit; })) : null;
+      V.msol = V.le.length ? idxMedia(V.le.map(function (r) { return r.sol; }).filter(function (x) { return x != null; })) : null;
+      V.nAn = null; V.solEst = false; V.le.forEach(function (r) { if (r.nAn != null) V.nAn = r.nAn; if (r.est) V.solEst = true; });
     });
     var ref0 = {};
     ['da', 'spc', 'pc'].forEach(function (k) {
@@ -370,6 +384,8 @@
     ref0.le = { m: mzl, sd: idxDesv(zl, mzl) };
     var lit = vacas.map(function (V) { return V.mle; }).filter(function (x) { return x != null; });
     ref0.leProm = idxMedia(lit);
+    ref0.litProm = idxMedia(vacas.map(function (V) { return V.mlit; }).filter(function (x) { return x != null; }));
+    ref0.solProm = idxMedia(vacas.map(function (V) { return V.msol; }).filter(function (x) { return x != null; }));
     vacas.forEach(function (V) {
       V.z = { da: idxZ(V.m.da, ref0.da.m, ref0.da.sd), spc: idxZ(V.m.spc, ref0.spc.m, ref0.spc.sd), pc: idxZ(V.m.pc, ref0.pc.m, ref0.pc.sd), le: idxZ(V.zle, ref0.le.m, ref0.le.sd) };
       ['da', 'spc', 'pc'].forEach(function (k) { if (V.z[k] != null) V.z[k] = -V.z[k]; }); // menos días / servicios es mejor
@@ -396,8 +412,8 @@
       V.tier = n >= 10 && i < k10 ? 'top' : n >= 10 && i >= n - k10 ? 'peor' : null;
       por[V.a.rp] = V;
     });
-    var prom = { da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm };
-    return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
+    var prom = { da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
+    return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
   var api = { indice: indice, ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -1118,8 +1134,11 @@
     function idxDe(a) { var r = IDX(); return r ? r.por[a.rp] || null : null; }
     function nf1(n) { return n == null ? '–' : nf(n, n < 10 ? 1 : 0); }
     function idxMini(V, r) {
-      var u = r.usaSol ? ' kg sól.' : ' L';
-      return [V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, V.mle != null ? nf(V.mle) + u : null].filter(Boolean).join(' · ');
+      return [V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, lecheTxt(V, r)].filter(Boolean).join(' · ');
+    }
+    function lecheTxt(V, r) {
+      if (V.mlit == null) return null;
+      return nf(V.mlit) + ' L' + (V.msol != null && r.hayAn ? ' · ' + nf(V.msol) + ' kg sól.' : '');
     }
     function idxNum(V) { return '<b class="ixn' + (V.tier ? ' ix-' + V.tier : '') + '">' + V.idx + '</b>'; }
     var MEDALLA = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 2h8l-2 6h-4z" fill="currentColor" opacity=".55"/><circle cx="12" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 12l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z" fill="currentColor"/></svg>';
@@ -1132,7 +1151,7 @@
         return '<button class="fchip" data-iv="' + v[0] + '" aria-pressed="' + (ver === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
       return '<section class="card"><h2>Índice del tambo</h2>' +
-        '<p class="cap" style="margin:0 0 10px">100 = promedio de las ' + r.n + ' vacas de este tambo. Toda la vida de cada vaca: días abiertos, servicios por concepción, parto a primer celo y leche a 305 días (' + (r.usaSol ? 'en kg de sólidos' : 'en litros, sin análisis de sólidos') + ').</p>' + chips +
+        '<p class="cap" style="margin:0 0 10px">100 = promedio de las ' + r.n + ' vacas de este tambo. Toda la vida de cada vaca: días abiertos, servicios por concepción, parto a primer celo y leche a 305 días (' + (r.usaSol ? 'comparada en kg de sólidos' : r.hayAn ? 'comparada en litros: los análisis de sólidos no son regulares' : 'en litros, sin análisis de sólidos') + ').</p>' + chips +
         L.slice(0, lim).map(function (V) { return rowHTML(V.a, { right: idxNum(V), sub: (ver === 'todas' ? V.puesto + 'º · ' : '') + idxMini(V, r) }); }).join('') +
         (L.length > lim ? '<button class="btn more" data-a="idxmas">Mostrar más (' + (L.length - lim) + ' restantes)</button>' : '') +
         (r.celoBajo ? '<p class="cap">En este tambo se anotan pocos celos, así que el dato parto a primer celo pesa menos (' + Math.round(r.pesos.pc) + '%).</p>' : '') + '</section>';
@@ -1141,12 +1160,11 @@
       var r = IDX(); if (!r || !(a.cat === 'vaca' || a.cat === 'seca' || !a.cat)) return '';
       var V = r.por[a.rp];
       if (!V) return '<section class="card"><h2>Índice del tambo</h2><p class="cap" style="margin:0">Sin índice: le falta al menos una lactancia con datos de reproducción completos.</p></section>';
-      var u = r.usaSol ? ' kg' : ' L';
       var comp = [
         ['da', 'Días abiertos', nf1(V.m.da) + ' d', nf(r.prom.da)],
         ['spc', 'Servicios por concepción', nf(V.m.spc, 1), nf(r.prom.spc, 1)],
         ['pc', 'Parto a primer celo', nf1(V.m.pc) + ' d', nf(r.prom.pc)],
-        ['le', 'Leche 305 días' + (r.usaSol ? ' (sólidos)' : ''), V.mle != null ? nf(V.mle) + u : '–', nf(r.prom.le) + u]
+        ['le', 'Leche 305 días', lecheTxt(V, r) || '–', nf(r.prom.lit) + ' L' + (r.prom.sol != null && r.hayAn ? ' · ' + nf(r.prom.sol) + ' kg' : '')]
       ].filter(function (c) { return V.pts[c[0]] != null; });
       var bar = comp.map(function (c) {
         var p = V.pts[c[0]], w = Math.min(50, Math.abs(p) * 5);
@@ -1155,7 +1173,9 @@
       }).join('');
       return '<section class="card"><div class="ixhead"><h2>Índice del tambo</h2>' + idxNum(V) + '</div>' +
         '<p class="cap" style="margin:-4px 0 8px">Puesto ' + V.puesto + ' de ' + r.n + (V.mejorQue != null ? ' · mejor que el ' + Math.min(99, V.mejorQue) + '% de las vacas del tambo' : '') + ' · ' + V.nLac + (V.nLac === 1 ? ' lactancia evaluada' : ' lactancias evaluadas') + (V.conf < 1 ? ' (cuenta ' + Math.round(V.conf * 100) + '% hasta tener 3)' : '') + '</p>' + bar +
-        '<p class="cap">Puntos que suma o resta cada dato. La línea del medio es el promedio del tambo.</p></section>';
+        '<p class="cap">' + (r.usaSol ? 'La leche se compara en kg de sólidos.' : 'La leche se compara en litros' + (r.hayAn ? ' (en este tambo los análisis de sólidos no son regulares).' : '.')) +
+        (V.nAn != null && r.hayAn ? ' Última lactancia: ' + V.nAn + (V.nAn === 1 ? ' control' : ' controles') + ' con sólidos' + (V.solEst ? '; con menos de ' + r.minAn + ' los sólidos se estiman con el % promedio del tambo' : '') + '.' : '') +
+        ' Puntos que suma o resta cada dato; la línea del medio es el promedio del tambo.</p></section>';
     }
     function idxBadge(a) {
       var V = idxDe(a); if (!V || !V.tier) return '';
@@ -1335,9 +1355,10 @@
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
         '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte programado</span>' : '') + (paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
-        (datos ? '<section class="card datos">' + datos + '</section>' : '') + idxFichaHTML(a) +
+        (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        idxFichaHTML(a) +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
         (h ? '<p class="src">Historial del respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
