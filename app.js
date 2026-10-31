@@ -298,18 +298,48 @@
   }
   function setSecado(n) { SECADO = n; api.SECADO = n; }
   /* ===== índice del tambo: reproducción (70%) + leche (30%), comparado contra el propio tambo ===== */
-  var IDX_W = { da: 35, spc: 20, pc: 15, le: 30 };
+  var IDX_W = { da: 30, spc: 15, pc: 10, pe: 15, le: 30 };
   function idxMedia(v) { var s = 0; v.forEach(function (x) { s += x; }); return v.length ? s / v.length : null; }
   function idxDesv(v, m) { if (v.length < 2) return null; var s = 0; v.forEach(function (x) { s += (x - m) * (x - m); }); return Math.sqrt(s / (v.length - 1)); }
   function idxZ(x, m, sd) { if (x == null || !sd) return null; var z = (x - m) / sd; return Math.max(-3, Math.min(3, z)); }
   // animales: vacas y secas activas; hist por caravana; esPren(código de tacto) -> bool; ref: fecha del respaldo
-  function indice(animales, hist, esPren, ref) {
+  // pérdidas de gestación: preñez confirmada por tacto y después tacto vacía, nuevo servicio (más de 20 días después) o aborto, antes del parto
+  function perdidas(h, esPren, esVac) {
+    var out = { n: 0, gest: 0, fechas: [] };
+    var cortes = ['0000'].concat(h.pa.map(function (p) { return p[0]; })).concat(['9999']);
+    var abs = (h.ab || []).concat(h.pa.filter(function (p) { return /^A/.test(p[2] || ''); }).map(function (p) { return p[0]; }));
+    for (var i = 0; i < cortes.length - 1; i++) {
+      var a0 = cortes[i], a1 = cortes[i + 1];
+      var ta = h.ta.filter(function (t) { return t[0] > a0 && t[0] < a1; }), sv = h.ev.filter(function (e) { return e[1] === 'S' && e[0] > a0 && e[0] < a1; });
+      var abT = abs.filter(function (f) { return f > a0 && f <= a1; }), usados = {};
+      var desde = a0;
+      while (true) {
+        var pos = ta.filter(function (t) { return t[0] > desde && esPren(t[1]); })[0];
+        if (!pos) break;
+        out.gest++;
+        var T = pos[0];
+        var neg = ta.filter(function (t) { return t[0] > T && esVac(t[1]); })[0];
+        var rs = sv.filter(function (e) { return diffDays(e[0], T) > 20; })[0];
+        var ab = abT.filter(function (f) { return f > T; })[0];
+        var fin = [neg && neg[0], rs && rs[0], ab].filter(Boolean).sort()[0];
+        if (!fin) break;
+        out.n++; out.fechas.push(fin); if (ab) usados[ab] = 1;
+        desde = fin;
+      }
+      // abortos cargados sin tacto previo
+      abT.forEach(function (f) { if (!usados[f] && out.fechas.indexOf(f) < 0 && !out.fechas.some(function (x) { return Math.abs(diffDays(x, f)) < 60; })) { out.n++; out.gest++; out.fechas.push(f); } });
+    }
+    return out;
+  }
+  function indice(animales, hist, esPren, ref, esVac) {
+    esVac = esVac || function () { return false; };
     var minEv = '9999';
     animales.forEach(function (a) { var h = hist[a.rp]; if (h && h.ev.length && h.ev[0][0] < minEv) minEv = h.ev[0][0]; });
     var vacas = [], lacs = [], nPc = 0, nCelo = 0;
     animales.forEach(function (a) {
       var h = hist[a.rp]; if (!h || !h.pa.length) return;
       var V = { a: a, da: [], spc: [], pc: [], le: [], nLac: 0, detalle: [] };
+      var PG = perdidas(h, esPren, esVac); V.perd = PG.n; V.gestConf = PG.gest; V.perdFechas = PG.fechas;
       // vaquillona (lactancia 0): servicios hasta la preñez que terminó en el primer parto
       var p1 = h.pa[0];
       if (p1 && p1[1] === 1 && p1[0] >= minEv) {
@@ -375,10 +405,10 @@
     });
     // celos poco anotados: el dato parto–primer celo pesa menos
     var cobCelo = nPc ? nCelo / nPc : 0;
-    var w = { da: IDX_W.da, spc: IDX_W.spc, pc: IDX_W.pc * Math.min(1, cobCelo / 0.5), le: IDX_W.le };
+    var w = { da: IDX_W.da, spc: IDX_W.spc, pc: IDX_W.pc * Math.min(1, cobCelo / 0.5), pe: IDX_W.pe, le: IDX_W.le };
     var resto = IDX_W.pc - w.pc; w.da += resto * IDX_W.da / (IDX_W.da + IDX_W.spc); w.spc += resto * IDX_W.spc / (IDX_W.da + IDX_W.spc);
     vacas.forEach(function (V) {
-      V.m = { da: idxMedia(V.da), spc: idxMedia(V.spc), pc: idxMedia(V.pc) };
+      V.m = { da: idxMedia(V.da), spc: idxMedia(V.spc), pc: idxMedia(V.pc), pe: V.gestConf ? V.perd / V.gestConf : null };
       var zs = V.le.map(function (r) { return r.z; }).filter(function (z) { return z != null; });
       V.zle = zs.length ? idxMedia(zs) : null;
       V.mle = V.le.length ? idxMedia(V.le.map(function (r) { return r.val; }).filter(function (x) { return x != null; })) : null;
@@ -387,7 +417,7 @@
       V.nAn = null; V.solEst = false; V.le.forEach(function (r) { if (r.nAn != null) V.nAn = r.nAn; if (r.est) V.solEst = true; });
     });
     var ref0 = {};
-    ['da', 'spc', 'pc'].forEach(function (k) {
+    ['da', 'spc', 'pc', 'pe'].forEach(function (k) {
       var vs = vacas.map(function (V) { return V.m[k]; }).filter(function (x) { return x != null; }), m = idxMedia(vs);
       ref0[k] = { m: m, sd: idxDesv(vs, m) };
     });
@@ -398,8 +428,8 @@
     ref0.litProm = idxMedia(vacas.map(function (V) { return V.mlit; }).filter(function (x) { return x != null; }));
     ref0.solProm = idxMedia(vacas.map(function (V) { return V.msol; }).filter(function (x) { return x != null; }));
     vacas.forEach(function (V) {
-      V.z = { da: idxZ(V.m.da, ref0.da.m, ref0.da.sd), spc: idxZ(V.m.spc, ref0.spc.m, ref0.spc.sd), pc: idxZ(V.m.pc, ref0.pc.m, ref0.pc.sd), le: idxZ(V.zle, ref0.le.m, ref0.le.sd) };
-      ['da', 'spc', 'pc'].forEach(function (k) { if (V.z[k] != null) V.z[k] = -V.z[k]; }); // menos días / servicios es mejor
+      V.z = { da: idxZ(V.m.da, ref0.da.m, ref0.da.sd), spc: idxZ(V.m.spc, ref0.spc.m, ref0.spc.sd), pc: idxZ(V.m.pc, ref0.pc.m, ref0.pc.sd), pe: idxZ(V.m.pe, ref0.pe.m, ref0.pe.sd), le: idxZ(V.zle, ref0.le.m, ref0.le.sd) };
+      ['da', 'spc', 'pc', 'pe'].forEach(function (k) { if (V.z[k] != null) V.z[k] = -V.z[k]; }); // menos días / servicios es mejor
       var s = 0, sw = 0;
       Object.keys(w).forEach(function (k) { if (V.z[k] != null && w[k] > 0) { s += w[k] * V.z[k]; sw += w[k]; } });
       V.raw = sw ? s / sw : null;
@@ -423,7 +453,7 @@
       V.tier = n >= 10 && i < k10 ? 'top' : n >= 10 && i >= n - k10 ? 'peor' : null;
       por[V.a.rp] = V;
     });
-    var prom = { da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
+    var prom = { pe: ref0.pe.m, da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
     return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
   var api = { indice: indice, ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
@@ -1042,6 +1072,7 @@
       if (!f) { var h = today(), y = +h.slice(0, 4); if (h.slice(5) < '05-22') y--; f = y + '-05-22'; }
       return (state.ini21 = f);
     }
+    function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
@@ -1146,14 +1177,14 @@
       if (IDXC.k === k) return IDXC.r;
       var ad = DB.animales.filter(function (a) { return !a.cat || a.cat === 'vaca' || a.cat === 'seca'; });
       var r = null;
-      try { r = A.indice(ad, DB.hist, esPren, DB.fecha || today()); if (r.n < 10) r = null; } catch (e) { r = null; }
+      try { r = A.indice(ad, DB.hist, esPren, DB.fecha || today(), esVacia); if (r.n < 10) r = null; } catch (e) { r = null; }
       IDXC = { k: k, r: r };
       return r;
     }
     function idxDe(a) { var r = IDX(); return r ? r.por[a.rp] || null : null; }
     function nf1(n) { return n == null ? '–' : nf(n, n < 10 ? 1 : 0); }
     function idxMini(V, r) {
-      return [V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, lecheTxt(V, r)].filter(Boolean).join(' · ');
+      return [V.perd ? '<b class="perd">' + V.perd + (V.perd === 1 ? ' pérdida' : ' pérdidas') + '</b>' : null, V.m.da != null ? nf(V.m.da) + ' d abiertos' : null, V.m.spc != null ? nf(V.m.spc, 1) + ' serv' : null, V.m.pc != null ? nf(V.m.pc) + ' d a celo' : null, lecheTxt(V, r)].filter(Boolean).join(' · ');
     }
     function lecheTxt(V, r) {
       if (V.mlit == null) return null;
@@ -1183,6 +1214,7 @@
         ['da', 'Días abiertos', nf1(V.m.da) + ' d', nf(r.prom.da)],
         ['spc', 'Servicios por concepción' + (V.spcVaq ? ' <small>(de vaquillona: ' + V.spcVaq + ')</small>' : ''), nf(V.m.spc, 1), nf(r.prom.spc, 1)],
         ['pc', 'Parto a primer celo', nf1(V.m.pc) + ' d', nf(r.prom.pc)],
+        ['pe', 'Pérdidas de gestación', V.perd ? V.perd + ' de ' + V.gestConf + ' preñeces' : '0 de ' + V.gestConf, nf(r.prom.pe * 100, 1) + '%'],
         ['le', 'Leche 305 días', lecheTxt(V, r) || '–', nf(r.prom.lit) + ' L' + (r.prom.sol != null && r.hayAn ? ' · ' + nf(r.prom.sol) + ' kg' : '')]
       ].filter(function (c) { return V.pts[c[0]] != null; });
       var bar = comp.map(function (c) {
