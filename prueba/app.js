@@ -1342,6 +1342,8 @@
       if (h) {
         var lp = h.pa.length ? h.pa[h.pa.length - 1][0] : '0000';
         var sl = h.ev.filter(function (e) { return e[1] === 'S' && e[0] > lp; });
+        var ult = sl.length ? sl[sl.length - 1] : null;
+        if (toro && ult && ult[3] && a.sFecha === ult[0]) toro += ' <small class="insem">' + esc(ult[3]) + '</small>';
         if (sl.length > 1) torosLac = '<span class="torl">' + sl.map(function (e) { return '<span>' + esc(e[2] || '?') + (e[3] ? ' <small>' + esc(e[3]) + '</small>' : '') + '</span>'; }).join('') + '</span>';
       }
       var datos = kv([
