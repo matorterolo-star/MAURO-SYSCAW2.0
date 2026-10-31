@@ -123,7 +123,12 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 
 /* tareas */
 .sec{margin-bottom:22px}
-.sechead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px}
+.sechead{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:2px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:56px}
+.sechead h2{flex:1}
+.sechead .chev{flex:none;color:var(--muted);transition:transform .15s}
+.sec.open .sechead{margin-bottom:10px}
+.sec.open .sechead .chev{transform:rotate(180deg)}
+.sec{margin-bottom:10px}
 .sechead h2{font-size:19px;margin:0}
 .count{min-width:30px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;background:var(--navy);color:#fff;border-radius:999px;padding:1px 10px;font-size:14px}
 @media (prefers-color-scheme:dark){.count{background:var(--gold);color:#14233F}}

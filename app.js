@@ -496,6 +496,7 @@
     function loadAll() {
       try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
       try { var sc = +localStorage.getItem('libreta:secado'); if (SECS.indexOf(sc) >= 0) A.setSecado(sc); } catch (e) {}
+      try { var dp = JSON.parse(localStorage.getItem('libreta:desp')); if (dp && typeof dp === 'object') state.desp = dp; } catch (e) {}
       try { var t = JSON.parse(localStorage.getItem(KEYT)); if (t && Array.isArray(t.lista)) TAMBOS = t; } catch (e) {}
       if (TAMBOS.lista.length) {
         if (!tamboAct()) TAMBOS.activo = TAMBOS.lista[0].id;
@@ -921,7 +922,12 @@
     var VENT = [[7, '7 días'], [30, '30 días'], [90, '90 días'], [183, '6 meses'], [365, '12 meses']];
     function secTareas(key, titulo, nota, items, mapRow, vacio) {
       var abierta = !!state.abiertas[key], lim = abierta ? items.length : 12;
-      var h = '<section class="sec"><div class="sechead"><h2>' + titulo + '</h2><span class="count">' + items.length + '</span></div>' + (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
+      // cada lista arranca plegada: título y cantidad; se despliega tocando el título
+      var desp = !!(state.desp && state.desp[key]);
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>' + titulo + '</h2><span class="count">' + items.length + '</span>' +
+        '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+      if (!desp) return h + '</section>';
+      h += (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
       if (!items.length) h += '<p class="hint">' + vacio + '</p>';
       else {
         h += items.slice(0, lim).map(mapRow).join('');
@@ -1429,6 +1435,7 @@
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
+      if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; try { localStorage.setItem('libreta:desp', JSON.stringify(state.desp)); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
