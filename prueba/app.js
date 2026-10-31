@@ -1389,6 +1389,22 @@
         (h ? '<p class="src">Historial del respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
 
+    // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
+    var FICHA_AB = {};
+    try { FICHA_AB = JSON.parse(localStorage.getItem('libreta:fichaab')) || {}; } catch (e) {}
+    function plegarFicha(main) {
+      Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
+        if (sec.classList.contains('datos')) return;
+        var h2 = sec.querySelector('h2'); if (!h2) return;
+        var head = h2.parentNode === sec ? h2 : h2.closest('.ixhead') || h2;
+        if (head.parentNode !== sec) return;
+        var key = h2.textContent.trim();
+        sec.classList.add('plg'); if (FICHA_AB[key]) sec.classList.add('open');
+        head.classList.add('plgh'); head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0'); head.setAttribute('aria-expanded', !!FICHA_AB[key]); head.dataset.plg = key;
+        head.insertAdjacentHTML('beforeend', '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+      });
+    }
+
     /* ----- render ----- */
     var NAVS = [
       ['buscar', 'Buscar', '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
@@ -1417,7 +1433,7 @@
       }).join('') + '</div>';
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); return; }
         state.rp = null;
       }
       var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
@@ -1439,6 +1455,7 @@
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
+      if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; try { localStorage.setItem('libreta:fichaab', JSON.stringify(FICHA_AB)); } catch (x) {} return; }
       if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; try { localStorage.setItem('libreta:desp', JSON.stringify(state.desp)); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
