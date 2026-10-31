@@ -697,9 +697,9 @@
       else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
     }
     function proyHTML() {
-      var P = A.proyeccion(DB.animales, today(), 12);
+      var P = A.proyeccion(DB.animales, today(), 6), N = P.length;
       var max = Math.max.apply(null, P.map(function (r) { return r.ord + r.sec + r.pre; })); if (!max) return '';
-      var W = 320, H = 150, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '', k = (H - 48) / max;
+      var W = 320, H = 150, padx = 6, gap = 12, bw = (W - padx * 2 - gap * (N - 1)) / N, s = '', k = (H - 48) / max;
       P.forEach(function (r, i) {
         var x = padx + i * (bw + gap), y = H - 26, tot = r.ord + r.sec + r.pre;
         [['pord', r.ord], ['psec', r.sec], ['ppre', r.pre]].forEach(function (p) { var h = p[1] * k; if (h) { y -= h; s += '<rect class="' + p[0] + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '"/>'; } });
@@ -708,7 +708,7 @@
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
       });
       var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + r.ord + '</td><td>' + r.sec + '</td><td>' + r.pre + '</td></tr>'; }).join('');
-      return '<section class="card"><h2>Proyección del rodeo</h2>' +
+      return '<section class="card"><h2>Proyección del rodeo · 6 meses</h2>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Preparto</th></tr></thead><tbody>' + filas + '</tbody></table>' +
