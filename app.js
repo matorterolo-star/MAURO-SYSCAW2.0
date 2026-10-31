@@ -638,7 +638,8 @@
     }
     function tareasHTML() {
       var t = A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), state.ventana), vtxt = (VENT.filter(function (v) { return v[0] === state.ventana; })[0] || [0, ''])[1];
-      state.secarLista = t.secar; state.vtxt = vtxt;
+      var fs = fechaSecado(), sec = listaSecado(fs);
+      state.secarLista = sec;
       var secChips = '<div class="secsel"><span>Secar a</span>' + SECS.map(function (n) { return '<button class="fchip plain" data-sec="' + n + '" aria-pressed="' + (A.SECADO === n) + '">' + n + '</button>'; }).join('') + '<span>días del parto</span></div>';
       var chips = '<div class="filters" role="group" aria-label="Ventana de tiempo">' + VENT.map(function (v) {
         return '<button class="fchip plain" data-v="' + v[0] + '" aria-pressed="' + (state.ventana === v[0]) + '">' + v[1] + '</button>';
@@ -647,9 +648,9 @@
         secTareas('tactar', 'Para tactar', 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto posterior.', t.tactar, function (x) {
           return rowHTML(x.a, { right: '<span class="when late">hace ' + x.dias + ' días</span>', sub: 'Servicio ' + A.fmt(x.fecha) + (x.a.toro && !/^celo/i.test(x.a.toro) ? ' · ' + esc(x.a.toro) : '') });
         }, 'No hay vacas pendientes de tacto.') +
-        secTareas('secar', 'Para secar', secChips + '<p class="secnote">Preñadas cuyo secado cae en los próximos ' + vtxt + '.</p>' + (t.secar.length ? '<button class="btn share" data-a="compsecar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 8.5L12 4l4.5 4.5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Enviar lista por WhatsApp</button>' : ''), t.secar, function (x) {
-          return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Secar el ' + A.fmt(x.fecha) });
-        }, 'Ninguna vaca para secar en los próximos ' + vtxt + '.') +
+        secTareas('secar', 'Para secar', '<label class="secfecha">Fecha de secado <input type="date" id="fsec" value="' + fs + '" min="' + today() + '"></label>' + secChips + '<p class="secnote">Vacas preñadas que el ' + A.fmt(fs) + ' están a ' + A.SECADO + ' días o menos del parto. Ordenadas por caravana.</p>' + (sec.length ? '<button class="btn share" data-a="compsecar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 8.5L12 4l4.5 4.5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Enviar lista por WhatsApp</button>' : ''), sec, function (x) {
+          return rowHTML(x.a, { right: '<span class="when">' + x.dp + ' días al parto</span>', sub: 'Parto probable ' + A.fmt(x.P) });
+        }, 'Ninguna vaca para secar el ' + A.fmt(fs) + '.') +
         secTareas('partos', 'Próximos partos', 'Partos probables en los próximos ' + vtxt + '.', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
         }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
@@ -687,11 +688,28 @@
       });
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes, vacas y vaquillonas">' + s + '</svg>';
     }
+    // Para secar en una fecha: vacas preñadas (no secas) que ese día están a SECADO días o menos del parto
+    function fechaSecado() {
+      var f = state.fsec;
+      if (!f) { try { f = localStorage.getItem('libreta:fsec'); } catch (e) {} }
+      if (!f || f < today()) f = today();
+      return (state.fsec = f);
+    }
+    function listaSecado(f) {
+      var out = [];
+      DB.animales.forEach(function (a) {
+        if (a.estado !== 'prenada' || (a.cat && a.cat !== 'vaca')) return;
+        var d = A.derive(a, today()); if (!d.partoProb) return;
+        var dp = A.diffDays(d.partoProb, f);
+        if (dp >= 0 && dp <= A.SECADO) out.push({ a: a, dp: dp, P: d.partoProb });
+      });
+      return out.sort(function (x, y) { return numRp(x.a, y.a); });
+    }
     function compartirSecar() {
-      var L = (state.secarLista || []).slice().sort(function (x, y) { return numRp(x.a, y.a); }), h = today();
+      var L = state.secarLista || [];
       var txt = '*Vacas para secar' + (PERFIL.nombre ? ' — ' + PERFIL.nombre : '') + '*\n' +
-        'Próximos ' + state.vtxt + ' · secado ' + A.SECADO + ' días antes del parto\n\n' +
-        L.map(function (x) { return (x.dias < 0 ? 'Atrasada' : A.fmt(x.fecha).slice(0, 5)) + ' · *' + x.a.rp + '* · parto ' + A.fmt(A.addDays(x.fecha, A.SECADO)).slice(0, 5); }).join('\n') +
+        'Secado del ' + A.fmt(state.fsec) + ' · hasta ' + A.SECADO + ' días antes del parto\n\n' +
+        L.map(function (x) { return '*' + x.a.rp + '* · parto ' + A.fmt(x.P).slice(0, 5) + ' (' + x.dp + ' días)'; }).join('\n') +
         '\n\nTotal: ' + L.length + (L.length === 1 ? ' vaca' : ' vacas') + '\nDr. Mauro Torterolo';
       if (navigator.share) navigator.share({ text: txt }).catch(function () {});
       else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
@@ -1025,6 +1043,9 @@
       else if (a === 'compsecar') compartirSecar();
       else if (a === 'uok') cerrarUnidad(idsMarcados());
       else if (a === 'ucancel') cerrarUnidad(null);
+    });
+    document.addEventListener('change', function (e) {
+      if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; try { localStorage.setItem('libreta:fsec', state.fsec); } catch (x) {} render(); }
     });
     document.addEventListener('input', function (e) {
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
