@@ -803,7 +803,6 @@
     }
     function rowBajaHTML(a) {
       return '<button class="row baja" data-rp="' + esc(a.key) + '">' + tagSVG(a.rp, 54, true) +
-        '<span class="who">' + esc(a.nombre || 'Sin nombre') + '</span>' +
         '<span class="rt"><span class="chip ' + a.bTipo + '">' + BAJA[a.bTipo] + '</span></span>' +
         '<span class="sub">' + (a.cat ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + esc(bajaTxt(a)) + (a.bCausa ? ' · ' + esc(a.bCausa) : '') + '</span></button>';
     }
@@ -811,7 +810,6 @@
       if (a.bTipo) return rowBajaHTML(a);
       o = o || {};
       return '<button class="row" data-rp="' + esc(a.rp) + '">' + tagSVG(a.rp, 54) +
-        '<span class="who">' + esc(a.nombre || 'Sin nombre') + '</span>' +
         '<span class="rt">' + (o.right != null ? o.right : chip(a)) + '</span>' +
         '<span class="sub">' + (o.sub != null ? (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + o.sub : subDefault(a)) + '</span></button>';
     }
