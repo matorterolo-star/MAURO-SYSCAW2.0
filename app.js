@@ -394,7 +394,8 @@
           try { location.hash = ''; } catch (e) {}
           render();
           toast(DB.animales.length + ' animales cargados del respaldo');
-          openSheet('Nombre del tambo', (parcial && sel.length === 1 ? sel[0] : d.tambo) || PERFIL.nombre);
+          // el nombre queda fijo: el que trae el respaldo
+          PERFIL.nombre = d.tambo || nombreDesdeArchivo(f.name) || PERFIL.nombre; savePerfil(); render();
         }).catch(function (e) {
           busy(false);
           if (e && e.cancelado) { toast('Carga cancelada. La libreta anterior sigue igual.'); return; }
@@ -452,8 +453,6 @@
         DB.sel = ids.length === DB.unidades.length ? null : ids;
         aplicarUnidad();
         var ahora = nombreSel(DB.sel);
-        // si el nombre del tambo era el de la unidad anterior, lo cambia por el de la nueva
-        if (!PERFIL.nombre || PERFIL.nombre === antes) { PERFIL.nombre = ahora === 'Todas las unidades' ? (root.SysCaw.infoFromName(DB.archivo).tambo || ahora) : ahora; savePerfil(); }
         state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60;
         try { location.hash = ''; } catch (e) {}
         saveDB();
@@ -496,9 +495,12 @@
       state.draft = { nombre: nombrePropuesto != null ? nombrePropuesto : PERFIL.nombre, logo: PERFIL.logo };
       $('#sheetTitle').textContent = titulo || 'Ajustes';
       $('#inNombre').value = state.draft.nombre;
+      // con respaldo de SysCaw el nombre es el del respaldo y no se edita
+      var fijo = DB.fuente === 'syscaw';
+      $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#sheet').hidden = false;
-      setTimeout(function () { $('#inNombre').focus(); }, 60);
+      if (!fijo) setTimeout(function () { $('#inNombre').focus(); }, 60);
     }
     function closeSheet() { $('#sheet').hidden = true; state.draft = null; }
     function paintLogoPreview() {
@@ -527,7 +529,7 @@
     }
     function guardarSheet() {
       if (!state.draft) return;
-      PERFIL = { nombre: $('#inNombre').value.trim(), logo: state.draft.logo || '' };
+      PERFIL = { nombre: DB.fuente === 'syscaw' ? PERFIL.nombre : $('#inNombre').value.trim(), logo: state.draft.logo || '' };
       savePerfil(); closeSheet(); render(); toast('Guardado');
     }
 
