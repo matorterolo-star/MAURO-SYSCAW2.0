@@ -75,12 +75,13 @@
     var bj = {}, refB = (infoFromName(opts.nombreArchivo).fecha || '9999');
     var desdeHist = refB === '9999' ? '0000' : addDays(refB, -730);
     T.ident.forEach(function (r) { if ((r[9] || r[13]) && (!sel || sel[r[11]])) bj[r[0]] = r; });
-    var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
+    var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [] }; });
     // historial completo solo para las bajas de los últimos 2 años (para no agrandar la libreta)
     Object.keys(bj).forEach(function (id) { var f = okDate(bj[id][9]); if (!f || f >= desdeHist) G[id] = { pa: [], ev: [], ta: [], la: [], ct: [] }; });
     var maxF = '0000';
     T.partos.forEach(function (r) {
-      var g = G[r[0]], f = okDate(r[1]); if (!g || !f || !(r[4] > 0)) return;
+      var g = G[r[0]], f = okDate(r[1]); if (!g || !f) return;
+      if (!(r[4] > 0)) { if (RES[r[2]] === 'A' && g.ab) g.ab.push(f); return; } // abortos que no abren lactancia
       var res = (RES[r[2]] || '') + (r[3] && r[3] !== '0' ? '/' + (RES[r[3]] || '') : '');
       g.pa.push([f, r[4], res, toro[r[5]] || '', okDate(r[6]), okDate(r[7])]); if (f > maxF) maxF = f;
     });
@@ -145,7 +146,7 @@
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
       var m = byId[a[4]];
-      hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
+      hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
     var bajas = [];
