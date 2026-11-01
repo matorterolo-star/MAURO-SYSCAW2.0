@@ -129,6 +129,19 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .sec.open .sechead{margin-bottom:10px}
 .sec.open .sechead .chev{transform:rotate(180deg)}
 .sec{margin-bottom:10px}
+.lchart{width:100%;height:auto;display:block;margin:4px 0 6px}
+.lgrid{stroke:var(--line);stroke-width:1}
+.lpt{cursor:pointer}.lpt .hit{fill:transparent}
+.lpt .dot{stroke:var(--surface);stroke-width:1}
+.lpt .dot.prim{fill:var(--apta)}.lpt .dot.mult{fill:var(--ciclando)}
+.lpt .dot.cs{stroke:var(--vacia);stroke-width:2}
+.lcur{fill:none;stroke-width:3;stroke-linejoin:round;pointer-events:none;paint-order:stroke}
+.lcur.prim,.lcur.mult{filter:drop-shadow(0 0 1.5px var(--surface))}
+.lcur.prim{stroke:var(--apta)}.lcur.mult{stroke:var(--ciclando)}
+.mleg i.lprim,.mleg i.lmult,.mleg i.lcs{border-radius:50%}
+.mleg i.lprim{background:var(--apta)}.mleg i.lmult{background:var(--ciclando)}.mleg i.lcs{background:transparent;border:2px solid var(--vacia)}
+.kv dd small.up{color:var(--prenada);display:inline}.kv dd small.dn{color:var(--vacia);display:inline}
+.tbl tr.sep td{border-top:2px solid var(--line)}
 .card.plg .plgh{display:flex;align-items:center;gap:10px;cursor:pointer;margin:0}
 .card.plg .plgh h2{flex:1;margin:0}
 .card.plg .ixhead.plgh h2{flex:1}
