@@ -1,5 +1,5 @@
-const CACHE = 'prueba-v61';
-const FILES = ['./', 'index.html', 'app.js?v=p61', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=p61', 'syscaw.js?v=p61', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'prueba-v62';
+const FILES = ['./', 'index.html', 'app.js?v=p62', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=p62', 'syscaw.js?v=p62', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 // al instalar, baja todo de nuevo (sin usar la memoria del navegador) para que no queden archivos de versiones distintas
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
