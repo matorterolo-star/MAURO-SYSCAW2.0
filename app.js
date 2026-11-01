@@ -143,11 +143,14 @@
     q = norm(q);
     if (!q) return [];
     var tokens = q.split(/\s+/), out = [];
+    // ID electrónico: se busca por sus últimos 8 números (desde 5 dígitos escritos)
+    var qd = q.replace(/\s+/g, ''); if (!/^\d{5,8}$/.test(qd)) qd = null;
     animales.forEach(function (a) {
       var n = a._n || (a._n = norm(a.nombre)), score = 0;
       if (a.rp === q) score = 100;
       else if (a.rp.indexOf(q) === 0) score = 80;
-      else if (q.length >= 5 && a.idElec && a.idElec.slice(-q.length) === q) score = 70;
+      else if (qd && a.idElec && a.idElec.slice(-8) === qd) score = 95;
+      else if (qd && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) score = 70;
       else if (n.indexOf(q) >= 0) score = 60;
       else if (tokens.every(function (t) { return n.indexOf(t) >= 0 || a.rp.indexOf(t) === 0; })) score = 50;
       else if (q.length >= 3 && a.rp.indexOf(q) >= 0) score = 40;
@@ -840,6 +843,8 @@
     function rowHTML(a, o) {
       if (a.bTipo) return rowBajaHTML(a);
       o = o || {};
+      var qd = String(state.q || '').replace(/\s+/g, '');
+      if (o.sub == null && /^\d{5,8}$/.test(qd) && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) o.sub = '<b>ID …' + esc(a.idElec.slice(-8)) + '</b>';
       return '<button class="row" data-rp="' + esc(a.rp) + '">' + tagSVG(a.rp, 54) +
         '<span class="rt">' + (o.right != null ? o.right : chip(a)) + '</span>' +
         '<span class="sub">' + (o.sub != null ? (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + o.sub : subDefault(a)) + '</span></button>';
@@ -912,9 +917,9 @@
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
         if (nPeor) fl.push(['ipeor', 'Peores 10%', nPeor]);
       }
-      return '<div class="searchbox"><label class="sr" for="q">Caravana o nombre</label>' +
+      return '<div class="searchbox"><label class="sr" for="q">Caravana, nombre o ID electrónico (últimos 8 números)</label>' +
         '<svg class="mag" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' +
-        '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana o nombre" value="' + esc(state.q) + '"></div>' + catsHTML() +
+        '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana, nombre o ID" value="' + esc(state.q) + '"></div>' + catsHTML() +
         '<div class="filters" role="group" aria-label="Filtrar por estado">' + fl.map(function (f) {
           return '<button class="fchip ' + f[0] + '" data-f="' + f[0] + '" aria-pressed="' + (state.filtro === f[0]) + '">' + f[1] + ' <b>' + f[2] + '</b></button>';
         }).join('') + '</div><div id="results"></div>';
@@ -1142,7 +1147,7 @@
       }).join('') + '</tbody></table></section>' : '';
       var aviso = '';
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        '<section class="card"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
+        '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
         (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
         (state.cat === 'vaca' || state.cat === 'seca' ? idxCardHTML() : '');
@@ -1433,11 +1438,11 @@
     try { FICHA_AB = JSON.parse(localStorage.getItem('libreta:fichaab')) || {}; } catch (e) {}
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
-        if (sec.classList.contains('datos')) return;
+        if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
         var h2 = sec.querySelector('h2'); if (!h2) return;
         var head = h2.parentNode === sec ? h2 : h2.closest('.ixhead') || h2;
         if (head.parentNode !== sec) return;
-        var key = h2.textContent.trim();
+        var key = h2.textContent.split(' · ')[0].trim();
         sec.classList.add('plg'); if (FICHA_AB[key]) sec.classList.add('open');
         head.classList.add('plgh'); head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0'); head.setAttribute('aria-expanded', !!FICHA_AB[key]); head.dataset.plg = key;
         head.insertAdjacentHTML('beforeend', '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
@@ -1478,7 +1483,7 @@
       }
       var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
-      else if (state.tab === 'rodeo') main.innerHTML = err + rodeoHTML();
+      else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); }
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
     }
 
