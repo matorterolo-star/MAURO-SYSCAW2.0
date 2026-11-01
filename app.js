@@ -524,14 +524,13 @@
       DB = { animales: [], cargada: null, archivo: '' };
       state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'buscar';
       state.ini21 = null; state.fsec = null; state.pev = null; state.abiertas = {};
-      state.cat = getP('cat') || 'vaca';
+      state.cat = 'todas';
       try { if (location.hash) location.hash = ''; } catch (e) {}
       return leerDB(id).then(function (o) { if (o && TAMBOS.activo === id) { DB = o; aplicarUnidad(); } return true; });
     }
     function loadAll() {
       try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
       try { var sc = +localStorage.getItem('libreta:secado'); if (SECS.indexOf(sc) >= 0) A.setSecado(sc); } catch (e) {}
-      try { var dp = JSON.parse(localStorage.getItem('libreta:desp')); if (dp && typeof dp === 'object') state.desp = dp; } catch (e) {}
       try { var t = JSON.parse(localStorage.getItem(KEYT)); if (t && Array.isArray(t.lista)) TAMBOS = t; } catch (e) {}
       if (TAMBOS.lista.length) {
         if (!tamboAct()) TAMBOS.activo = TAMBOS.lista[0].id;
@@ -545,7 +544,7 @@
         if (!o || !Array.isArray(o.animales) || !(o.animales.length || (o.todos && o.todos.length))) return false;
         var t = nuevoTambo(PERFIL.nombre); t.logo = PERFIL.logo;
         TAMBOS.activo = t.id;
-        try { var c = localStorage.getItem('libreta:cat'); if (c) state.cat = c; } catch (e) {}
+        state.cat = 'todas';
         DB = o; aplicarUnidad();
         return saveDB().then(function () { idbDel('db'); try { localStorage.removeItem(KEY); } catch (e) {} return true; });
       });
@@ -622,7 +621,7 @@
     function bajaTxt(a) { return BAJA[a.bTipo] + (a.bFecha ? ' el ' + A.fmt(a.bFecha) : ''); }
     function toast(msg) {
       var t = $('#toast'); t.textContent = msg; t.classList.add('on');
-      clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove('on'); }, 3200);
+      clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("on"); }, Math.max(3200, String(msg).length * 70));
     }
 
     /* ----- caravana (silueta con el número) ----- */
@@ -653,7 +652,7 @@
           DB = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
           // el nombre queda fijo: el que trae el respaldo
@@ -746,7 +745,7 @@
           if (!mismo) prepararDestino(nombreDesdeArchivo(f.name));
           state.destino = null;
           DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: prev.hist, codes: prev.codes, fecha: prev.fecha };
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
           toast(res.animales.length + ' animales cargados');
@@ -769,8 +768,10 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
+      $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
+      $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
-      $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return x.n || ('productor ' + x.p.join(', ')); }).join(' · ') : 'Sin activar';
+      $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return (x.n || ('productor ' + x.p.join(', '))) + (x.r === 'op' ? ' (operario)' : ''); }).join(' · ') : 'Sin activar';
       $('#sheet').hidden = false;
       if (!fijo) setTimeout(function () { $('#inNombre').focus(); }, 60);
     }
@@ -807,7 +808,7 @@
 
     /* ----- navegación ----- */
     function setTab(t) {
-      state.tab = t; state.rp = null;
+      state.tab = t; state.rp = null; state.informe = false;
       try { if (location.hash) location.hash = ''; } catch (e) {}
       render(); window.scrollTo(0, 0);
     }
@@ -864,21 +865,51 @@
     // Para venta: descarte programado + más de 300 días en leche + menos de 15 litros en el último control
     var VTA_DEL = 300, VTA_LTS = 15;
     function delDe(a) { return a.pFecha && (a.cat === 'vaca' || !a.cat) ? (DB.fuente === 'syscaw' ? A.diffDays(today(), a.pFecha) : a.dLac) : null; }
+    // criterio de venta: lo define cada productor (se guarda por tambo); lo que quede vacío no se toma
+    function vtaCfg() { var c = null; try { c = JSON.parse(getP('vta')); } catch (e) {} return c || { desc: true, vacia: false, del: VTA_DEL, lts: VTA_LTS }; }
+    function vtaTxt(c) {
+      c = c || vtaCfg();
+      var t = [c.desc ? 'descarte programado' : null, c.vacia ? 'vacías' : null, c.del ? 'más de ' + c.del + ' días en leche' : null, c.lts ? 'menos de ' + c.lts + ' litros' : null].filter(Boolean);
+      return t.length ? t.join(' · ') : 'sin criterio';
+    }
     function paraVenta(a) {
-      if (!a.rech || (a.cat && a.cat !== 'vaca')) return false;
+      if (a.cat && a.cat !== 'vaca') return false;
+      var c = vtaCfg(); if (!c.desc && !c.vacia && !c.del && !c.lts) return false;
+      if (c.desc && !a.rech) return false;
+      if (c.vacia && a.estado === 'prenada') return false;
       var d = delDe(a), l = a.pr && a.pr[0];
-      return d != null && d > VTA_DEL && typeof l === 'number' && l < VTA_LTS;
+      if (c.del && !(d != null && d > c.del)) return false;
+      if (c.lts && !(typeof l === 'number' && l < c.lts)) return false;
+      return true;
+    }
+    function vtaSheet() {
+      state.vtaDraft = vtaCfg();
+      var c = state.vtaDraft, chk = function (k, t) { return '<button class="fchip" data-vk="' + k + '" aria-pressed="' + !!c[k] + '">' + t + '</button>'; };
+      var num = function (k, a1, b1) { return '<label class="xnum">' + a1 + ' <input type="number" inputmode="numeric" min="1" max="999" data-vn="' + k + '" value="' + (c[k] || '') + '" placeholder="–"> ' + b1 + '</label>'; };
+      $('#sheetXTitle').textContent = 'Criterio para venta';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Vacas en ordeñe que cumplen todo lo marcado. Lo que quede vacío no se toma.</p>' +
+        num('del', 'Más de', 'días en leche') + num('lts', 'Menos de', 'litros en el último control') +
+        '<div class="filters" style="margin-top:8px">' + chk('desc', 'Solo descarte programado') + chk('vacia', 'Solo vacías (no preñadas)') + '</div>' +
+        '<p class="xcount" id="vtaN"></p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="vtaok">Guardar criterio</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      vtaCuenta(); $('#sheetX').hidden = false;
+    }
+    function vtaCuenta() {
+      var g = getP('vta'); setP('vta', JSON.stringify(state.vtaDraft));
+      var n = DB.animales.filter(paraVenta).length;
+      if (g == null) { try { localStorage.removeItem('libreta:vta:' + TAMBOS.activo); } catch (e) {} } else setP('vta', g);
+      $('#vtaN').innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'vaca' : 'vacas') + ' para venta con este criterio';
     }
     function matchFiltro(a, f) { if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
-    var GL = { vaca: 'En ordeñe', seca: 'Secas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
+    var GL = { todas: 'Todas', vaca: 'En ordeñe', seca: 'Secas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
     function grupo(a) { return a.cat || 'vaca'; }
     function grupos() { var g = {}; DB.animales.forEach(function (a) { g[grupo(a)] = (g[grupo(a)] || 0) + 1; }); return g; }
     function lista() {
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
-      if (state.cat === 'todas' && state.tab === 'rodeo' && !state.rp) return DB.animales;
+      if (state.cat === 'todas') return DB.animales;
       if (orden.indexOf(state.cat) < 0) state.cat = orden[0] || 'vaca';
       return DB.animales.filter(function (a) { return grupo(a) === state.cat; });
     }
@@ -886,14 +917,14 @@
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
       if (orden.length < 2) return '';
       // en Rodeo se agrega "Todas" (partos proyectados de vacas y vaquillonas juntos)
-      var conTodas = state.tab === 'rodeo';
+      var conTodas = true;
       return '<div class="cats' + (orden.length === 4 || conTodas ? ' n4' : '') + '" role="group" aria-label="Categoría">' +
         (conTodas ? '<button class="todas" data-cat="todas" aria-pressed="' + (state.cat === 'todas') + '">Todas <b>' + DB.animales.length + '</b></button>' : '') +
         orden.map(function (k) {
           return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
         }).join('') + '</div>';
     }
-    function nombreGrupo(n) { return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
+    function nombreGrupo(n) { if (state.cat === 'todas') return n === 1 ? 'animal' : 'animales'; return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
     function ordenar(list, f) {
       var h = today();
       var key = function (a) {
@@ -916,9 +947,9 @@
       var nCelo = L.filter(function (a) { return a.celo; }).length;
       if (nCelo) fl.push(['pcelo', 'Preñada + celo', nCelo]);
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
-      var nVta = L.filter(paraVenta).length;
+      var nVta = esOperario() ? 0 : L.filter(paraVenta).length;
       if (nVta) fl.push(['venta', 'Para venta', nVta]);
-      if (IDX()) {
+      if (IDX() && !esOperario()) {
         var nTop = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'top'; }).length, nPeor = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'peor'; }).length;
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
         if (nPeor) fl.push(['ipeor', 'Peores 10%', nPeor]);
@@ -937,7 +968,7 @@
         // busca dentro de la categoría elegida; si no está, avisa en qué otra categoría aparece
         list = A.search(lista(), q).filter(function (a) { return f === 'todas' || matchFiltro(a, f); });
         if (list.length) {
-          html = '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + ' en ' + GL[state.cat].toLowerCase() + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('');
+          html = '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + (state.cat === 'todas' ? '' : ' en ' + GL[state.cat].toLowerCase()) + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('');
           if (list.length > 40) html += '<p class="hint">Mostrando 40. Escribí más para acotar.</p>';
         } else {
           var otros = A.search(DB.animales, q).filter(function (a) { return grupo(a) !== state.cat; });
@@ -983,7 +1014,7 @@
       var chips = '<div class="filters" role="group" aria-label="Ventana de tiempo">' + VENT.map(function (v) {
         return '<button class="fchip plain" data-v="' + v[0] + '" aria-pressed="' + (state.ventana === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
-      return '<h1 class="ptitle">Tareas</h1>' + chips +
+      return '<h1 class="ptitle">Tareas</h1>' + chips + '<button class="btn share xtop" data-a="exptactar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Lista a Excel (tacto, secado, venta)</button>' +
         (function () {
           var rowT = function (x) { return rowHTML(x.a, { right: '<span class="when late">hace ' + x.dias + ' días</span>', sub: 'Servicio ' + A.fmt(x.fecha) + (x.a.toro && !/^celo/i.test(x.a.toro) ? ' · ' + esc(x.a.toro) : '') }); };
           var nota = 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto posterior.';
@@ -997,9 +1028,9 @@
         secTareas('partos', 'Próximos partos', 'Partos probables en los próximos ' + vtxt + '.', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
         }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
-        secTareas('venta', 'Para venta', 'Descarte programado, más de ' + VTA_DEL + ' días en leche y menos de ' + VTA_LTS + ' litros en el último control.', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
+        secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca de descarte cumple las condiciones de venta.');
+        }, 'Ninguna vaca cumple el criterio de venta.');
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -1118,6 +1149,39 @@
           '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
+    // Rodeo: vacas en ordeñe y secas, promedio diario de los 12 meses que terminan en el mes elegido
+    var VOVSC = { k: null, r: null };
+    function vovsHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var ref = DB.fecha || today(), maxMes = ref.slice(0, 7), fin = state.vomes && state.vomes <= maxMes ? state.vomes : maxMes;
+      var y = +fin.slice(0, 4), m = +fin.slice(5, 7), M = [];
+      for (var i = 11; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } M.push({ key: yy + '-' + pad2(mm), label: A.MESES[mm - 1], anio: yy }); }
+      var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + fin;
+      if (VOVSC.k !== k) VOVSC = { k: k, r: vovsMeses(M) };
+      var R = VOVSC.r, r0 = function (v) { return v == null ? null : Math.round(v); };
+      var W = 340, H = 170, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '';
+      var max = Math.max.apply(null, R.vm.map(function (v) { return v || 0; })) || 1, kk = (H - 48) / max;
+      M.forEach(function (mo, i) {
+        var x = padx + i * (bw + gap), base = H - 26, o = r0(R.vo[i]), se = r0(R.vs[i]);
+        if (o != null) {
+          s += '<rect class="pord" x="' + x.toFixed(1) + '" y="' + (base - o * kk).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (o * kk).toFixed(1) + '"/>';
+          if (se) s += '<rect class="psec" x="' + x.toFixed(1) + '" y="' + (base - (o + se) * kk).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (se * kk).toFixed(1) + '"/>';
+          s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (base - (o + (se || 0)) * kk - 4).toFixed(1) + '" text-anchor="middle">' + (o + (se || 0)) + '</text>';
+        }
+        s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + mo.label + '</text>';
+        if (mo.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(mo.anio).slice(2) + '</text>';
+      });
+      var av = function (l) { var v = l.filter(function (x) { return x != null; }); return v.length ? v.reduce(function (a1, b1) { return a1 + b1; }, 0) / v.length : null; };
+      var filas = M.map(function (mo, i) { var o = r0(R.vo[i]), se = r0(R.vs[i]); return '<tr><td>' + mo.label + ' ' + String(mo.anio).slice(2) + '</td><td>' + (o != null ? o : '–') + '</td><td>' + (se != null ? se : '–') + '</td><td>' + (o != null ? o + (se || 0) : '–') + '</td><td>' + (o != null && o + se ? pct(o, o + se) : '–') + '</td></tr>'; }).reverse().join('');
+      var ao = av(R.vo), as = av(R.vs);
+      return '<section class="card"><h2>Vacas en ordeñe y secas</h2>' +
+        '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '" max="' + maxMes + '"></label>' +
+        '<div class="kpis"><div><b>' + (ao != null ? nf(ao) : '–') + '</b><span>En ordeñe, promedio</span></div><div><b>' + (as != null ? nf(as) : '–') + '</b><span>Secas, promedio</span></div><div class="tp"><b>' + (ao != null && ao + as ? pct(ao, ao + as) : '–') + '</b><span>En ordeñe / total</span></div></div>' +
+        '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' +
+        '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Vacas en ordeñe y secas por mes">' + s + '</svg>' +
+        '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Total</th><th>% ordeñe</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<p class="cap">Promedio de todos los días de cada mes, calculado con los partos, secados y bajas de SysCaw.</p></section>';
+    }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
       var rv = A.resumen(V, h), rq = A.resumen(Q, h);
@@ -1132,7 +1196,7 @@
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
-        proyHTML() + repHTML() +
+        vovsHTML() + proyHTML() + repHTML() + idxCardHTML() +
         '<section class="card"><h2>' + nf(DB.animales.length) + ' animales</h2><table class="tbl"><thead><tr><th>Categoría</th><th>Animales</th><th>Preñadas</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
     }
     function rodeoHTML() {
@@ -1155,7 +1219,7 @@
         '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
         (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
-        (state.cat === 'vaca' || state.cat === 'seca' ? idxCardHTML() : '');
+        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '');
     }
 
     /* ----- ficha ----- */
@@ -1226,6 +1290,7 @@
         (r.celoBajo ? '<p class="cap">En este tambo se anotan pocos celos, así que el dato parto a primer celo pesa menos (' + Math.round(r.pesos.pc) + '%).</p>' : '') + '</section>';
     }
     function idxFichaHTML(a) {
+      if (esOperario()) return '';
       var r = IDX(); if (!r || !(a.cat === 'vaca' || a.cat === 'seca' || !a.cat)) return '';
       var V = r.por[a.rp];
       if (!V) return '<section class="card"><h2>Índice del tambo</h2><p class="cap" style="margin:0">Sin índice todavía: le falta cerrar al menos una lactancia con datos de reproducción y de leche.</p></section>';
@@ -1248,6 +1313,7 @@
         ' Puntos que suma o resta cada dato; la línea del medio es el promedio del tambo.</p></section>';
     }
     function idxBadge(a) {
+      if (esOperario()) return '';
       var V = idxDe(a); if (!V) return '';
       var cls = V.tier === 'top' ? '' : V.tier === 'peor' ? ' peor' : ' neutro';
       return '<span class="medalla' + cls + '" title="Índice del tambo: ' + V.idx + '">' + (V.tier === 'top' ? MEDALLA : '') + '<span class="ixb">' + V.idx + '</span>' +
@@ -1392,7 +1458,7 @@
         ])) +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
-        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guarda solo la última lactancia. El historial completo está en SysCaw.</p>' : '') +
+        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
         '<p class="src">Respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }
@@ -1429,7 +1495,7 @@
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
@@ -1440,7 +1506,6 @@
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
     var FICHA_AB = {};
-    try { FICHA_AB = JSON.parse(localStorage.getItem('libreta:fichaab')) || {}; } catch (e) {}
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
@@ -1556,7 +1621,14 @@
       var caen = conPrev.filter(function (v) { var d = v.prev[1] - v.lt; return d >= 4 && d / v.prev[1] >= 0.2; }).sort(function (x, y) { return (y.prev[1] - y.lt) / y.prev[1] - (x.prev[1] - x.lt) / x.prev[1]; });
       var caida = C.ant ? '<section class="card"><h2>Cayeron más · ' + caen.length + ' vacas</h2><p class="cap" style="margin:0 0 8px">Bajaron 20% o más (y al menos 4 L) respecto del control del ' + A.fmt(C.ant) + '.</p>' +
         (caen.length ? caen.slice(0, 40).map(function (v) { var pc = Math.round((v.prev[1] - v.lt) / v.prev[1] * 100); return rowHTML(v.a, { right: '<span class="when late">−' + pc + '%</span>', sub: nf(v.prev[1], 1) + ' → ' + nf(v.lt, 1) + ' L · ' + v.del + ' días en leche' }); }).join('') : '<p class="hint">Ninguna vaca cayó tanto.</p>') + '</section>' : '';
-      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + tabla + caida;
+      var top = V.slice().sort(function (x, y) { return y.lt - x.lt; }).slice(0, 5);
+      var top5 = '<section class="card"><h2>Top 5 del control</h2><p class="cap" style="margin:0 0 8px">Las 5 vacas con más litros' + (C.fecha ? ' el ' + A.fmt(C.fecha) : '') + ', comparadas con el control anterior.</p>' +
+        top.map(function (v, i) {
+          var pv = v.prev && v.prev[1] > 0 ? v.prev[1] : null, d = pv != null ? v.lt - pv : null;
+          return rowHTML(v.a, { right: '<span class="when ' + (d != null && d < 0 ? 'late' : 'ok') + '">' + nf(v.lt, 1) + ' L</span>',
+            sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
+        }).join('') + '</section>';
+      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + top5 + tabla + caida;
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
@@ -1617,15 +1689,319 @@
         else { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); }
       }, function () { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); });
     }
+    // operario: solo Buscar y la ficha. El tipo de acceso va dentro de la firma.
+    function esOperario() { return !esVet() && ACT.length > 0 && !ACT.some(function (x) { return x.r !== 'op'; }); }
     function enviarActivacion() {
       if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
-      firmar({ p: DB.idProd, n: PERFIL.nombre || '', f: today() }).then(function (tok) {
+      closeSheet();
+      $('#sheetXTitle').textContent = '¿Para quién es la activación?';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + '</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="actprod">Productor · app completa</button><button class="btn big" data-a="actop">Operario · solo buscar y ficha</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function enviarActivacionRol(rol) {
+      $('#sheetX').hidden = true;
+      var pl = { p: DB.idProd, n: PERFIL.nombre || '', f: today() }; if (rol === 'op') pl.r = 'op';
+      firmar(pl).then(function (tok) {
         // el link siempre lleva a la app oficial, aunque se genere desde la versión de prueba
         var url = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '') + '#act=' + tok;
-        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
+        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*' + (rol === 'op' ? ' (operario)' : '') + '. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
         if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
       }, function () { toast('No pude generar la activación. Revisá tu clave.'); });
     }
+
+    /* ----- informe anual (solo modo veterinario), con el formato de los informes del Dr. Torterolo; se guarda como PDF desde Imprimir ----- */
+    function infMeses(modo) {
+      var ref = DB.fecha || today(), y = +ref.slice(0, 4), m = +ref.slice(5, 7);
+      if (modo === 'ej') { if (m < 7) y--; m = 6; } // ejercicio julio–junio cerrado
+      var out = [];
+      for (var i = 11; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } out.push({ key: yy + '-' + pad2(mm), label: A.MESES[mm - 1], anio: yy, mid: yy + '-' + pad2(mm) + '-15' }); }
+      return out;
+    }
+    // todos los animales de todas las unidades; cada cálculo usa la unidad en la que estaba el animal en esa fecha
+    function infLista() {
+      var H = DB.hist || {};
+      return (DB.todos || DB.animales).map(function (a) { return { a: a, h: H[a.rp] }; }).concat((DB.bajasT || DB.bajas || []).map(function (b) { return { a: b, h: H[b.key] }; })).filter(function (x) { return x.h; });
+    }
+    function unidadEn(x, D) {
+      var mv = x.h.mv; if (!mv || !mv.length) return x.a.u;
+      var u = null; mv.forEach(function (m) { if (m[0] <= D) u = m[1]; });
+      return u != null && u >= 0 ? u : (u == null ? mv[0][2] : -1);
+    }
+    function enSel(u) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(u) >= 0; }
+    // fecha de concepción de la lactancia que empieza en el parto i
+    function concLac(h, i) {
+      var p = h.pa[i], np = h.pa[i + 1], hasta = np ? np[0] : '9999';
+      var sv = h.ev.filter(function (e) { return e[1] === 'S' && e[0] > p[0] && e[0] < hasta; });
+      if (np) { var est = A.addDays(np[0], -A.GEST), best = null; sv.forEach(function (e) { var d = Math.abs(A.diffDays(e[0], est)); if (d <= 20 && (!best || d < best[1])) best = [e[0], d]; }); return { sv: sv, conc: best ? best[0] : null }; }
+      var pos = h.ta.filter(function (t) { return t[0] > p[0] && esPren(t[1]); });
+      if (pos.length) { var T = pos[pos.length - 1][0], antes = sv.filter(function (e) { return e[0] <= T; }); return { sv: sv, conc: antes.length ? antes[antes.length - 1][0] : null }; }
+      return { sv: sv, conc: null };
+    }
+    // VO y VS: promedio de todos los días de cada mes, reconstruido con partos, secados (cierre de lactancia) y bajas de SysCaw.
+    // VM = VO + VS (+ las vacas dadas de baja de las que no hay fecha de secado guardada)
+    function vovsMeses(M, L) {
+      L = L || infLista();
+      var estado = function (x, D) {
+        if (x.a.bTipo && x.a.bFecha && x.a.bFecha <= D) return null;
+        var pa = x.h.pa, k = -1; for (var q = 0; q < pa.length; q++) if (pa[q][0] <= D) k = q;
+        if (k < 0) return pa.some(function (p) { return p[1] >= 2 && A.diffDays(p[0], D) <= 400 * (p[1] - 1); }) ? 'M' : null;
+        var p = pa[k], np = pa[k + 1], seco = p[5] || (np ? A.addDays(np[0], -A.SECADO) : null);
+        return seco && seco <= D ? 'S' : 'O';
+      };
+      var vo = [], vs = [], vm = [], ref = DB.fecha || today();
+      M.forEach(function (m) {
+        var y = +m.key.slice(0, 4), mm = +m.key.slice(5, 7), dias = new Date(y, mm, 0).getDate(), o = 0, s = 0, x0 = 0, n = 0;
+        for (var dd = 1; dd <= dias; dd++) {
+          var D = m.key + '-' + pad2(dd); if (D > ref) break; n++;
+          L.forEach(function (x) { if (!x.h.pa.length || !enSel(unidadEn(x, D))) return; var e = estado(x, D); if (e === 'O') o++; else if (e === 'S') s++; else if (e === 'M') x0++; });
+        }
+        vo.push(n ? o / n : null); vs.push(n ? s / n : null); vm.push(n ? (o + s + x0) / n : null);
+      });
+      return { vo: vo, vs: vs, vm: vm };
+    }
+    function infDatos(modo) {
+      var M = infMeses(modo), desde = M[0].key + '-01', hasta = M[11].key + '-31', L = infLista();
+      var R = vovsMeses(M, L), vo = R.vo, vs = R.vs, vm = R.vm;
+      var av = function (l) { var v = l.filter(function (x) { return x != null; }); return v.length ? v.reduce(function (s, x) { return s + x; }, 0) / v.length : null; };
+      // partos ocurridos (sin abortos)
+      var pv = M.map(function () { return 0; }), pq = pv.slice(), ab = 0;
+      L.forEach(function (x) { x.h.pa.forEach(function (p) {
+        if (p[0] < desde || p[0] > hasta) return;
+        if (!enSel(unidadEn(x, p[0]))) return;
+        if (/^A/.test(p[2] || '')) { ab++; return; }
+        var k = M.map(function (m) { return m.key; }).indexOf(p[0].slice(0, 7)); if (k < 0) return;
+        if (p[1] === 1) pq[k]++; else pv[k]++;
+      }); });
+      // concentración: los 6 meses seguidos con más partos
+      var best = null; for (var i = 0; i <= 6; i++) { var s = 0; for (var j = i; j < i + 6; j++) s += pv[j] + pq[j]; if (!best || s > best.s) best = { i: i, s: s }; }
+      // indicadores de la temporada de servicios (vacas): desde el inicio elegido hasta el último servicio
+      var ini = inicio21(), ref = DB.fecha || today(), fin = null;
+      L.forEach(function (x) { x.h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] >= ini && e[0] <= ref && (!fin || e[0] > fin) && enSel(unidadEn(x, e[0]))) fin = e[0]; }); });
+      var ips = [], ipp = [], nServ = 0, nPren = 0, apt = 0, pre = 0;
+      if (fin) L.forEach(function (x) {
+        var h = x.h;
+        h.pa.forEach(function (p, i) {
+          if (!enSel(unidadEn(x, p[0]))) return;
+          var c = concLac(h, i);
+          var s1 = c.sv[0];
+          if (s1 && s1[0] >= ini && s1[0] <= fin) ips.push(A.diffDays(s1[0], p[0]));
+          c.sv.forEach(function (e) { if (e[0] >= ini && e[0] <= fin) nServ++; });
+          if (c.conc && c.conc >= ini && c.conc <= fin) { nPren++; ipp.push(A.diffDays(c.conc, p[0])); }
+          // % preñez general: vacas paridas antes del inicio, vacías al inicio, que cumplieron la espera voluntaria en la temporada
+          var np = h.pa[i + 1];
+          if (p[0] < ini && (!np || np[0] > ini) && !(c.conc && c.conc < ini) && A.diffDays(fin, p[0]) >= pevActual() && !(x.a.bTipo && x.a.bFecha && x.a.bFecha < ini)) { apt++; if (c.conc && c.conc >= ini && c.conc <= fin) pre++; }
+        });
+      });
+      var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
+        .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
+      var CY = fin ? A.ciclos21(an, esPren, ini, pevActual(), ref) : [], Tc = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 };
+      CY.forEach(function (c) { if (c.cerrado) ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { Tc[k] += c[k]; }); });
+      return { M: M, vo: vo, vs: vs, vm: vm, avo: av(vo), avs: av(vs), avm: av(vm), pv: pv, pq: pq, ab: ab, best: best, ini: ini, fin: fin,
+        ips: av(ips), spp: nPren ? nServ / nPren : null, ipp: av(ipp), pg: apt ? pre / apt * 100 : null, apt: apt, pre: pre,
+        det: Tc.aptas ? Tc.serv / Tc.aptas * 100 : null, con: Tc.sOk + Tc.sMal ? Tc.sOk / (Tc.sOk + Tc.sMal) * 100 : null, tp: Tc.aptas ? Tc.pren / Tc.aptas * 100 : null };
+    }
+    function infBarras(M, series, H, opt) {
+      // barras agrupadas (series lado a lado) con el valor escrito en cada barra
+      opt = opt || {}; var W = 520, ml = 34, mr = 6, mt = 14, mb = 22, ns = series.length;
+      var max = 0; series.forEach(function (s) { s.v.forEach(function (v) { if (v > max) max = v; }); }); max = max ? max * 1.1 : 1;
+      var paso = Math.pow(10, Math.floor(Math.log10(max / 4))); [1, 2, 2.5, 5, 10].some(function (k) { if (k * paso * 4 >= max) { paso *= k; return true; } }); max = paso * 4;
+      var gw = (W - ml - mr) / M.length, bw = Math.min(16, (gw - 8) / ns), Y = function (v) { return H - mb - v / max * (H - mt - mb); };
+      var s = '';
+      for (var t = 0; t <= 4; t++) { var v = max * t / 4; s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="ilbl" x="' + (ml - 4) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + nf(v) + '</text>'; }
+      if (opt.marco) s += '<rect class="imarco" x="' + (ml + opt.marco.i * gw + 1) + '" y="' + (mt - 10) + '" width="' + (6 * gw - 2) + '" height="' + (H - mb - mt + 10) + '"/><text class="ival" x="' + (ml + opt.marco.i * gw + 6) + '" y="' + (mt + 2) + '">' + opt.marco.t + '</text>';
+      M.forEach(function (m, i) {
+        var x0 = ml + i * gw + (gw - bw * ns) / 2;
+        series.forEach(function (sr, k) {
+          var v = sr.v[i]; if (v == null) return;
+          var x = x0 + k * bw, y = Y(v);
+          s += '<rect class="ib ' + sr.c + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (bw - 1.5).toFixed(1) + '" height="' + (H - mb - y).toFixed(1) + '"/>';
+          if (opt.valores !== false && v) s += '<text class="ival" x="' + (x + bw / 2 - 0.7).toFixed(1) + '" y="' + (y - 3).toFixed(1) + '" text-anchor="middle">' + nf(v) + '</text>';
+        });
+        s += '<text class="ilbl" x="' + (ml + i * gw + gw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + (m.lbl || (m.label.charAt(0).toUpperCase() + m.label.slice(1) + String(m.anio).slice(2))) + '</text>';
+      });
+      return '<svg class="ichart" viewBox="0 0 ' + W + ' ' + H + '">' + s + '</svg>';
+    }
+    function infDisp(V, porRod) {
+      var W = 520, H = 210, ml = 30, mr = 70, mt = 8, mb = 26;
+      var xmax = Math.max(400, Math.ceil(Math.max.apply(null, V.map(function (v) { return v.del; })) / 100) * 100), ymax = Math.max(40, Math.ceil(Math.max.apply(null, V.map(function (v) { return v.lt; })) / 10) * 10);
+      var X = function (d) { return ml + d / xmax * (W - ml - mr); }, Y = function (l) { return H - mb - l / ymax * (H - mt - mb); }, s = '';
+      for (var t = 0; t <= ymax; t += 10) s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(t) + '" y2="' + Y(t) + '"/><text class="ilbl" x="' + (ml - 4) + '" y="' + (Y(t) + 3) + '" text-anchor="end">' + t + '</text>';
+      for (t = 0; t <= xmax; t += 100) s += '<text class="ilbl" x="' + X(t) + '" y="' + (H - 12) + '" text-anchor="middle">' + t + '</text>';
+      s += '<text class="ilbl" x="' + ((ml + W - mr) / 2) + '" y="' + (H - 1) + '" text-anchor="middle">DEL</text><text class="ilbl" transform="translate(9 ' + (H / 2) + ') rotate(-90)" text-anchor="middle">Leche</text>';
+      var forma = ['dot1', 'sq2', 'dot3', 'sq4'];
+      V.forEach(function (v) {
+        var k = porRod.indexOf(v.a.rod || '—'), c = forma[k % 4], x = X(Math.min(v.del, xmax)).toFixed(1), y = Y(v.lt).toFixed(1);
+        s += c.indexOf('sq') === 0 ? '<rect class="ip ' + c + '" x="' + (x - 3) + '" y="' + (y - 3) + '" width="6" height="6"/>' : '<circle class="ip ' + c + '" cx="' + x + '" cy="' + y + '" r="3.2"/>';
+      });
+      porRod.forEach(function (r, k) { var c = forma[k % 4], y = mt + 20 + k * 16, x = W - mr + 12; s += (c.indexOf('sq') === 0 ? '<rect class="ip ' + c + '" x="' + (x - 3) + '" y="' + (y - 3) + '" width="6" height="6"/>' : '<circle class="ip ' + c + '" cx="' + x + '" cy="' + y + '" r="3.2"/>') + '<text class="ilbl" x="' + (x + 8) + '" y="' + (y + 3) + '">' + esc(r) + '</text>'; });
+      return '<svg class="ichart" viewBox="0 0 ' + W + ' ' + H + '">' + s + '</svg>';
+    }
+    function informeHTML() {
+      var modo = state.infModo || '12', D = infDatos(modo), f1 = function (v, d) { return v == null ? '–' : nf(v, d || 0); };
+      var tv = D.pv.reduce(function (s, x) { return s + x; }, 0), tq = D.pq.reduce(function (s, x) { return s + x; }, 0), tt = tv + tq;
+      var titulo = DB.unidad || PERFIL.nombre || 'Tambo', mmaa = function (f) { return f ? f.slice(5, 7) + '/' + f.slice(2, 4) : ''; };
+      var sec = function (t, x) { return '<h3 class="ish">' + t + '</h3>' + x; };
+      var lado = function (h) { return '<div class="iside">' + h + '</div>'; };
+      // página 1
+      var p1 = '<div class="ipag"><p class="iprod">' + esc(PERFIL.nombre || '') + '</p><h2 class="ititle">' + esc(titulo) + '</h2>' +
+        sec('Relación VO/VM', '<div class="irow"><div class="ibox">' + infBarras(D.M, [{ v: D.vo.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b1' }, { v: D.vm.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b2' }], 190) +
+          '<div class="ileg"><span><i class="b1"></i>VO</span><span><i class="b2"></i>VM</span></div></div>' +
+          lado('<small>REL VO/VM</small><b>' + (D.avo != null && D.avm ? nf(D.avo / D.avm, 2) : '–') + '</b><span>' + f1(D.avo) + ' VO<br>' + f1(D.avs) + ' VS<br>' + f1(D.avm) + ' VM</span>') + '</div>' +
+          '<p class="inote">Promedio diario de cada mes, calculado con los partos, secados y bajas de SysCaw. VM = vacas en ordeñe + secas.</p>') +
+        sec('Partos ocurridos', '<div class="irow">' + lado('<small>PARTOS VACA</small><b>' + tv + '</b><span>' + (D.avm ? nf(tv / D.avm * 100, 0) + '% VM' : '') + '</span>') +
+          '<div class="ibox">' + infBarras(D.M, [{ v: D.pv, c: 'b1' }, { v: D.pq, c: 'b3' }], 170, { valores: false, marco: tt && D.best.s ? { i: D.best.i, t: nf(D.best.s / tt * 100, 0) + ' %' } : null }) +
+          '<table class="itbl"><tr><th></th>' + D.M.map(function (m) { return '<th>' + m.label.charAt(0).toUpperCase() + m.label.slice(1) + String(m.anio).slice(2) + '</th>'; }).join('') + '</tr>' +
+          '<tr><td><i class="b3"></i>Vaq</td>' + D.pq.map(function (v) { return '<td>' + v + '</td>'; }).join('') + '</tr><tr><td><i class="b1"></i>Vacas</td>' + D.pv.map(function (v) { return '<td>' + v + '</td>'; }).join('') + '</tr></table></div>' +
+          lado('<small>PARTOS VAQ</small><b>' + tq + '</b><span>' + (D.avm ? nf(tq / D.avm * 100, 0) + '% VM' : '') + '</span>') + '</div>' +
+          (D.ab ? '<p class="inote">Además, ' + D.ab + (D.ab === 1 ? ' aborto' : ' abortos') + ' en el período. El recuadro marca los 6 meses seguidos con más partos.</p>' : '<p class="inote">El recuadro marca los 6 meses seguidos con más partos.</p>')) +
+        sec('Indicadores reproductivos' + (D.fin ? ' <small>(' + mmaa(D.ini) + ' – ' + mmaa(D.fin) + ')</small>' : ''), D.fin ? '<table class="iind">' +
+          '<tr><td>Intervalo parto servicio</td><td>' + f1(D.ips) + '</td></tr><tr><td>Servicios por preñez</td><td>' + f1(D.spp, 1) + '</td></tr><tr><td>Intervalo parto preñez</td><td>' + f1(D.ipp) + '</td></tr><tr><td>% Preñez general</td><td>' + f1(D.pg) + '</td></tr>' +
+          '<tr class="isep"><td></td><td></td></tr><tr><td>Detección de celo (%)</td><td>' + f1(D.det, 1) + '</td></tr><tr><td>% Concepción</td><td>' + f1(D.con) + '</td></tr><tr><td>Tasa de preñez (%)</td><td>' + f1(D.tp) + '</td></tr></table>' : '<p class="inote">Sin servicios desde el inicio de la temporada elegido en Rodeo.</p>') +
+        '</div>';
+      // página 2
+      var C = controlLechero(), V = C.V, rods = [];
+      DB.animales.forEach(function (a) { if ((a.cat === 'vaca' || !a.cat) && rods.indexOf(a.rod || '—') < 0) rods.push(a.rod || '—'); });
+      rods.sort();
+      var vByRp = {}; V.forEach(function (v) { vByRp[v.a.rp] = v; });
+      var st = function (l) { return l.length ? [l.reduce(function (s, x) { return s + x; }, 0) / l.length, Math.max.apply(null, l), Math.min.apply(null, l)] : [null, null, null]; };
+      var fila = function (nom, A_) {
+        var lt = [], del = [], ec = [], sdL = 0, sdE = 0, g = { pr: 0, nr: 0, va: 0, sd: 0 }, la = [0, 0, 0], ref = DB.fecha || today();
+        A_.forEach(function (a) {
+          var v = vByRp[a.rp]; if (v) lt.push(v.lt); else sdL++;
+          if (a.pFecha) del.push(A.diffDays(ref, a.pFecha));
+          var h = DB.hist[a.rp]; if (h && h.ec) ec.push(h.ec[1]); else sdE++;
+          if (a.estado === 'prenada') g.pr++; else if (a.estado === 'servida') g.nr++; else if (a.estado === 'sin' && !a.sFecha && !a.tFecha) g.sd++; else g.va++;
+          la[Math.min(2, Math.max(0, (a.pN || 1) - 1))]++;
+        });
+        var a1 = st(lt), a2 = st(del), a3 = st(ec);
+        return '<tr><td><b>' + esc(nom) + '</b></td><td>' + A_.length + '</td><td>' + f1(a1[0], 1) + '</td><td>' + f1(a1[1], 1) + '</td><td>' + f1(a1[2], 1) + '</td><td>' + (sdL || '') + '</td>' +
+          '<td>' + f1(a2[0]) + '</td><td>' + f1(a2[1]) + '</td><td>' + f1(a2[2]) + '</td>' +
+          '<td>' + f1(a3[0], 1) + '</td><td>' + f1(a3[1], 1) + '</td><td>' + f1(a3[2], 1) + '</td><td>' + (sdE || '') + '</td>' +
+          '<td>' + g.pr + '</td><td>' + g.nr + '</td><td>' + g.va + '</td><td>' + (g.sd || '') + '</td><td>' + la[0] + '</td><td>' + la[1] + '</td><td>' + la[2] + '</td></tr>';
+      };
+      var enProd = DB.animales.filter(function (a) { return a.cat === 'vaca' || !a.cat; });
+      var tabla = '<table class="iest"><thead><tr><th></th><th></th><th colspan="4">Producción (L)</th><th colspan="3">Días lactancia</th><th colspan="4">Estado corporal</th><th colspan="4">Est. gestacional</th><th colspan="3">Anim. x lact.</th></tr>' +
+        '<tr><th></th><th>Anim</th><th>Prom</th><th>Max</th><th>Min</th><th>S/D</th><th>Prom</th><th>Max</th><th>Min</th><th>Prom</th><th>Max</th><th>Min</th><th>S/D</th><th>Preñ</th><th>N.R.</th><th>Vac</th><th>S/D</th><th>1</th><th>2</th><th>3+</th></tr></thead><tbody>' +
+        rods.map(function (r) { return fila(r, enProd.filter(function (a) { return (a.rod || '—') === r; })); }).join('') + (rods.length > 1 ? fila('Total', enProd).replace('<tr>', '<tr class="itot">') : '') + '</tbody></table>';
+      var lim = limReal(), P = A.proyeccion(DB.animales, today(), 8, lim).filter(function (r) { return r.okSec; }).slice(0, 6);
+      var pm = P.map(function (r) { return { label: r.label, anio: r.anio, lbl: r.label.charAt(0).toUpperCase() + r.label.slice(1) + ' ' + String(r.anio).slice(2) }; });
+      // proyección de partos: por unidad (vacas) y vaquillonas, solo meses con preñeces confirmadas
+      var ms = {}; DB.animales.forEach(function (a) { if (a.estado === 'prenada') { var d = A.derive(a, today()); if (d.partoProb && d.partoProb >= today() && d.partoProb <= lim) ms[d.partoProb.slice(0, 7)] = 1; } });
+      var meses = Object.keys(ms).sort(), us = DB.unidades ? DB.unidades.filter(function (u) { return !DB.sel || DB.sel.indexOf(u.id) >= 0; }) : [{ id: null, nombre: '' }];
+      var cuenta = function (fl) { return meses.map(function (k) { return DB.animales.filter(function (a) { if (a.estado !== 'prenada' || !fl(a)) return false; var d = A.derive(a, today()); return d.partoProb && d.partoProb.slice(0, 7) === k; }).length; }); };
+      var filasP = us.map(function (u) { return { n: 'Vacas' + (u.nombre && us.length > 1 ? ' ' + u.nombre : ''), v: cuenta(function (a) { return a.cat !== 'vaquillona' && (u.id == null || a.u === u.id); }) }; })
+        .concat([{ n: 'Vaq', v: cuenta(function (a) { return a.cat === 'vaquillona'; }) }]);
+      var tot = meses.map(function (k, i) { return filasP.reduce(function (s, f) { return s + f.v[i]; }, 0); });
+      var mlbl = function (k) { return A.MESES[+k.slice(5, 7) - 1].charAt(0).toUpperCase() + A.MESES[+k.slice(5, 7) - 1].slice(1) + '-' + k.slice(2, 4); };
+      var p2 = '<div class="ipag"><p class="iprod">' + esc(PERFIL.nombre || '') + '</p>' +
+        sec('Estado productivo y reproductivo actual', (V.length ? '<p class="inote" style="margin-top:0"><i>Control lechero ' + (C.fecha ? C.fecha.slice(5, 7) + '/' + C.fecha.slice(0, 4) : '') + '</i></p><div class="ibox">' + infDisp(V, rods) + '</div>' : '') +
+          '<p class="isub">Estado productivo al ' + A.fmt(DB.fecha || today()) + ' · En producción</p>' + tabla +
+          '<p class="inote">N.R.: servidas sin diagnóstico (no retorno). S/D: sin dato.</p>') +
+        sec('Proyección del rodeo', P.length ? '<div class="ibox inarrow"><p class="icap">Promedio VO</p>' + infBarras(pm, [{ v: P.map(function (r) { return r.ord; }), c: 'b1' }], 200) + '</div>' : '<p class="inote">Sin preñeces confirmadas para proyectar.</p>') +
+        sec('Proyección de partos totales', meses.length ? '<table class="iproy"><tr><th></th>' + meses.map(function (k) { return '<th>' + mlbl(k) + '</th>'; }).join('') + '<th></th></tr>' +
+          filasP.map(function (f) { return '<tr><td><b>' + esc(f.n) + '</b></td>' + f.v.map(function (v) { return '<td>' + (v || '') + '</td>'; }).join('') + '<td></td></tr>'; }).join('') +
+          '<tr class="itot"><td><b>Total</b></td>' + tot.map(function (v) { return '<td><b>' + v + '</b></td>'; }).join('') + '<td><b>' + tot.reduce(function (s, x) { return s + x; }, 0) + '</b></td></tr></table><p class="inote">Solo preñeces confirmadas por tacto.</p>' : '<p class="inote">Sin partos confirmados.</p>') +
+        '<p class="ifirma">Dr. Mauro Torterolo</p></div>';
+      var bar = '<div class="infbar"><button class="btn" data-a="infcerrar">Volver</button><div class="filters">' + [['12', 'Últimos 12 meses'], ['ej', 'Ejercicio jul–jun']].map(function (c) { return '<button class="fchip" data-im="' + c[0] + '" aria-pressed="' + (modo === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div><button class="btn primary" data-a="infpdf">Guardar PDF</button></div>';
+      return '<div class="inf">' + bar + p1 + p2 + '</div>';
+    }
+    function abrirInforme() {
+      if (!esVet() || !DB.hist) { toast('El informe anual necesita el respaldo de SysCaw y el modo veterinario.'); return; }
+      closeSheet(); state.informe = true; render(); window.scrollTo(0, 0);
+    }
+    function pdfInforme() {
+      var t = document.title; document.title = 'Informe ' + (DB.unidad || PERFIL.nombre || '') + ' ' + (DB.fecha || today());
+      setTimeout(function () { window.print(); setTimeout(function () { document.title = t; }, 500); }, 50);
+    }
+
+    /* ----- exportar a Excel: lista de tacto con filtro previo ----- */
+    // criterios: se toma cada uno que esté completo; un animal entra si cumple cualquiera de ellos
+    function xMotivos(a, f, hoy, secar) {
+      var m = [], cat = a.cat || 'vaca';
+      if (!((cat === 'vaca' && f.ord) || (cat === 'seca' && f.sec) || (cat === 'vaquillona' && f.vaq))) return m;
+      // para venta: se toma aunque esté marcado "Excluir descartes" (la venta es justamente de descartes)
+      if (f.venta && paraVenta(a)) m.push('Para venta' + (a.rech ? ': ' + (a.rechDet || a.rech) : '') + (typeof (a.pr || [])[0] === 'number' ? ', ' + nf(a.pr[0], 1) + ' L' : '') + (delDe(a) != null ? ', ' + nf(delDe(a)) + ' días en leche' : ''));
+      if (f.sinDesc && a.rech) return m;
+      var serv = a.sFecha && !/^celo/i.test(a.toro || '');
+      if (f.sdx > 0 && a.estado !== 'prenada' && serv && (!a.tFecha || a.tFecha < a.sFecha)) { var d = A.diffDays(hoy, a.sFecha); if (d >= f.sdx) m.push('Servida hace ' + d + ' días sin diagnóstico'); }
+      if (f.psv > 0 && a.pFecha && a.estado !== 'prenada' && (!a.sFecha || a.sFecha <= a.pFecha)) { var p = A.diffDays(hoy, a.pFecha); if (p >= f.psv) m.push('Parida hace ' + p + ' días sin servicio'); }
+      if (f.celo && a.celo) m.push('Preñada con celo posterior');
+      if (f.secar && secar[a.rp]) m.push('Para secar: ' + secar[a.rp].dp + ' días al parto');
+      return m;
+    }
+    function xFiltradas() {
+      var f = state.xf, hoy = today(), secar = {};
+      if (f.secar) listaSecado(fechaSecado()).forEach(function (x) { secar[x.a.rp] = x; });
+      var out = [];
+      DB.animales.forEach(function (a) { var m = xMotivos(a, f, hoy, secar); if (m.length) out.push({ a: a, m: m }); });
+      return out;
+    }
+    function xOpts() {
+      var f = state.xf, n = xFiltradas().length;
+      var chk = function (k, t) { return '<button class="fchip" data-xk="' + k + '" aria-pressed="' + !!f[k] + '">' + t + '</button>'; };
+      var num = function (k, a, b) { return '<label class="xnum">' + a + ' <input type="number" inputmode="numeric" min="1" max="999" data-xn="' + k + '" value="' + (f[k] || '') + '" placeholder="–"> ' + b + '</label>'; };
+      $('#xopts').innerHTML = '<p class="xlbl">Categoría</p><div class="filters">' + chk('ord', 'Vacas en ordeñe') + chk('sec', 'Secas') + chk('vaq', 'Vaquillonas') + '</div>' +
+        '<div class="filters" style="margin-top:8px">' + chk('sinDesc', 'Excluir descartes') + '</div>' +
+        '<p class="xlbl">Incluir (lo que quede vacío no se toma)</p>' +
+        num('sdx', 'Servidas con más de', 'días sin diagnóstico') +
+        num('psv', 'Paridas con más de', 'días sin servicio') +
+        '<div class="filters" style="margin-top:8px">' + chk('celo', 'Preñadas con celo') + chk('secar', 'Para secar por preñez') + chk('venta', 'Para venta') + '</div>' +
+        (f.venta ? '<p class="cap">Para venta: ' + esc(vtaTxt()) + ' (se cambia en Tareas → Para venta).</p>' : '') +
+        (f.secar ? '<p class="cap">Para secar: preñadas a ' + A.SECADO + ' días o menos del parto el ' + A.fmt(fechaSecado()) + ' (fecha de Tareas → Para secar).</p>' : '') +
+        '<p class="xcount"><b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales') + '</p>';
+      $('#btnXok').disabled = !n;
+    }
+    function xActualizarCuenta() { var n = xFiltradas().length; var c = $('#xopts .xcount'); if (c) c.innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales'); $('#btnXok').disabled = !n; }
+    function abrirExport() {
+      var g = null; try { g = JSON.parse(localStorage.getItem('libreta:xf')); } catch (e) {}
+      state.xf = g || { ord: true, sec: false, vaq: true, sinDesc: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false };
+      $('#sheetXTitle').textContent = 'Armar lista';
+      $('#xbtns').innerHTML = '<button class="btn primary big" id="btnXok" data-a="xok">Ver lista y exportar</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      xOpts(); $('#sheetX').hidden = false;
+    }
+    function exportarTactar() {
+      try { localStorage.setItem('libreta:xf', JSON.stringify(state.xf)); } catch (e) {}
+      var L = xFiltradas().sort(function (x, y) { return numRp(x.a, y.a); }), ref = today();
+      var fila = function (x) {
+        var a = x.a, h = DB.hist ? DB.hist[a.rp] : null, ins = null, serv = a.sFecha && !/^celo/i.test(a.toro || '');
+        if (h) h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] === a.sFecha) ins = e[3] || null; });
+        return [a.rp, a.nombre || '', a.cat === 'vaquillona' ? 'Vaquillona' : a.cat === 'seca' ? 'Seca' : 'En ordeñe', a.rod || '', x.m.join(' · '), a.pN || '', a.pFecha ? A.fmt(a.pFecha) : '',
+          a.pFecha ? A.diffDays(ref, a.pFecha) : '', a.sFecha ? A.fmt(a.sFecha) : '', a.sFecha ? A.diffDays(ref, a.sFecha) : '', a.sN || '', serv ? (a.toro || '') : (a.sFecha ? 'Celo' : ''), ins || '',
+          a.tFecha ? A.fmt(a.tFecha) : '', a.result || '', a.rech ? (a.rechDet || a.rech) : '', typeof (a.pr || [])[0] === 'number' ? a.pr[0] : ''];
+      };
+      var head = ['Caravana', 'Nombre', 'Categoría', 'Rodeo', 'Motivo', 'Lactancia', 'Último parto', 'Días en leche', 'Último servicio', 'Días desde servicio', 'Nº servicio', 'Toro', 'Inseminador', 'Último tacto', 'Resultado', 'Descarte', 'Litros último control'];
+      var tit = 'Lista · ' + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref);
+      var ws = root.XLSX.utils.aoa_to_sheet([[tit], [], head].concat(L.map(fila)));
+      ws['!cols'] = head.map(function (h, i) { return { wch: i === 4 ? 34 : i === 1 ? 18 : Math.max(9, h.length + 2) }; });
+      var wb = root.XLSX.utils.book_new(); root.XLSX.utils.book_append_sheet(wb, ws, 'Lista');
+      var nombre = ('Lista ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
+      var buf = root.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      var file = null; try { file = new File([buf], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); } catch (e) {}
+      // CSV separado por comas (como lo lee Excel en el celular) para los teléfonos que no dejan compartir .xlsx
+      var csv = '\ufeff' + [head].concat(L.map(fila)).map(function (r) { return r.map(function (v) { v = v == null ? '' : String(v); return /[,;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n');
+      var fcsv = null; try { fcsv = new File([csv], nombre.replace(/\.xlsx$/, '.csv'), { type: 'text/csv' }); } catch (e) {}
+      state.xout = { wb: wb, file: file, csv: fcsv, nombre: nombre };
+      // la lista queda a la vista y después se elige compartir o guardar
+      var puedeComp = !!(navigator.share && (file || fcsv));
+      $('#sheetXTitle').textContent = 'Lista · ' + L.length + (L.length === 1 ? ' animal' : ' animales');
+      $('#xopts').innerHTML = '<div class="xprev">' + L.map(function (x) { return '<div><b>' + esc(x.a.rp) + '</b><span>' + esc(x.m.join(' · ')) + '</span></div>'; }).join('') + '</div>' +
+        '<p class="cap">Archivo: ' + esc(nombre) + '</p>';
+      $('#xbtns').innerHTML = (puedeComp ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button><button class="btn" data-a="xsharecsv">Compartir como CSV (se abre con Excel)</button>' : '') +
+        '<button class="btn' + (puedeComp ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
+    }
+    function xCompartir() {
+      var o = state.xout; if (!o) return;
+      var falla = function () { root.XLSX.writeFile(o.wb, o.nombre); toast('Este teléfono no deja compartir Excel: quedó guardado en Descargas. Podés mandarlo desde ahí o usar "Compartir como CSV".'); };
+      if (!o.file || !(navigator.canShare && navigator.canShare({ files: [o.file] }))) { falla(); return; }
+      navigator.share({ files: [o.file], title: o.nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') falla(); });
+    }
+    function xCompartirCSV() {
+      var o = state.xout; if (!o || !o.csv) return;
+      if (navigator.canShare && navigator.canShare({ files: [o.csv] })) navigator.share({ files: [o.csv], title: o.csv.name }).catch(function (e) { if (!e || e.name !== 'AbortError') toast('No se pudo compartir. Usá "Guardar Excel en el teléfono".'); });
+      else toast('Este teléfono no deja compartir archivos. Usá "Guardar Excel en el teléfono".');
+    }
+    function xGuardar() { var o = state.xout; if (!o) return; root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
 
     /* ----- render ----- */
     var NAVS = [
@@ -1656,13 +2032,16 @@
           '<button class="btn primary big" data-a="pegaract">Pegar link de activación</button></section>';
         return;
       }
-      nav.hidden = false;
+      var op = esOperario();
+      if (op) { state.tab = 'buscar'; state.informe = false; }
+      nav.hidden = op;
       $('#ubtn').hidden = !DB.unidades;
       if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
-      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)');
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
       nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
+      if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
         if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); return; }
@@ -1684,17 +2063,20 @@
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
-      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; setP('cat', state.cat); render(); return; }
+      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
-      if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; try { localStorage.setItem('libreta:fichaab', JSON.stringify(FICHA_AB)); } catch (x) {} return; }
-      if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; try { localStorage.setItem('libreta:desp', JSON.stringify(state.desp)); } catch (x) {} render(); return; }
+      if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; return; }
+      if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; render(); return; }
+      if ((el = e.target.closest('[data-im]'))) { state.infModo = el.dataset.im; render(); return; }
       if ((el = e.target.closest('[data-ev]'))) { state.evMed = el.dataset.ev; render(); return; }
       if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
       if ((el = e.target.closest('[data-k]'))) { state.abiertas[el.dataset.k] = !state.abiertas[el.dataset.k]; render(); return; }
+      if ((el = e.target.closest('[data-vk]'))) { state.vtaDraft[el.dataset.vk] = !state.vtaDraft[el.dataset.vk]; el.setAttribute('aria-pressed', !!state.vtaDraft[el.dataset.vk]); vtaCuenta(); return; }
+      if ((el = e.target.closest('[data-xk]'))) { state.xf[el.dataset.xk] = !state.xf[el.dataset.xk]; xOpts(); return; }
       var b = e.target.closest('[data-a]'); if (!b) return;
       var a = b.dataset.a;
       if (a === 'load') { state.destino = tamboAct() ? null : 'nuevo'; $('#file').click(); }
@@ -1709,8 +2091,21 @@
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
       else if (a === 'enviaract') enviarActivacion();
+      else if (a === 'actprod') enviarActivacionRol('prod');
+      else if (a === 'actop') enviarActivacionRol('op');
       else if (a === 'vet') modoVet();
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
+      else if (a === 'exptactar') abrirExport();
+      else if (a === 'xok') exportarTactar();
+      else if (a === 'xshare') xCompartir();
+      else if (a === 'vtacfg') vtaSheet();
+      else if (a === 'vtaok') { setP('vta', JSON.stringify(state.vtaDraft)); $('#sheetX').hidden = true; render(); toast('Criterio de venta guardado'); }
+      else if (a === 'xsharecsv') xCompartirCSV();
+      else if (a === 'xsave') xGuardar();
+      else if (a === 'xcancel') $('#sheetX').hidden = true;
+      else if (a === 'informe') abrirInforme();
+      else if (a === 'infcerrar') { state.informe = false; render(); window.scrollTo(0, 0); }
+      else if (a === 'infpdf') pdfInforme();
       else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
@@ -1719,10 +2114,13 @@
       else if (a === 'ucancel') cerrarUnidad(null);
     });
     document.addEventListener('change', function (e) {
+      if (e.target.id === 'vomes' && e.target.value) { state.vomes = e.target.value; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
     document.addEventListener('input', function (e) {
+      if (e.target.dataset && e.target.dataset.vn) { var w = parseInt(e.target.value, 10); state.vtaDraft[e.target.dataset.vn] = w > 0 ? w : null; vtaCuenta(); return; }
+      if (e.target.dataset && e.target.dataset.xn) { var v = parseInt(e.target.value, 10); state.xf[e.target.dataset.xn] = v > 0 ? v : null; xActualizarCuenta(); return; }
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
     });
     document.addEventListener('keydown', function (e) {

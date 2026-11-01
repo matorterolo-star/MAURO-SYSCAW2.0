@@ -115,6 +115,7 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .fchip.venta[aria-pressed="false"]{border-color:var(--vacia);color:var(--vacia)}
 .when{font-size:13.5px;font-weight:700;color:var(--muted);white-space:nowrap}
 .when.late{color:var(--vacia)}
+.when.ok{color:var(--prenada)}
 
 /* estado vacío */
 .empty{background:var(--surface);border:1px dashed var(--line);border-radius:20px;padding:28px 20px;text-align:center}
@@ -130,6 +131,44 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .sec.open .sechead{margin-bottom:10px}
 .sec.open .sechead .chev{transform:rotate(180deg)}
 .sec{margin-bottom:10px}
+.xlbl{margin:10px 0 6px;font-weight:700;font-size:15px}.xcount{margin:14px 0 12px;font-size:16px}.xcount b{font-size:22px}
+#sheetX .filters{flex-wrap:wrap}
+.xnum{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;font-size:15px}.xnum input{width:74px;min-height:44px;font-size:18px;text-align:center;border:2px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.xtop{width:100%;margin:0 0 12px}
+.xprev{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:12px;margin:0 0 6px}.xprev div{display:grid;grid-template-columns:64px 1fr;gap:8px;padding:9px 12px;border-top:1px solid var(--line);font-size:14.5px}.xprev div:first-child{border-top:0}.xprev b{font-size:16px}.xprev span{color:var(--muted)}
+.infbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:0 0 14px}.infbar .filters{margin:0}
+.ipag{background:#fff;color:#1a1a1a;border:1px solid var(--line);border-radius:8px;padding:18px 18px 10px;margin:0 0 16px;font-family:Calibri,Aptos,"Segoe UI",Arial,sans-serif}
+.iprod{margin:0;text-align:right;font-style:italic;font-size:12px;color:#333}
+.ititle{text-align:center;font-size:20px;margin:0 0 6px;color:#111}
+.ish{color:#1F3864;font-size:14px;font-weight:700;text-transform:uppercase;margin:16px 0 8px;padding-bottom:3px;border-bottom:1px solid #2E5597}.ish small{font-size:11px;text-transform:none}
+.irow{display:flex;gap:8px;align-items:stretch}.ibox{flex:1;min-width:0;border:1px solid #000;padding:6px}.inarrow{max-width:520px;margin:0 auto}
+.iside{flex:none;width:74px;border:1px solid #000;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:4px;padding:4px}
+.iside small{font-size:10px;font-weight:700}.iside b{font-size:22px}.iside span{font-size:10.5px;font-weight:700}
+.ichart{width:100%;height:auto;display:block}
+.ichart .lgrid{stroke:#ddd}.ilbl{font-size:9px;fill:#333}.ival{font-size:8.5px;fill:#111;font-weight:700}
+.ib.b1{fill:#2F5597}.ib.b2{fill:#A9BCE0}.ib.b3{fill:#C9A227}.imarco{fill:none;stroke:#1F3864;stroke-width:1}
+.ip.dot1{fill:#000}.ip.sq2{fill:#fff;stroke:#000;stroke-width:1}.ip.dot3{fill:#2F5597}.ip.sq4{fill:#fff;stroke:#2F5597;stroke-width:1}
+.ileg{display:flex;justify-content:center;gap:14px;font-size:10.5px}.ileg i,.itbl i{display:inline-block;width:9px;height:9px;margin-right:4px}.ileg i.b1,.itbl i.b1{background:#2F5597}.ileg i.b2{background:#A9BCE0}.itbl i.b3{background:#C9A227}
+.itbl,.iest,.iproy,.iind{border-collapse:collapse;font-size:10px;width:100%;font-variant-numeric:tabular-nums;color:#111}
+.itbl td,.itbl th{border:1px solid #999;text-align:center;padding:1px 2px}.itbl td:first-child{text-align:left;white-space:nowrap}
+.iind{width:auto;margin:0 auto;font-size:12px;font-weight:700;min-width:300px}.iind td{border:1.5px solid #000;padding:2px 8px}.iind td:last-child{text-align:center;width:90px}.iind .isep td{height:14px}
+.iest th{font-size:9px;color:#1F3864;border-bottom:1px solid #999;padding:1px}.iest td{text-align:center;padding:2px 1px;font-size:9.5px}.iest td:first-child{text-align:left}.iest .itot td{border-top:1.5px solid #000}
+.iproy{width:auto;margin:0 auto;font-size:11px}.iproy td,.iproy th{border:1px solid #000;padding:2px 10px;text-align:center}.iproy th{background:#eee}.iproy td:first-child{text-align:left}.iproy .itot td{background:#eee;font-size:12px}
+.isub{text-align:center;font-weight:700;font-size:12px;margin:10px 0 4px;color:#111;border:1px solid #999;border-radius:4px;padding:3px}
+.inote{font-size:10px;color:#444;margin:4px 0 0}.icap{text-align:center;font-size:12px;margin:0 0 2px;color:#333}.ifirma{text-align:right;font-size:10px;color:#666;margin:14px 0 0;font-style:italic}
+.iest{overflow-x:auto}.ipag .iest{display:block;overflow-x:auto}
+@media print{
+ :root{--bg:#F3F5F9!important;--surface:#fff!important;--ink:#0D1A33!important;--muted:#53627B!important;--line:#D3DBE7!important;--navy:#12274A!important;--link:#1F4FA3!important;--apta:#8A6510!important;--prenada:#16794A!important;--vacia:#B3261E!important}
+ body{background:#fff!important}
+ header.top,.nav,.infbar,#toast,.sheet{display:none!important}
+ main.wrap{padding:0!important;max-width:none!important}
+ .card{break-inside:avoid;box-shadow:none}
+ .ipag{border:0;border-radius:0;padding:0;margin:0;break-after:page;font-size:11px}.ipag:last-child{break-after:auto}
+ .ipag .iest{display:table}
+ .card.plg:not(.open)>:not(.plgh){display:block!important}
+ .chev{display:none!important}
+ @page{margin:12mm}
+}
 .actinfo{text-align:center;margin:14px 0 2px}
 .vetlnk{display:block;margin:4px auto 0;border:0;background:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;min-height:36px}
 .lchart{width:100%;height:auto;display:block;margin:4px 0 6px}
@@ -394,6 +433,7 @@ details.lac summary .l{flex:1}
       <button class="btn primary big" data-a="guardar">Guardar</button>
       <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
       <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
+      <button class="btn" data-a="informe" id="btnInf" hidden>Informe anual (PDF)</button>
       <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar activación de este tambo</button>
       <button class="btn" data-a="pegaract">Pegar link de activación</button>
       <button class="btn" data-a="cerrar">Cancelar</button>
@@ -428,15 +468,23 @@ details.lac summary .l{flex:1}
   </div>
 </div>
 
+<div class="sheet" id="sheetX" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetXTitle">
+    <h2 id="sheetXTitle">Armar lista</h2>
+    <div id="xopts"></div>
+    <div class="sheetbtns" id="xbtns"></div>
+  </div>
+</div>
+
 <input id="file" type="file" hidden>
 <input id="logoFile" type="file" accept="image/*" hidden>
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=32"></script>
-<script src="syscaw.js?v=32"></script>
+<script src="paradox.js?v=33"></script>
+<script src="syscaw.js?v=33"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=32"></script>
+<script src="app.js?v=33"></script>
 </body>
 </html>

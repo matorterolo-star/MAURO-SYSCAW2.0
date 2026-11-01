@@ -7,7 +7,7 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
-  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB', maestro: 'MaestroCoLech.DB' };
+  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB', maestro: 'MaestroCoLech.DB', estcorp: 'ESTCORP.DB', pases: 'SegTambos.DB' };
   var FIELDS = {
     ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle', 'DescarteFecha'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
@@ -89,6 +89,13 @@
       var g = G[r[0]], f = okDate(r[1]); if (!g || !f) return;
       var t = r[2] === 1 ? 'C' : 'S'; g.ev.push([f, t, t === 'S' ? (toro[r[3]] || '') : '', t === 'S' ? (insServ[r[0] + '|' + r[1]] || null) : null]); if (f > maxF) maxF = f;
     });
+    // pases entre unidades (últimos 3 años): para saber en qué unidad estaba cada animal en cada fecha
+    var mvBy = {};
+    try { if (files[OPCIONALES.pases]) PX.readTable(files[OPCIONALES.pases], { fields: ['ID', 'Fecha', 'Tambo', 'Origen'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && f >= '2023-01-01' && r[2] != null) (mvBy[r[0]] = mvBy[r[0]] || []).push([f, r[2], r[3]]); }); } catch (e) { mvBy = {}; }
+    Object.keys(mvBy).forEach(function (k) { mvBy[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
+    // última condición corporal de cada animal
+    var ecBy = {};
+    try { if (files[OPCIONALES.estcorp]) PX.readTable(files[OPCIONALES.estcorp], { fields: ['ID', 'Fecha', 'ECorp'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && r[2] > 0 && (!ecBy[r[0]] || f > ecBy[r[0]][0])) ecBy[r[0]] = [f, r[2]]; }); } catch (e) { ecBy = {}; }
     T.tactos.forEach(function (r) { var g = G[r[0]], f = okDate(r[1]); if (g && f) { g.ta.push([f, r[2]]); if (f > maxF) maxF = f; } });
     T.lact.forEach(function (r) {
       var g = G[r[0]]; if (!g || !(r[1] > 0)) return;
@@ -146,7 +153,7 @@
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
       var m = byId[a[4]];
-      hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
+      hist[rp] = { mv: mvBy[id] || null, ec: ecBy[id] || null, pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
     var bajas = [];
@@ -158,10 +165,12 @@
       var g = G[id];
       if (g) {
         var m = byId[r[4]];
-        // de las bajas se guarda solo la última lactancia (desde el último parto)
-        var lpB = g.pa.length ? g.pa[g.pa.length - 1] : null, desdeB = lpB ? lpB[0] : '0000';
+        // de las bajas se guardan los partos de los últimos 2 años (al menos el último) y lo ocurrido desde el primero de ellos
+        var paB = g.pa.filter(function (p) { return p[0] >= desdeHist; }); if (!paB.length && g.pa.length) paB = [g.pa[g.pa.length - 1]];
+        var lpB = paB.length ? paB[paB.length - 1] : null, desdeB = paB.length ? paB[0][0] : '0000';
         var desdeEv = function (e) { return e[0] >= desdeB; };
-        hist[key] = { pa: lpB ? [lpB] : [], ev: g.ev.filter(desdeEv), ta: g.ta.filter(desdeEv), la: lpB ? g.la.filter(function (l) { return l[0] === lpB[1]; }) : [], ct: g.ct.filter(desdeEv), ult: true, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
+        var nros = paB.map(function (p) { return p[1]; });
+        hist[key] = { mv: mvBy[id] || null, pa: paB, ev: g.ev.filter(desdeEv), ta: g.ta.filter(desdeEv), la: g.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: g.ct.filter(desdeEv), ult: true, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
       } else hist[key] = { pa: [], ev: [], ta: [], la: [], ct: [], fn: okDate(r[3]), ma: byId[r[4]] ? String(byId[r[4]][1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null, corto: true };
     });
     bajas.sort(function (x, y) { return (y.bFecha || '') < (x.bFecha || '') ? -1 : 1; });
@@ -177,8 +186,8 @@
     // resumen de cada control lechero del tambo (historial completo): fecha, unidad, vacas ordeñadas, litros totales, días en leche promedio
     var ctrls = [];
     try {
-      if (files[OPCIONALES.maestro]) PX.readTable(files[OPCIONALES.maestro], { fields: ['Fecha', 'Tambo', 'VacasOrdenadas', 'TotLitros', 'DiasLactProm'], array: true }).rows.forEach(function (r) {
-        var f = okDate(r[0]); if (f && r[2] > 0 && r[3] > 0) ctrls.push([f, r[1] == null ? 0 : r[1], r[2], Math.round(r[3]), r[4] || null]);
+      if (files[OPCIONALES.maestro]) PX.readTable(files[OPCIONALES.maestro], { fields: ['Fecha', 'Tambo', 'VacasOrdenadas', 'TotLitros', 'DiasLactProm', 'VacasSecas'], array: true }).rows.forEach(function (r) {
+        var f = okDate(r[0]); if (f && r[2] > 0 && r[3] > 0) ctrls.push([f, r[1] == null ? 0 : r[1], r[2], Math.round(r[3]), r[4] || null, r[5] == null ? null : r[5]]);
       });
       ctrls.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
     } catch (e) { ctrls = []; }
