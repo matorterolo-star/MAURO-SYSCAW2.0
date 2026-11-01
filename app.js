@@ -1614,7 +1614,8 @@
     function enviarActivacion() {
       if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
       firmar({ p: DB.idProd, n: PERFIL.nombre || '', f: today() }).then(function (tok) {
-        var url = location.href.split('#')[0] + '#act=' + tok;
+        // el link siempre lleva a la app oficial, aunque se genere desde la versión de prueba
+        var url = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '') + '#act=' + tok;
         var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
         if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
       }, function () { toast('No pude generar la activación. Revisá tu clave.'); });
@@ -1639,6 +1640,13 @@
       if (!DB.animales.length) {
         $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = emptyHTML(); return;
+      }
+      // sin activación no se muestra ninguna libreta, aunque ya esté cargada en el teléfono
+      if (!habilitado(DB.idProd)) {
+        $('#meta').textContent = 'Libreta sin activar'; nav.hidden = true; $('#ubtn').hidden = true;
+        main.innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Activá tu libreta</h2>' +
+          '<p>Para usar la Libreta de vacas en este teléfono necesitás el link de activación de tu tambo. Pedíselo al Dr. Mauro Torterolo y abrilo desde este mismo navegador.</p></section>';
+        return;
       }
       nav.hidden = false;
       $('#ubtn').hidden = !DB.unidades;
