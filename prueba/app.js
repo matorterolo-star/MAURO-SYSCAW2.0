@@ -1830,6 +1830,7 @@
     function xMotivos(a, f, hoy, secar) {
       var m = [], cat = a.cat || 'vaca';
       if (!((cat === 'vaca' && f.ord) || (cat === 'seca' && f.sec) || (cat === 'vaquillona' && f.vaq))) return m;
+      if (f.sinDesc && a.rech) return m;
       var serv = a.sFecha && !/^celo/i.test(a.toro || '');
       if (f.sdx > 0 && a.estado !== 'prenada' && serv && (!a.tFecha || a.tFecha < a.sFecha)) { var d = A.diffDays(hoy, a.sFecha); if (d >= f.sdx) m.push('Servida hace ' + d + ' días sin diagnóstico'); }
       if (f.psv > 0 && a.pFecha && a.estado !== 'prenada' && (!a.sFecha || a.sFecha <= a.pFecha)) { var p = A.diffDays(hoy, a.pFecha); if (p >= f.psv) m.push('Parida hace ' + p + ' días sin servicio'); }
@@ -1849,6 +1850,7 @@
       var chk = function (k, t) { return '<button class="fchip" data-xk="' + k + '" aria-pressed="' + !!f[k] + '">' + t + '</button>'; };
       var num = function (k, a, b) { return '<label class="xnum">' + a + ' <input type="number" inputmode="numeric" min="1" max="999" data-xn="' + k + '" value="' + (f[k] || '') + '" placeholder="–"> ' + b + '</label>'; };
       $('#xopts').innerHTML = '<p class="xlbl">Categoría</p><div class="filters">' + chk('ord', 'Vacas en ordeñe') + chk('sec', 'Secas') + chk('vaq', 'Vaquillonas') + '</div>' +
+        '<div class="filters" style="margin-top:8px">' + chk('sinDesc', 'Excluir descartes') + '</div>' +
         '<p class="xlbl">Incluir (lo que quede vacío no se toma)</p>' +
         num('sdx', 'Servidas con más de', 'días sin diagnóstico') +
         num('psv', 'Paridas con más de', 'días sin servicio') +
@@ -1860,7 +1862,7 @@
     function xActualizarCuenta() { var n = xFiltradas().length; var c = $('#xopts .xcount'); if (c) c.innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales'); $('#btnXok').disabled = !n; }
     function abrirExport() {
       var g = null; try { g = JSON.parse(localStorage.getItem('libreta:xf')); } catch (e) {}
-      state.xf = g || { ord: true, sec: false, vaq: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false };
+      state.xf = g || { ord: true, sec: false, vaq: true, sinDesc: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false };
       $('#sheetXTitle').textContent = 'Lista de tacto';
       $('#xbtns').innerHTML = '<button class="btn primary big" id="btnXok" data-a="xok">Ver lista y exportar</button><button class="btn" data-a="xcancel">Cancelar</button>';
       xOpts(); $('#sheetX').hidden = false;
