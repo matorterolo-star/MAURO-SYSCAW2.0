@@ -182,7 +182,10 @@
       });
       ctrls.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
     } catch (e) { ctrls = []; }
-    return { ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
+    // número de productor de SysCaw: identifica al tambo para la activación
+    var idProd = [];
+    try { if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: ['IdProd'], array: true }).rows.forEach(function (r) { if (r[0] != null && idProd.indexOf(r[0]) < 0) idProd.push(r[0]); }); } catch (e) { idProd = []; }
+    return { idProd: idProd, ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una

@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Libreta de vacas</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -129,6 +130,8 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .sec.open .sechead{margin-bottom:10px}
 .sec.open .sechead .chev{transform:rotate(180deg)}
 .sec{margin-bottom:10px}
+.actinfo{text-align:center;margin:14px 0 2px}
+.vetlnk{display:block;margin:4px auto 0;border:0;background:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;min-height:36px}
 .lchart{width:100%;height:auto;display:block;margin:4px 0 6px}
 .lgrid{stroke:var(--line);stroke-width:1}
 .lpt{cursor:pointer}.lpt .hit{fill:transparent}
@@ -391,8 +394,12 @@ details.lac summary .l{flex:1}
       <button class="btn primary big" data-a="guardar">Guardar</button>
       <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
       <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
+      <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar activación de este tambo</button>
       <button class="btn" data-a="cerrar">Cancelar</button>
     </div>
+    <p class="cap actinfo" id="actInfo"></p>
+    <button class="vetlnk" data-a="vet" id="btnVet">Modo veterinario</button>
+    <p class="cap actinfo">© Dr. Mauro Torterolo · Libreta de vacas. Uso exclusivo de sus clientes.</p>
   </div>
 </div>
 
