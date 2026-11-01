@@ -1393,7 +1393,7 @@
         ])) +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
-        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guarda solo la última lactancia. El historial completo está en SysCaw.</p>' : '') +
+        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
         '<p class="src">Respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }
@@ -1636,10 +1636,17 @@
       for (var i = 11; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } out.push({ key: yy + '-' + pad2(mm), label: A.MESES[mm - 1], anio: yy, mid: yy + '-' + pad2(mm) + '-15' }); }
       return out;
     }
+    // todos los animales de todas las unidades; cada cálculo usa la unidad en la que estaba el animal en esa fecha
     function infLista() {
       var H = DB.hist || {};
-      return DB.animales.map(function (a) { return { a: a, h: H[a.rp] }; }).concat((DB.bajas || []).map(function (b) { return { a: b, h: H[b.key] }; })).filter(function (x) { return x.h; });
+      return (DB.todos || DB.animales).map(function (a) { return { a: a, h: H[a.rp] }; }).concat((DB.bajasT || DB.bajas || []).map(function (b) { return { a: b, h: H[b.key] }; })).filter(function (x) { return x.h; });
     }
+    function unidadEn(x, D) {
+      var mv = x.h.mv; if (!mv || !mv.length) return x.a.u;
+      var u = null; mv.forEach(function (m) { if (m[0] <= D) u = m[1]; });
+      return u != null && u >= 0 ? u : (u == null ? mv[0][2] : -1);
+    }
+    function enSel(u) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(u) >= 0; }
     // fecha de concepción de la lactancia que empieza en el parto i
     function concLac(h, i) {
       var p = h.pa[i], np = h.pa[i + 1], hasta = np ? np[0] : '9999';
@@ -1661,6 +1668,7 @@
         var D = m.mid, n = 0;
         L.forEach(function (x) {
           if (x.a.bTipo && x.a.bFecha && x.a.bFecha <= D) return;
+          if (!enSel(unidadEn(x, D))) return;
           var vaca = x.h.pa.some(function (p) { return p[0] <= D || (p[1] >= 2 && A.diffDays(p[0], D) <= 400 * (p[1] - 1)); });
           if (vaca) n++;
         });
@@ -1671,6 +1679,7 @@
       var pv = M.map(function () { return 0; }), pq = pv.slice(), ab = 0;
       L.forEach(function (x) { x.h.pa.forEach(function (p) {
         if (p[0] < desde || p[0] > hasta) return;
+        if (!enSel(unidadEn(x, p[0]))) return;
         if (/^A/.test(p[2] || '')) { ab++; return; }
         var k = M.map(function (m) { return m.key; }).indexOf(p[0].slice(0, 7)); if (k < 0) return;
         if (p[1] === 1) pq[k]++; else pv[k]++;
@@ -1679,11 +1688,12 @@
       var best = null; for (var i = 0; i <= 6; i++) { var s = 0; for (var j = i; j < i + 6; j++) s += pv[j] + pq[j]; if (!best || s > best.s) best = { i: i, s: s }; }
       // indicadores de la temporada de servicios (vacas): desde el inicio elegido hasta el último servicio
       var ini = inicio21(), ref = DB.fecha || today(), fin = null;
-      L.forEach(function (x) { x.h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] >= ini && e[0] <= ref && (!fin || e[0] > fin)) fin = e[0]; }); });
+      L.forEach(function (x) { x.h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] >= ini && e[0] <= ref && (!fin || e[0] > fin) && enSel(unidadEn(x, e[0]))) fin = e[0]; }); });
       var ips = [], ipp = [], nServ = 0, nPren = 0, apt = 0, pre = 0;
       if (fin) L.forEach(function (x) {
         var h = x.h;
         h.pa.forEach(function (p, i) {
+          if (!enSel(unidadEn(x, p[0]))) return;
           var c = concLac(h, i);
           var s1 = c.sv[0];
           if (s1 && s1[0] >= ini && s1[0] <= fin) ips.push(A.diffDays(s1[0], p[0]));
