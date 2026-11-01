@@ -1620,7 +1620,14 @@
       var caen = conPrev.filter(function (v) { var d = v.prev[1] - v.lt; return d >= 4 && d / v.prev[1] >= 0.2; }).sort(function (x, y) { return (y.prev[1] - y.lt) / y.prev[1] - (x.prev[1] - x.lt) / x.prev[1]; });
       var caida = C.ant ? '<section class="card"><h2>Cayeron más · ' + caen.length + ' vacas</h2><p class="cap" style="margin:0 0 8px">Bajaron 20% o más (y al menos 4 L) respecto del control del ' + A.fmt(C.ant) + '.</p>' +
         (caen.length ? caen.slice(0, 40).map(function (v) { var pc = Math.round((v.prev[1] - v.lt) / v.prev[1] * 100); return rowHTML(v.a, { right: '<span class="when late">−' + pc + '%</span>', sub: nf(v.prev[1], 1) + ' → ' + nf(v.lt, 1) + ' L · ' + v.del + ' días en leche' }); }).join('') : '<p class="hint">Ninguna vaca cayó tanto.</p>') + '</section>' : '';
-      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + tabla + caida;
+      var top = V.slice().sort(function (x, y) { return y.lt - x.lt; }).slice(0, 5);
+      var top5 = '<section class="card"><h2>Top 5 del control</h2><p class="cap" style="margin:0 0 8px">Las 5 vacas con más litros' + (C.fecha ? ' el ' + A.fmt(C.fecha) : '') + ', comparadas con el control anterior.</p>' +
+        top.map(function (v, i) {
+          var pv = v.prev && v.prev[1] > 0 ? v.prev[1] : null, d = pv != null ? v.lt - pv : null;
+          return rowHTML(v.a, { right: '<span class="when ' + (d != null && d < 0 ? 'late' : 'ok') + '">' + nf(v.lt, 1) + ' L</span>',
+            sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
+        }).join('') + '</section>';
+      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + top5 + tabla + caida;
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
