@@ -7,7 +7,7 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
-  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB', maestro: 'MaestroCoLech.DB' };
+  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB', maestro: 'MaestroCoLech.DB', estcorp: 'ESTCORP.DB' };
   var FIELDS = {
     ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle', 'DescarteFecha'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
@@ -89,6 +89,9 @@
       var g = G[r[0]], f = okDate(r[1]); if (!g || !f) return;
       var t = r[2] === 1 ? 'C' : 'S'; g.ev.push([f, t, t === 'S' ? (toro[r[3]] || '') : '', t === 'S' ? (insServ[r[0] + '|' + r[1]] || null) : null]); if (f > maxF) maxF = f;
     });
+    // última condición corporal de cada animal
+    var ecBy = {};
+    try { if (files[OPCIONALES.estcorp]) PX.readTable(files[OPCIONALES.estcorp], { fields: ['ID', 'Fecha', 'ECorp'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && r[2] > 0 && (!ecBy[r[0]] || f > ecBy[r[0]][0])) ecBy[r[0]] = [f, r[2]]; }); } catch (e) { ecBy = {}; }
     T.tactos.forEach(function (r) { var g = G[r[0]], f = okDate(r[1]); if (g && f) { g.ta.push([f, r[2]]); if (f > maxF) maxF = f; } });
     T.lact.forEach(function (r) {
       var g = G[r[0]]; if (!g || !(r[1] > 0)) return;
@@ -146,7 +149,7 @@
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
       var m = byId[a[4]];
-      hist[rp] = { pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
+      hist[rp] = { ec: ecBy[id] || null, pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
     var bajas = [];
