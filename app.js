@@ -859,7 +859,7 @@
       return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá el respaldo</h2>' +
         '<p>Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
-        '<button class="btn primary big" data-a="load">Elegir archivo</button></section>';
+        '<button class="btn primary big" data-a="load">Elegir archivo</button>' + (!esVet() && !ACT.length ? '<button class="btn big" data-a="pegaract" style="margin-top:10px">Pegar link de activación</button>' : '') + '</section>';
     }
     // Para venta: descarte programado + más de 300 días en leche + menos de 15 litros en el último control
     var VTA_DEL = 300, VTA_LTS = 15;
@@ -1590,10 +1590,10 @@
         return crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, datos);
       }).then(function (sig) { return b64u(datos) + '.' + b64u(new Uint8Array(sig)); });
     }
-    function leerActivacion() {
-      var m = /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
-      if (!m) return Promise.resolve(false);
-      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+    function leerActivacion(texto) {
+      var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
+      if (!m) { if (texto != null) toast('No encontré un link de activación en lo que pegaste.'); return Promise.resolve(false); }
+      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       return verificar(m[1]).then(function (pl) {
         if (!pl || !pl.p) { toast('El link de activación no es válido.'); return false; }
         ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]);
@@ -1601,6 +1601,12 @@
         toast('Libreta activada para ' + (pl.n || 'este tambo')); state.error = ''; render();
         return true;
       });
+    }
+    // pegar el link dentro de la app (sirve cuando el link se abrió en otro navegador, o en el ícono del escritorio del iPhone)
+    function pegarActivacion() {
+      var pedir = function (pre) { var t = prompt('Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) leerActivacion(t); };
+      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
+      else pedir('');
     }
     function modoVet() {
       if (esVet()) { if (confirm('¿Salir del modo veterinario en este teléfono? Vas a necesitar tu clave para volver.')) { try { localStorage.removeItem('libreta:vet'); } catch (e) {} closeSheet(); toast('Modo veterinario desactivado'); } return; }
@@ -1645,7 +1651,9 @@
       if (!habilitado(DB.idProd)) {
         $('#meta').textContent = 'Libreta sin activar'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Activá tu libreta</h2>' +
-          '<p>Para usar la Libreta de vacas en este teléfono necesitás el link de activación de tu tambo. Pedíselo al Dr. Mauro Torterolo y abrilo desde este mismo navegador.</p></section>';
+          '<p>Para usar la Libreta de vacas en este teléfono necesitás el link de activación de tu tambo. Pedíselo al Dr. Mauro Torterolo.</p>' +
+          '<p><b>¿Ya lo tenés?</b> Copiá el link desde WhatsApp (mantené apretado el mensaje → Copiar) y tocá el botón.</p>' +
+          '<button class="btn primary big" data-a="pegaract">Pegar link de activación</button></section>';
         return;
       }
       nav.hidden = false;
@@ -1702,6 +1710,7 @@
       else if (a === 'tambos') tambosSheet();
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'vet') modoVet();
+      else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
       else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
