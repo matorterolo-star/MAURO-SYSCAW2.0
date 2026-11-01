@@ -769,8 +769,9 @@
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
+      $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
-      $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return x.n || ('productor ' + x.p.join(', ')); }).join(' · ') : 'Sin activar';
+      $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return (x.n || ('productor ' + x.p.join(', '))) + (x.r === 'op' ? ' (operario)' : ''); }).join(' · ') : 'Sin activar';
       $('#sheet').hidden = false;
       if (!fijo) setTimeout(function () { $('#inNombre').focus(); }, 60);
     }
@@ -946,9 +947,9 @@
       var nCelo = L.filter(function (a) { return a.celo; }).length;
       if (nCelo) fl.push(['pcelo', 'Preñada + celo', nCelo]);
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
-      var nVta = L.filter(paraVenta).length;
+      var nVta = esOperario() ? 0 : L.filter(paraVenta).length;
       if (nVta) fl.push(['venta', 'Para venta', nVta]);
-      if (IDX()) {
+      if (IDX() && !esOperario()) {
         var nTop = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'top'; }).length, nPeor = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'peor'; }).length;
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
         if (nPeor) fl.push(['ipeor', 'Peores 10%', nPeor]);
@@ -1289,6 +1290,7 @@
         (r.celoBajo ? '<p class="cap">En este tambo se anotan pocos celos, así que el dato parto a primer celo pesa menos (' + Math.round(r.pesos.pc) + '%).</p>' : '') + '</section>';
     }
     function idxFichaHTML(a) {
+      if (esOperario()) return '';
       var r = IDX(); if (!r || !(a.cat === 'vaca' || a.cat === 'seca' || !a.cat)) return '';
       var V = r.por[a.rp];
       if (!V) return '<section class="card"><h2>Índice del tambo</h2><p class="cap" style="margin:0">Sin índice todavía: le falta cerrar al menos una lactancia con datos de reproducción y de leche.</p></section>';
@@ -1311,6 +1313,7 @@
         ' Puntos que suma o resta cada dato; la línea del medio es el promedio del tambo.</p></section>';
     }
     function idxBadge(a) {
+      if (esOperario()) return '';
       var V = idxDe(a); if (!V) return '';
       var cls = V.tier === 'top' ? '' : V.tier === 'peor' ? ' peor' : ' neutro';
       return '<span class="medalla' + cls + '" title="Índice del tambo: ' + V.idx + '">' + (V.tier === 'top' ? MEDALLA : '') + '<span class="ixb">' + V.idx + '</span>' +
@@ -1492,7 +1495,7 @@
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
@@ -1686,12 +1689,23 @@
         else { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); }
       }, function () { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); });
     }
+    // operario: solo Buscar y la ficha. El tipo de acceso va dentro de la firma.
+    function esOperario() { return !esVet() && ACT.length > 0 && !ACT.some(function (x) { return x.r !== 'op'; }); }
     function enviarActivacion() {
       if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
-      firmar({ p: DB.idProd, n: PERFIL.nombre || '', f: today() }).then(function (tok) {
+      closeSheet();
+      $('#sheetXTitle').textContent = '¿Para quién es la activación?';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + '</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="actprod">Productor · app completa</button><button class="btn big" data-a="actop">Operario · solo buscar y ficha</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function enviarActivacionRol(rol) {
+      $('#sheetX').hidden = true;
+      var pl = { p: DB.idProd, n: PERFIL.nombre || '', f: today() }; if (rol === 'op') pl.r = 'op';
+      firmar(pl).then(function (tok) {
         // el link siempre lleva a la app oficial, aunque se genere desde la versión de prueba
         var url = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '') + '#act=' + tok;
-        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
+        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*' + (rol === 'op' ? ' (operario)' : '') + '. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
         if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
       }, function () { toast('No pude generar la activación. Revisá tu clave.'); });
     }
@@ -2018,10 +2032,12 @@
           '<button class="btn primary big" data-a="pegaract">Pegar link de activación</button></section>';
         return;
       }
-      nav.hidden = false;
+      var op = esOperario();
+      if (op) { state.tab = 'buscar'; state.informe = false; }
+      nav.hidden = op;
       $('#ubtn').hidden = !DB.unidades;
       if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
-      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)');
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
       nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
@@ -2075,6 +2091,8 @@
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
       else if (a === 'enviaract') enviarActivacion();
+      else if (a === 'actprod') enviarActivacionRol('prod');
+      else if (a === 'actop') enviarActivacionRol('op');
       else if (a === 'vet') modoVet();
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
       else if (a === 'exptactar') abrirExport();
