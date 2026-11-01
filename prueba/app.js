@@ -1688,21 +1688,23 @@
     }
     function infDatos(modo) {
       var M = infMeses(modo), desde = M[0].key + '-01', hasta = M[11].key + '-31', L = infLista();
-      // VO: vacas ordeñadas según el control lechero; VM: vacas masa (paridas al menos una vez y en el rodeo) a mitad de mes
-      var C = (DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; });
-      var vo = M.map(function (m) {
-        var f = {}; C.forEach(function (c) { if (c[0].slice(0, 7) === m.key) f[c[0]] = (f[c[0]] || 0) + c[2]; });
-        var k = Object.keys(f); return k.length ? k.reduce(function (s, x) { return s + f[x]; }, 0) / k.length : null;
-      });
-      var vm = M.map(function (m) {
-        var D = m.mid, n = 0;
-        L.forEach(function (x) {
-          if (x.a.bTipo && x.a.bFecha && x.a.bFecha <= D) return;
-          if (!enSel(unidadEn(x, D))) return;
-          var vaca = x.h.pa.some(function (p) { return p[0] <= D || (p[1] >= 2 && A.diffDays(p[0], D) <= 400 * (p[1] - 1)); });
-          if (vaca) n++;
-        });
-        return n;
+      // VO y VS: promedio de todos los días del mes, reconstruido con partos, secados (cierre de lactancia) y bajas de SysCaw.
+      // VM = VO + VS (+ las vacas dadas de baja de las que no hay fecha de secado guardada)
+      var estado = function (x, D) {
+        if (x.a.bTipo && x.a.bFecha && x.a.bFecha <= D) return null;
+        var pa = x.h.pa, k = -1; for (var q = 0; q < pa.length; q++) if (pa[q][0] <= D) k = q;
+        if (k < 0) return pa.some(function (p) { return p[1] >= 2 && A.diffDays(p[0], D) <= 400 * (p[1] - 1); }) ? 'M' : null;
+        var p = pa[k], np = pa[k + 1], seco = p[5] || (np ? A.addDays(np[0], -A.SECADO) : null);
+        return seco && seco <= D ? 'S' : 'O';
+      };
+      var vo = [], vs = [], vm = [];
+      M.forEach(function (m) {
+        var y = +m.key.slice(0, 4), mm = +m.key.slice(5, 7), dias = new Date(y, mm, 0).getDate(), o = 0, s = 0, x0 = 0, n = 0;
+        for (var dd = 1; dd <= dias; dd++) {
+          var D = m.key + '-' + pad2(dd); if (D > (DB.fecha || today())) break; n++;
+          L.forEach(function (x) { if (!x.h.pa.length || !enSel(unidadEn(x, D))) return; var e = estado(x, D); if (e === 'O') o++; else if (e === 'S') s++; else if (e === 'M') x0++; });
+        }
+        vo.push(n ? o / n : null); vs.push(n ? s / n : null); vm.push(n ? (o + s + x0) / n : null);
       });
       var av = function (l) { var v = l.filter(function (x) { return x != null; }); return v.length ? v.reduce(function (s, x) { return s + x; }, 0) / v.length : null; };
       // partos ocurridos (sin abortos)
@@ -1738,7 +1740,7 @@
         .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
       var CY = fin ? A.ciclos21(an, esPren, ini, pevActual(), ref) : [], Tc = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 };
       CY.forEach(function (c) { if (c.cerrado) ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { Tc[k] += c[k]; }); });
-      return { M: M, vo: vo, vm: vm, avo: av(vo), avm: av(vm), pv: pv, pq: pq, ab: ab, best: best, ini: ini, fin: fin,
+      return { M: M, vo: vo, vs: vs, vm: vm, avo: av(vo), avs: av(vs), avm: av(vm), pv: pv, pq: pq, ab: ab, best: best, ini: ini, fin: fin,
         ips: av(ips), spp: nPren ? nServ / nPren : null, ipp: av(ipp), pg: apt ? pre / apt * 100 : null, apt: apt, pre: pre,
         det: Tc.aptas ? Tc.serv / Tc.aptas * 100 : null, con: Tc.sOk + Tc.sMal ? Tc.sOk / (Tc.sOk + Tc.sMal) * 100 : null, tp: Tc.aptas ? Tc.pren / Tc.aptas * 100 : null };
     }
@@ -1786,9 +1788,10 @@
       var lado = function (h) { return '<div class="iside">' + h + '</div>'; };
       // página 1
       var p1 = '<div class="ipag"><p class="iprod">' + esc(PERFIL.nombre || '') + '</p><h2 class="ititle">' + esc(titulo) + '</h2>' +
-        sec('Relación VO/VM', '<div class="irow"><div class="ibox">' + infBarras(D.M, [{ v: D.vo.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b1' }, { v: D.vm, c: 'b2' }], 190) +
+        sec('Relación VO/VM', '<div class="irow"><div class="ibox">' + infBarras(D.M, [{ v: D.vo.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b1' }, { v: D.vm.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b2' }], 190) +
           '<div class="ileg"><span><i class="b1"></i>VO</span><span><i class="b2"></i>VM</span></div></div>' +
-          lado('<small>REL VO/VM</small><b>' + (D.avo != null && D.avm ? nf(D.avo / D.avm, 2) : '–') + '</b><span>' + f1(D.avo) + ' VO<br>' + f1(D.avm) + ' VM</span>') + '</div>') +
+          lado('<small>REL VO/VM</small><b>' + (D.avo != null && D.avm ? nf(D.avo / D.avm, 2) : '–') + '</b><span>' + f1(D.avo) + ' VO<br>' + f1(D.avs) + ' VS<br>' + f1(D.avm) + ' VM</span>') + '</div>' +
+          '<p class="inote">Promedio diario de cada mes, calculado con los partos, secados y bajas de SysCaw. VM = vacas en ordeñe + secas.</p>') +
         sec('Partos ocurridos', '<div class="irow">' + lado('<small>PARTOS VACA</small><b>' + tv + '</b><span>' + (D.avm ? nf(tv / D.avm * 100, 0) + '% VM' : '') + '</span>') +
           '<div class="ibox">' + infBarras(D.M, [{ v: D.pv, c: 'b1' }, { v: D.pq, c: 'b3' }], 170, { valores: false, marco: tt && D.best.s ? { i: D.best.i, t: nf(D.best.s / tt * 100, 0) + ' %' } : null }) +
           '<table class="itbl"><tr><th></th>' + D.M.map(function (m) { return '<th>' + m.label.charAt(0).toUpperCase() + m.label.slice(1) + String(m.anio).slice(2) + '</th>'; }).join('') + '</tr>' +
