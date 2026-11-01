@@ -177,8 +177,8 @@
     // resumen de cada control lechero del tambo (historial completo): fecha, unidad, vacas ordeñadas, litros totales, días en leche promedio
     var ctrls = [];
     try {
-      if (files[OPCIONALES.maestro]) PX.readTable(files[OPCIONALES.maestro], { fields: ['Fecha', 'Tambo', 'VacasOrdenadas', 'TotLitros', 'DiasLactProm'], array: true }).rows.forEach(function (r) {
-        var f = okDate(r[0]); if (f && r[2] > 0 && r[3] > 0) ctrls.push([f, r[1] == null ? 0 : r[1], r[2], Math.round(r[3]), r[4] || null]);
+      if (files[OPCIONALES.maestro]) PX.readTable(files[OPCIONALES.maestro], { fields: ['Fecha', 'Tambo', 'VacasOrdenadas', 'TotLitros', 'DiasLactProm', 'VacasSecas'], array: true }).rows.forEach(function (r) {
+        var f = okDate(r[0]); if (f && r[2] > 0 && r[3] > 0) ctrls.push([f, r[1] == null ? 0 : r[1], r[2], Math.round(r[3]), r[4] || null, r[5] == null ? null : r[5]]);
       });
       ctrls.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
     } catch (e) { ctrls = []; }
