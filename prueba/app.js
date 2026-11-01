@@ -622,7 +622,7 @@
     function bajaTxt(a) { return BAJA[a.bTipo] + (a.bFecha ? ' el ' + A.fmt(a.bFecha) : ''); }
     function toast(msg) {
       var t = $('#toast'); t.textContent = msg; t.classList.add('on');
-      clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove('on'); }, 3200);
+      clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("on"); }, Math.max(3200, String(msg).length * 70));
     }
 
     /* ----- caravana (silueta con el número) ----- */
@@ -1883,16 +1883,29 @@
       var nombre = ('Lista de tacto ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
       var buf = root.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       var file = null; try { file = new File([buf], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); } catch (e) {}
-      state.xout = { wb: wb, file: file, nombre: nombre };
+      // CSV (separado por ; y con acentos) para los celulares que no dejan compartir .xlsx
+      var csv = '\ufeff' + [head].concat(L.map(fila)).map(function (r) { return r.map(function (v) { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\r\n');
+      var fcsv = null; try { fcsv = new File([csv], nombre.replace(/\.xlsx$/, '.csv'), { type: 'text/csv' }); } catch (e) {}
+      state.xout = { wb: wb, file: file, csv: fcsv, nombre: nombre };
       // la lista queda a la vista y después se elige compartir o guardar
-      var puedeComp = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+      var puedeComp = !!(navigator.share && (file || fcsv));
       $('#sheetXTitle').textContent = 'Lista de tacto · ' + L.length + (L.length === 1 ? ' animal' : ' animales');
       $('#xopts').innerHTML = '<div class="xprev">' + L.map(function (x) { return '<div><b>' + esc(x.a.rp) + '</b><span>' + esc(x.m.join(' · ')) + '</span></div>'; }).join('') + '</div>' +
         '<p class="cap">Archivo: ' + esc(nombre) + '</p>';
-      $('#xbtns').innerHTML = (puedeComp ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button>' : '') +
+      $('#xbtns').innerHTML = (puedeComp ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button><button class="btn" data-a="xsharecsv">Compartir como CSV (se abre con Excel)</button>' : '') +
         '<button class="btn' + (puedeComp ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
     }
-    function xCompartir() { var o = state.xout; if (o && o.file) navigator.share({ files: [o.file], title: o.nombre }).catch(function () {}); }
+    function xCompartir() {
+      var o = state.xout; if (!o) return;
+      var falla = function () { root.XLSX.writeFile(o.wb, o.nombre); toast('Este teléfono no deja compartir Excel: quedó guardado en Descargas. Podés mandarlo desde ahí o usar "Compartir como CSV".'); };
+      if (!o.file || !(navigator.canShare && navigator.canShare({ files: [o.file] }))) { falla(); return; }
+      navigator.share({ files: [o.file], title: o.nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') falla(); });
+    }
+    function xCompartirCSV() {
+      var o = state.xout; if (!o || !o.csv) return;
+      if (navigator.canShare && navigator.canShare({ files: [o.csv] })) navigator.share({ files: [o.csv], title: o.csv.name }).catch(function (e) { if (!e || e.name !== 'AbortError') toast('No se pudo compartir. Usá "Guardar Excel en el teléfono".'); });
+      else toast('Este teléfono no deja compartir archivos. Usá "Guardar Excel en el teléfono".');
+    }
     function xGuardar() { var o = state.xout; if (!o) return; root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
 
     /* ----- render ----- */
@@ -1985,6 +1998,7 @@
       else if (a === 'exptactar') abrirExport();
       else if (a === 'xok') exportarTactar();
       else if (a === 'xshare') xCompartir();
+      else if (a === 'xsharecsv') xCompartirCSV();
       else if (a === 'xsave') xGuardar();
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
