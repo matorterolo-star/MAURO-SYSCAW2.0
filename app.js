@@ -524,14 +524,13 @@
       DB = { animales: [], cargada: null, archivo: '' };
       state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'buscar';
       state.ini21 = null; state.fsec = null; state.pev = null; state.abiertas = {};
-      state.cat = getP('cat') || 'vaca';
+      state.cat = 'todas';
       try { if (location.hash) location.hash = ''; } catch (e) {}
       return leerDB(id).then(function (o) { if (o && TAMBOS.activo === id) { DB = o; aplicarUnidad(); } return true; });
     }
     function loadAll() {
       try { var p = localStorage.getItem(KEYP); if (p) { var q = JSON.parse(p); if (q) PERFIL = { nombre: q.nombre || '', logo: q.logo || '' }; } } catch (e) {}
       try { var sc = +localStorage.getItem('libreta:secado'); if (SECS.indexOf(sc) >= 0) A.setSecado(sc); } catch (e) {}
-      try { var dp = JSON.parse(localStorage.getItem('libreta:desp')); if (dp && typeof dp === 'object') state.desp = dp; } catch (e) {}
       try { var t = JSON.parse(localStorage.getItem(KEYT)); if (t && Array.isArray(t.lista)) TAMBOS = t; } catch (e) {}
       if (TAMBOS.lista.length) {
         if (!tamboAct()) TAMBOS.activo = TAMBOS.lista[0].id;
@@ -545,7 +544,7 @@
         if (!o || !Array.isArray(o.animales) || !(o.animales.length || (o.todos && o.todos.length))) return false;
         var t = nuevoTambo(PERFIL.nombre); t.logo = PERFIL.logo;
         TAMBOS.activo = t.id;
-        try { var c = localStorage.getItem('libreta:cat'); if (c) state.cat = c; } catch (e) {}
+        state.cat = 'todas';
         DB = o; aplicarUnidad();
         return saveDB().then(function () { idbDel('db'); try { localStorage.removeItem(KEY); } catch (e) {} return true; });
       });
@@ -653,7 +652,7 @@
           DB = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
           // el nombre queda fijo: el que trae el respaldo
@@ -746,7 +745,7 @@
           if (!mismo) prepararDestino(nombreDesdeArchivo(f.name));
           state.destino = null;
           DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: prev.hist, codes: prev.codes, fecha: prev.fecha };
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
           toast(res.animales.length + ' animales cargados');
@@ -904,12 +903,12 @@
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
-    var GL = { vaca: 'En ordeñe', seca: 'Secas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
+    var GL = { todas: 'Todas', vaca: 'En ordeñe', seca: 'Secas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
     function grupo(a) { return a.cat || 'vaca'; }
     function grupos() { var g = {}; DB.animales.forEach(function (a) { g[grupo(a)] = (g[grupo(a)] || 0) + 1; }); return g; }
     function lista() {
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
-      if (state.cat === 'todas' && state.tab === 'rodeo' && !state.rp) return DB.animales;
+      if (state.cat === 'todas') return DB.animales;
       if (orden.indexOf(state.cat) < 0) state.cat = orden[0] || 'vaca';
       return DB.animales.filter(function (a) { return grupo(a) === state.cat; });
     }
@@ -917,14 +916,14 @@
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
       if (orden.length < 2) return '';
       // en Rodeo se agrega "Todas" (partos proyectados de vacas y vaquillonas juntos)
-      var conTodas = state.tab === 'rodeo';
+      var conTodas = true;
       return '<div class="cats' + (orden.length === 4 || conTodas ? ' n4' : '') + '" role="group" aria-label="Categoría">' +
         (conTodas ? '<button class="todas" data-cat="todas" aria-pressed="' + (state.cat === 'todas') + '">Todas <b>' + DB.animales.length + '</b></button>' : '') +
         orden.map(function (k) {
           return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
         }).join('') + '</div>';
     }
-    function nombreGrupo(n) { return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
+    function nombreGrupo(n) { if (state.cat === 'todas') return n === 1 ? 'animal' : 'animales'; return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
     function ordenar(list, f) {
       var h = today();
       var key = function (a) {
@@ -968,7 +967,7 @@
         // busca dentro de la categoría elegida; si no está, avisa en qué otra categoría aparece
         list = A.search(lista(), q).filter(function (a) { return f === 'todas' || matchFiltro(a, f); });
         if (list.length) {
-          html = '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + ' en ' + GL[state.cat].toLowerCase() + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('');
+          html = '<h2 class="h">' + list.length + (list.length === 1 ? ' resultado' : ' resultados') + (state.cat === 'todas' ? '' : ' en ' + GL[state.cat].toLowerCase()) + '</h2>' + list.slice(0, 40).map(function (a) { return rowHTML(a); }).join('');
           if (list.length > 40) html += '<p class="hint">Mostrando 40. Escribí más para acotar.</p>';
         } else {
           var otros = A.search(DB.animales, q).filter(function (a) { return grupo(a) !== state.cat; });
@@ -1196,7 +1195,7 @@
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
-        vovsHTML() + proyHTML() + repHTML() +
+        vovsHTML() + proyHTML() + repHTML() + idxCardHTML() +
         '<section class="card"><h2>' + nf(DB.animales.length) + ' animales</h2><table class="tbl"><thead><tr><th>Categoría</th><th>Animales</th><th>Preñadas</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
     }
     function rodeoHTML() {
@@ -1504,7 +1503,6 @@
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
     var FICHA_AB = {};
-    try { FICHA_AB = JSON.parse(localStorage.getItem('libreta:fichaab')) || {}; } catch (e) {}
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
@@ -2049,12 +2047,12 @@
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
-      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; setP('cat', state.cat); render(); return; }
+      if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
-      if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; try { localStorage.setItem('libreta:fichaab', JSON.stringify(FICHA_AB)); } catch (x) {} return; }
-      if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; try { localStorage.setItem('libreta:desp', JSON.stringify(state.desp)); } catch (x) {} render(); return; }
+      if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; return; }
+      if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; render(); return; }
       if ((el = e.target.closest('[data-im]'))) { state.infModo = el.dataset.im; render(); return; }
       if ((el = e.target.closest('[data-ev]'))) { state.evMed = el.dataset.ev; render(); return; }
       if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; render(); return; }
