@@ -1883,8 +1883,8 @@
       var nombre = ('Lista de tacto ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
       var buf = root.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       var file = null; try { file = new File([buf], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); } catch (e) {}
-      // CSV (separado por ; y con acentos) para los celulares que no dejan compartir .xlsx
-      var csv = '\ufeff' + [head].concat(L.map(fila)).map(function (r) { return r.map(function (v) { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\r\n');
+      // CSV separado por comas (como lo lee Excel en el celular) para los teléfonos que no dejan compartir .xlsx
+      var csv = '\ufeff' + [head].concat(L.map(fila)).map(function (r) { return r.map(function (v) { v = v == null ? '' : String(v); return /[,;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n');
       var fcsv = null; try { fcsv = new File([csv], nombre.replace(/\.xlsx$/, '.csv'), { type: 'text/csv' }); } catch (e) {}
       state.xout = { wb: wb, file: file, csv: fcsv, nombre: nombre };
       // la lista queda a la vista y después se elige compartir o guardar
