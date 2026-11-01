@@ -865,10 +865,40 @@
     // Para venta: descarte programado + más de 300 días en leche + menos de 15 litros en el último control
     var VTA_DEL = 300, VTA_LTS = 15;
     function delDe(a) { return a.pFecha && (a.cat === 'vaca' || !a.cat) ? (DB.fuente === 'syscaw' ? A.diffDays(today(), a.pFecha) : a.dLac) : null; }
+    // criterio de venta: lo define cada productor (se guarda por tambo); lo que quede vacío no se toma
+    function vtaCfg() { var c = null; try { c = JSON.parse(getP('vta')); } catch (e) {} return c || { desc: true, vacia: false, del: VTA_DEL, lts: VTA_LTS }; }
+    function vtaTxt(c) {
+      c = c || vtaCfg();
+      var t = [c.desc ? 'descarte programado' : null, c.vacia ? 'vacías' : null, c.del ? 'más de ' + c.del + ' días en leche' : null, c.lts ? 'menos de ' + c.lts + ' litros' : null].filter(Boolean);
+      return t.length ? t.join(' · ') : 'sin criterio';
+    }
     function paraVenta(a) {
-      if (!a.rech || (a.cat && a.cat !== 'vaca')) return false;
+      if (a.cat && a.cat !== 'vaca') return false;
+      var c = vtaCfg(); if (!c.desc && !c.vacia && !c.del && !c.lts) return false;
+      if (c.desc && !a.rech) return false;
+      if (c.vacia && a.estado === 'prenada') return false;
       var d = delDe(a), l = a.pr && a.pr[0];
-      return d != null && d > VTA_DEL && typeof l === 'number' && l < VTA_LTS;
+      if (c.del && !(d != null && d > c.del)) return false;
+      if (c.lts && !(typeof l === 'number' && l < c.lts)) return false;
+      return true;
+    }
+    function vtaSheet() {
+      state.vtaDraft = vtaCfg();
+      var c = state.vtaDraft, chk = function (k, t) { return '<button class="fchip" data-vk="' + k + '" aria-pressed="' + !!c[k] + '">' + t + '</button>'; };
+      var num = function (k, a1, b1) { return '<label class="xnum">' + a1 + ' <input type="number" inputmode="numeric" min="1" max="999" data-vn="' + k + '" value="' + (c[k] || '') + '" placeholder="–"> ' + b1 + '</label>'; };
+      $('#sheetXTitle').textContent = 'Criterio para venta';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Vacas en ordeñe que cumplen todo lo marcado. Lo que quede vacío no se toma.</p>' +
+        num('del', 'Más de', 'días en leche') + num('lts', 'Menos de', 'litros en el último control') +
+        '<div class="filters" style="margin-top:8px">' + chk('desc', 'Solo descarte programado') + chk('vacia', 'Solo vacías (no preñadas)') + '</div>' +
+        '<p class="xcount" id="vtaN"></p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="vtaok">Guardar criterio</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      vtaCuenta(); $('#sheetX').hidden = false;
+    }
+    function vtaCuenta() {
+      var g = getP('vta'); setP('vta', JSON.stringify(state.vtaDraft));
+      var n = DB.animales.filter(paraVenta).length;
+      if (g == null) { try { localStorage.removeItem('libreta:vta:' + TAMBOS.activo); } catch (e) {} } else setP('vta', g);
+      $('#vtaN').innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'vaca' : 'vacas') + ' para venta con este criterio';
     }
     function matchFiltro(a, f) { if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
@@ -998,9 +1028,9 @@
         secTareas('partos', 'Próximos partos', 'Partos probables en los próximos ' + vtxt + '.', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
         }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
-        secTareas('venta', 'Para venta', 'Descarte programado, más de ' + VTA_DEL + ' días en leche y menos de ' + VTA_LTS + ' litros en el último control.', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
+        secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca de descarte cumple las condiciones de venta.');
+        }, 'Ninguna vaca cumple el criterio de venta.');
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -1831,7 +1861,7 @@
       var m = [], cat = a.cat || 'vaca';
       if (!((cat === 'vaca' && f.ord) || (cat === 'seca' && f.sec) || (cat === 'vaquillona' && f.vaq))) return m;
       // para venta: se toma aunque esté marcado "Excluir descartes" (la venta es justamente de descartes)
-      if (f.venta && paraVenta(a)) m.push('Para venta: ' + (a.rechDet || a.rech || 'descarte') + ', ' + nf(a.pr[0], 1) + ' L, ' + nf(delDe(a)) + ' días en leche');
+      if (f.venta && paraVenta(a)) m.push('Para venta' + (a.rech ? ': ' + (a.rechDet || a.rech) : '') + (typeof (a.pr || [])[0] === 'number' ? ', ' + nf(a.pr[0], 1) + ' L' : '') + (delDe(a) != null ? ', ' + nf(delDe(a)) + ' días en leche' : ''));
       if (f.sinDesc && a.rech) return m;
       var serv = a.sFecha && !/^celo/i.test(a.toro || '');
       if (f.sdx > 0 && a.estado !== 'prenada' && serv && (!a.tFecha || a.tFecha < a.sFecha)) { var d = A.diffDays(hoy, a.sFecha); if (d >= f.sdx) m.push('Servida hace ' + d + ' días sin diagnóstico'); }
@@ -1857,7 +1887,7 @@
         num('sdx', 'Servidas con más de', 'días sin diagnóstico') +
         num('psv', 'Paridas con más de', 'días sin servicio') +
         '<div class="filters" style="margin-top:8px">' + chk('celo', 'Preñadas con celo') + chk('secar', 'Para secar por preñez') + chk('venta', 'Para venta') + '</div>' +
-        (f.venta ? '<p class="cap">Para venta: descarte programado, más de ' + VTA_DEL + ' días en leche y menos de ' + VTA_LTS + ' litros en el último control.</p>' : '') +
+        (f.venta ? '<p class="cap">Para venta: ' + esc(vtaTxt()) + ' (se cambia en Tareas → Para venta).</p>' : '') +
         (f.secar ? '<p class="cap">Para secar: preñadas a ' + A.SECADO + ' días o menos del parto el ' + A.fmt(fechaSecado()) + ' (fecha de Tareas → Para secar).</p>' : '') +
         '<p class="xcount"><b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales') + '</p>';
       $('#btnXok').disabled = !n;
@@ -1983,6 +2013,7 @@
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
       if ((el = e.target.closest('[data-k]'))) { state.abiertas[el.dataset.k] = !state.abiertas[el.dataset.k]; render(); return; }
+      if ((el = e.target.closest('[data-vk]'))) { state.vtaDraft[el.dataset.vk] = !state.vtaDraft[el.dataset.vk]; el.setAttribute('aria-pressed', !!state.vtaDraft[el.dataset.vk]); vtaCuenta(); return; }
       if ((el = e.target.closest('[data-xk]'))) { state.xf[el.dataset.xk] = !state.xf[el.dataset.xk]; xOpts(); return; }
       var b = e.target.closest('[data-a]'); if (!b) return;
       var a = b.dataset.a;
@@ -2003,6 +2034,8 @@
       else if (a === 'exptactar') abrirExport();
       else if (a === 'xok') exportarTactar();
       else if (a === 'xshare') xCompartir();
+      else if (a === 'vtacfg') vtaSheet();
+      else if (a === 'vtaok') { setP('vta', JSON.stringify(state.vtaDraft)); $('#sheetX').hidden = true; render(); toast('Criterio de venta guardado'); }
       else if (a === 'xsharecsv') xCompartirCSV();
       else if (a === 'xsave') xGuardar();
       else if (a === 'xcancel') $('#sheetX').hidden = true;
@@ -2021,6 +2054,7 @@
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
     document.addEventListener('input', function (e) {
+      if (e.target.dataset && e.target.dataset.vn) { var w = parseInt(e.target.value, 10); state.vtaDraft[e.target.dataset.vn] = w > 0 ? w : null; vtaCuenta(); return; }
       if (e.target.dataset && e.target.dataset.xn) { var v = parseInt(e.target.value, 10); state.xf[e.target.dataset.xn] = v > 0 ? v : null; xActualizarCuenta(); return; }
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
     });
