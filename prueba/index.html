@@ -134,6 +134,7 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 #sheetX .filters{flex-wrap:wrap}
 .xnum{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;font-size:15px}.xnum input{width:74px;min-height:44px;font-size:18px;text-align:center;border:2px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 .xtop{width:100%;margin:0 0 12px}
+.xprev{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:12px;margin:0 0 6px}.xprev div{display:grid;grid-template-columns:64px 1fr;gap:8px;padding:9px 12px;border-top:1px solid var(--line);font-size:14.5px}.xprev div:first-child{border-top:0}.xprev b{font-size:16px}.xprev span{color:var(--muted)}
 .infbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:0 0 14px}.infbar .filters{margin:0}
 .ipag{background:#fff;color:#1a1a1a;border:1px solid var(--line);border-radius:8px;padding:18px 18px 10px;margin:0 0 16px;font-family:Calibri,Aptos,"Segoe UI",Arial,sans-serif}
 .iprod{margin:0;text-align:right;font-style:italic;font-size:12px;color:#333}
@@ -470,10 +471,7 @@ details.lac summary .l{flex:1}
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetXTitle">
     <h2 id="sheetXTitle">Lista de tacto</h2>
     <div id="xopts"></div>
-    <div class="sheetbtns">
-      <button class="btn primary big" id="btnXok" data-a="xok">Exportar a Excel</button>
-      <button class="btn" data-a="xcancel">Cancelar</button>
-    </div>
+    <div class="sheetbtns" id="xbtns"></div>
   </div>
 </div>
 
@@ -482,10 +480,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=p65"></script>
-<script src="syscaw.js?v=p65"></script>
+<script src="paradox.js?v=p66"></script>
+<script src="syscaw.js?v=p66"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p65"></script>
+<script src="app.js?v=p66"></script>
 </body>
 </html>

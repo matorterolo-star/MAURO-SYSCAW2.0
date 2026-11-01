@@ -969,7 +969,6 @@
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       h += (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
-      if ((key === 'tactar' || key === 'tactarvq') && items.length) h += '<button class="btn share" data-a="exptactar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Exportar a Excel</button>';
       if (!items.length) h += '<p class="hint">' + vacio + '</p>';
       else {
         h += items.slice(0, lim).map(mapRow).join('');
@@ -1862,6 +1861,8 @@
     function abrirExport() {
       var g = null; try { g = JSON.parse(localStorage.getItem('libreta:xf')); } catch (e) {}
       state.xf = g || { ord: true, sec: false, vaq: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false };
+      $('#sheetXTitle').textContent = 'Lista de tacto';
+      $('#xbtns').innerHTML = '<button class="btn primary big" id="btnXok" data-a="xok">Ver lista y exportar</button><button class="btn" data-a="xcancel">Cancelar</button>';
       xOpts(); $('#sheetX').hidden = false;
     }
     function exportarTactar() {
@@ -1882,11 +1883,17 @@
       var nombre = ('Lista de tacto ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
       var buf = root.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       var file = null; try { file = new File([buf], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); } catch (e) {}
-      $('#sheetX').hidden = true;
-      if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function () {});
-      else root.XLSX.writeFile(wb, nombre);
-      toast(L.length + (L.length === 1 ? ' animal exportado' : ' animales exportados'));
+      state.xout = { wb: wb, file: file, nombre: nombre };
+      // la lista queda a la vista y después se elige compartir o guardar
+      var puedeComp = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+      $('#sheetXTitle').textContent = 'Lista de tacto · ' + L.length + (L.length === 1 ? ' animal' : ' animales');
+      $('#xopts').innerHTML = '<div class="xprev">' + L.map(function (x) { return '<div><b>' + esc(x.a.rp) + '</b><span>' + esc(x.m.join(' · ')) + '</span></div>'; }).join('') + '</div>' +
+        '<p class="cap">Archivo: ' + esc(nombre) + '</p>';
+      $('#xbtns').innerHTML = (puedeComp ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button>' : '') +
+        '<button class="btn' + (puedeComp ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
     }
+    function xCompartir() { var o = state.xout; if (o && o.file) navigator.share({ files: [o.file], title: o.nombre }).catch(function () {}); }
+    function xGuardar() { var o = state.xout; if (!o) return; root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
 
     /* ----- render ----- */
     var NAVS = [
@@ -1977,6 +1984,8 @@
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
       else if (a === 'exptactar') abrirExport();
       else if (a === 'xok') exportarTactar();
+      else if (a === 'xshare') xCompartir();
+      else if (a === 'xsave') xGuardar();
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
       else if (a === 'infcerrar') { state.informe = false; render(); window.scrollTo(0, 0); }
