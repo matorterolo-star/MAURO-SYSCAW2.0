@@ -1070,8 +1070,7 @@
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
       });
       var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? r.ord : '') + '</td><td>' + (r.okSec ? r.sec : '') + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
-      var ult = P[N - 1];
-      return '<section class="card"><h2>Proyección del rodeo · hasta ' + ult.label + ' ' + String(ult.anio).slice(2) + '</h2>' +
+      return '<section class="card"><h2>Proyección del rodeo</h2>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
