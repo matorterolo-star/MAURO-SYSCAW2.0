@@ -1,3 +1,4 @@
+/* © Dr. Mauro Torterolo — Libreta de vacas. Todos los derechos reservados. Uso exclusivo de sus clientes. */
 (function (root) {
   'use strict';
 
@@ -646,9 +647,10 @@
       busy(true, 'Leyendo respaldo de SysCaw…<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
         root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
+          if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
           var nom = d.tambo || nombreDesdeArchivo(f.name) || '', cambio = prepararDestino(nom);
-          DB = { animales: [], todos: d.animales, ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          DB = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
@@ -735,6 +737,7 @@
       var fr = new FileReader();
       fr.onload = function () {
         if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
+        if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
         try {
           var res = A.parseLibreta(root.XLSX, fr.result);
           res.animales.forEach(function (a) { a.cat = 'vaca'; });
@@ -765,6 +768,9 @@
       var fijo = DB.fuente === 'syscaw';
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
+      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
+      $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
+      $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return x.n || ('productor ' + x.p.join(', ')); }).join(' · ') : 'Sin activar';
       $('#sheet').hidden = false;
       if (!fijo) setTimeout(function () { $('#inNombre').focus(); }, 60);
     }
@@ -1553,6 +1559,67 @@
       return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + tabla + caida;
     }
 
+    /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
+    var PUBKEY = {"kty":"EC","crv":"P-256","x":"-zikzRKxDR2Iml5AuWh6PgDIipwqr1fpHjwct7moAoQ","y":"eWwwwoCwgfWupZrAebMISU7Yx3aUlhEYOoAJ79GFda0"};
+    var ACT = []; try { ACT = JSON.parse(localStorage.getItem('libreta:act')) || []; } catch (e) { ACT = []; }
+    function esVet() { try { return !!localStorage.getItem('libreta:vet'); } catch (e) { return false; } }
+    function habilitado(ids) {
+      if (esVet()) return true;
+      ids = ids || [];
+      if (!ids.length) return ACT.length > 0;
+      return ACT.some(function (x) { return (x.p || []).some(function (q) { return ids.indexOf(q) >= 0; }); });
+    }
+    function bloqueado(nombre) {
+      state.error = 'Este tambo' + (nombre ? ' (' + nombre + ')' : '') + ' no está activado en este teléfono. Pedile el link de activación al Dr. Mauro Torterolo.';
+      render(); toast('Tambo sin activar');
+    }
+    function b64u(bytes) { var s = ''; bytes.forEach(function (b) { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+    function unb64u(t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var s = atob(t), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+    function verificar(token) {
+      try {
+        var parts = token.split('.'), datos = unb64u(parts[0]), firma = unb64u(parts[1]);
+        return crypto.subtle.importKey('jwk', PUBKEY, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']).then(function (k) {
+          return crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, k, firma, datos);
+        }).then(function (ok) { return ok ? JSON.parse(new TextDecoder().decode(datos)) : null; }).catch(function () { return null; });
+      } catch (e) { return Promise.resolve(null); }
+    }
+    function firmar(payload) {
+      var jwk = JSON.parse(new TextDecoder().decode(unb64u(localStorage.getItem('libreta:vet').replace(/^MTV1\./, ''))));
+      var datos = new TextEncoder().encode(JSON.stringify(payload));
+      return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']).then(function (k) {
+        return crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, datos);
+      }).then(function (sig) { return b64u(datos) + '.' + b64u(new Uint8Array(sig)); });
+    }
+    function leerActivacion() {
+      var m = /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
+      if (!m) return Promise.resolve(false);
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+      return verificar(m[1]).then(function (pl) {
+        if (!pl || !pl.p) { toast('El link de activación no es válido.'); return false; }
+        ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]);
+        try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {}
+        toast('Libreta activada para ' + (pl.n || 'este tambo')); state.error = ''; render();
+        return true;
+      });
+    }
+    function modoVet() {
+      if (esVet()) { if (confirm('¿Salir del modo veterinario en este teléfono? Vas a necesitar tu clave para volver.')) { try { localStorage.removeItem('libreta:vet'); } catch (e) {} closeSheet(); toast('Modo veterinario desactivado'); } return; }
+      var k = (prompt('Pegá tu clave de veterinario') || '').trim(); if (!k) return;
+      try { localStorage.setItem('libreta:vet', k); } catch (e) {}
+      firmar({ t: 1 }).then(function (tok) { return verificar(tok); }).then(function (ok) {
+        if (ok) { toast('Modo veterinario activo'); openSheet('Ajustes'); }
+        else { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); }
+      }, function () { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); });
+    }
+    function enviarActivacion() {
+      if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
+      firmar({ p: DB.idProd, n: PERFIL.nombre || '', f: today() }).then(function (tok) {
+        var url = location.href.split('#')[0] + '#act=' + tok;
+        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
+        if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+      }, function () { toast('No pude generar la activación. Revisá tu clave.'); });
+    }
+
     /* ----- render ----- */
     var NAVS = [
       ['buscar', 'Buscar', '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
@@ -1625,6 +1692,8 @@
       else if (a === 'quitarlogo') { state.draft.logo = ''; paintLogoPreview(); }
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
+      else if (a === 'enviaract') enviarActivacion();
+      else if (a === 'vet') modoVet();
       else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
@@ -1658,6 +1727,7 @@
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
     var listo = loadAll();
+    leerActivacion();
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
