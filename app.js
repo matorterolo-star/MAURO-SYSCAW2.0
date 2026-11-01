@@ -969,6 +969,7 @@
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       h += (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
+      if ((key === 'tactar' || key === 'tactarvq') && items.length) h += '<button class="btn share" data-a="exptactar" data-xcat="' + (key === 'tactar' ? 'vacas' : 'vaq') + '"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Exportar a Excel</button>';
       if (!items.length) h += '<p class="hint">' + vacio + '</p>';
       else {
         h += items.slice(0, lim).map(mapRow).join('');
@@ -1825,6 +1826,57 @@
       setTimeout(function () { window.print(); setTimeout(function () { document.title = t; }, 500); }, 50);
     }
 
+    /* ----- exportar a Excel: para tactar, con filtro previo ----- */
+    function tactarTodas() { return A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), state.ventana).tactar; }
+    function xFiltradas() {
+      var f = state.xf;
+      return tactarTodas().filter(function (x) {
+        var q = x.a.cat === 'vaquillona';
+        if (f.cat === 'vacas' && q) return false;
+        if (f.cat === 'vaq' && !q) return false;
+        if (x.dias < f.dias) return false;
+        if (f.rod !== 'todos' && (x.a.rod || '—') !== f.rod) return false;
+        return true;
+      });
+    }
+    function xOpts() {
+      var f = state.xf, rods = [];
+      tactarTodas().forEach(function (x) { var r = x.a.rod || '—'; if (rods.indexOf(r) < 0) rods.push(r); }); rods.sort();
+      var grupo = function (tit, attr, ops, val) { return '<p class="xlbl">' + tit + '</p><div class="filters">' + ops.map(function (o) { return '<button class="fchip" ' + attr + '="' + o[0] + '" aria-pressed="' + (String(val) === String(o[0])) + '">' + o[1] + '</button>'; }).join('') + '</div>'; };
+      var n = xFiltradas().length;
+      $('#xopts').innerHTML = grupo('Categoría', 'data-xc', [['vacas', 'Vacas'], ['vaq', 'Vaquillonas'], ['ambas', 'Ambas']], f.cat) +
+        grupo('Días desde el servicio', 'data-xd', [[35, '35 o más'], [45, '45 o más'], [60, '60 o más'], [90, '90 o más']], f.dias) +
+        (rods.length > 1 ? grupo('Rodeo', 'data-xr', [['todos', 'Todos']].concat(rods.map(function (r) { return [r, r]; })), f.rod) : '') +
+        '<p class="xcount"><b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales') + ' para tactar</p>';
+      $('#btnXok').disabled = !n;
+    }
+    function abrirExport(cat) {
+      state.xf = { cat: cat || 'vacas', dias: A.DX_MIN, rod: 'todos' };
+      xOpts(); $('#sheetX').hidden = false;
+    }
+    function exportarTactar() {
+      var L = xFiltradas().slice().sort(function (x, y) { return numRp(x.a, y.a); }), ref = today();
+      var fila = function (x) {
+        var a = x.a, h = DB.hist ? DB.hist[a.rp] : null, ins = null;
+        if (h) h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] === a.sFecha) ins = e[3] || null; });
+        return [a.rp, a.nombre || '', a.cat === 'vaquillona' ? 'Vaquillona' : a.cat === 'seca' ? 'Seca' : 'Vaca', a.rod || '', a.pN || '', a.pFecha ? A.fmt(a.pFecha) : '',
+          a.pFecha ? A.diffDays(ref, a.pFecha) : '', a.sFecha ? A.fmt(a.sFecha) : '', x.dias, a.sN || '', a.toro && !/^celo/i.test(a.toro) ? a.toro : '', ins || '',
+          a.tFecha ? A.fmt(a.tFecha) : '', a.result || '', a.rech ? (a.rechDet || a.rech) : ''];
+      };
+      var head = ['Caravana', 'Nombre', 'Categoría', 'Rodeo', 'Lactancia', 'Último parto', 'Días en leche', 'Fecha servicio', 'Días desde servicio', 'Nº servicio', 'Toro', 'Inseminador', 'Último tacto', 'Resultado', 'Descarte'];
+      var tit = 'Para tactar · ' + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref);
+      var ws = root.XLSX.utils.aoa_to_sheet([[tit], [], head].concat(L.map(fila)));
+      ws['!cols'] = head.map(function (h, i) { return { wch: i === 1 ? 18 : Math.max(9, h.length + 2) }; });
+      var wb = root.XLSX.utils.book_new(); root.XLSX.utils.book_append_sheet(wb, ws, 'Para tactar');
+      var nombre = ('Para tactar ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
+      var buf = root.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      var file = null; try { file = new File([buf], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); } catch (e) {}
+      $('#sheetX').hidden = true;
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function () {});
+      else root.XLSX.writeFile(wb, nombre);
+      toast(L.length + (L.length === 1 ? ' animal exportado' : ' animales exportados'));
+    }
+
     /* ----- render ----- */
     var NAVS = [
       ['buscar', 'Buscar', '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
@@ -1895,6 +1947,9 @@
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
       if ((el = e.target.closest('[data-k]'))) { state.abiertas[el.dataset.k] = !state.abiertas[el.dataset.k]; render(); return; }
+      if ((el = e.target.closest('[data-xc]'))) { state.xf.cat = el.dataset.xc; xOpts(); return; }
+      if ((el = e.target.closest('[data-xd]'))) { state.xf.dias = +el.dataset.xd; xOpts(); return; }
+      if ((el = e.target.closest('[data-xr]'))) { state.xf.rod = el.dataset.xr; xOpts(); return; }
       var b = e.target.closest('[data-a]'); if (!b) return;
       var a = b.dataset.a;
       if (a === 'load') { state.destino = tamboAct() ? null : 'nuevo'; $('#file').click(); }
@@ -1911,6 +1966,9 @@
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'vet') modoVet();
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
+      else if (a === 'exptactar') abrirExport(b.dataset.xcat);
+      else if (a === 'xok') exportarTactar();
+      else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
       else if (a === 'infcerrar') { state.informe = false; render(); window.scrollTo(0, 0); }
       else if (a === 'infpdf') pdfInforme();
