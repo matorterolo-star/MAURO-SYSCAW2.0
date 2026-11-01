@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Libreta de vacas</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -129,6 +130,27 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .sec.open .sechead{margin-bottom:10px}
 .sec.open .sechead .chev{transform:rotate(180deg)}
 .sec{margin-bottom:10px}
+.actinfo{text-align:center;margin:14px 0 2px}
+.vetlnk{display:block;margin:4px auto 0;border:0;background:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;min-height:36px}
+.lchart{width:100%;height:auto;display:block;margin:4px 0 6px}
+.lgrid{stroke:var(--line);stroke-width:1}
+.lpt{cursor:pointer}.lpt .hit{fill:transparent}
+.lpt .dot{stroke:var(--surface);stroke-width:1}
+.lpt .dot.prim{fill:var(--apta)}.lpt .dot.mult{fill:var(--ciclando)}
+.lpt .dot.cs{stroke:var(--vacia);stroke-width:2}
+.lcur{fill:none;stroke-width:3;stroke-linejoin:round;pointer-events:none;paint-order:stroke}
+.lcur.prim,.lcur.mult{filter:drop-shadow(0 0 1.5px var(--surface))}
+.lcur.prim{stroke:var(--apta)}.lcur.mult{stroke:var(--ciclando)}
+.mleg i.lprim,.mleg i.lmult,.mleg i.lcs{border-radius:50%}
+.mleg i.lprim{background:var(--apta)}.mleg i.lmult{background:var(--ciclando)}.mleg i.lcs{background:transparent;border:2px solid var(--vacia)}
+.kv dd small.up{color:var(--prenada);display:inline}.kv dd small.dn{color:var(--vacia);display:inline}
+.tbl tr.sep td{border-top:2px solid var(--line)}
+.ev{fill:none;stroke-linejoin:round;stroke-linecap:round}
+.ev.cur{stroke:var(--link);stroke-width:3}.ev.prev{stroke:var(--apta);stroke-width:2}.ev.hist{stroke:var(--muted);stroke-width:2;stroke-dasharray:5 4}
+.evp.cur{fill:var(--link)}.evp.prev{fill:var(--apta)}
+.evv{font-size:12px;font-weight:700;fill:var(--link)}
+.mleg i.ecur{background:var(--link)}.mleg i.eprev{background:var(--apta)}.mleg i.ehist{background:transparent;border-top:2px dashed var(--muted);border-radius:0;height:0;margin-top:5px}
+.ptbl small.up{color:var(--prenada)}.ptbl small.dn{color:var(--vacia)}
 .card.plg .plgh{display:flex;align-items:center;gap:10px;cursor:pointer;margin:0}
 .card.plg .plgh h2{flex:1;margin:0}
 .card.plg .ixhead.plgh h2{flex:1}
@@ -372,8 +394,12 @@ details.lac summary .l{flex:1}
       <button class="btn primary big" data-a="guardar">Guardar</button>
       <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
       <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
+      <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar activación de este tambo</button>
       <button class="btn" data-a="cerrar">Cancelar</button>
     </div>
+    <p class="cap actinfo" id="actInfo"></p>
+    <button class="vetlnk" data-a="vet" id="btnVet">Modo veterinario</button>
+    <p class="cap actinfo">© Dr. Mauro Torterolo · Libreta de vacas. Uso exclusivo de sus clientes.</p>
   </div>
 </div>
 
@@ -406,10 +432,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=30"></script>
-<script src="syscaw.js?v=30"></script>
+<script src="paradox.js?v=31"></script>
+<script src="syscaw.js?v=31"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

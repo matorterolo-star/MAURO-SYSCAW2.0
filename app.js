@@ -1,3 +1,4 @@
+/* © Dr. Mauro Torterolo — Libreta de vacas. Todos los derechos reservados. Uso exclusivo de sus clientes. */
 (function (root) {
   'use strict';
 
@@ -143,11 +144,14 @@
     q = norm(q);
     if (!q) return [];
     var tokens = q.split(/\s+/), out = [];
+    // ID electrónico: se busca por sus últimos 8 números (desde 5 dígitos escritos)
+    var qd = q.replace(/\s+/g, ''); if (!/^\d{5,8}$/.test(qd)) qd = null;
     animales.forEach(function (a) {
       var n = a._n || (a._n = norm(a.nombre)), score = 0;
       if (a.rp === q) score = 100;
       else if (a.rp.indexOf(q) === 0) score = 80;
-      else if (q.length >= 5 && a.idElec && a.idElec.slice(-q.length) === q) score = 70;
+      else if (qd && a.idElec && a.idElec.slice(-8) === qd) score = 95;
+      else if (qd && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) score = 70;
       else if (n.indexOf(q) >= 0) score = 60;
       else if (tokens.every(function (t) { return n.indexOf(t) >= 0 || a.rp.indexOf(t) === 0; })) score = 50;
       else if (q.length >= 3 && a.rp.indexOf(q) >= 0) score = 40;
@@ -643,9 +647,10 @@
       busy(true, 'Leyendo respaldo de SysCaw…<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
         root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
+          if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
           var nom = d.tambo || nombreDesdeArchivo(f.name) || '', cambio = prepararDestino(nom);
-          DB = { animales: [], todos: d.animales, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          DB = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
           aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'vaca';
@@ -732,6 +737,7 @@
       var fr = new FileReader();
       fr.onload = function () {
         if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
+        if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
         try {
           var res = A.parseLibreta(root.XLSX, fr.result);
           res.animales.forEach(function (a) { a.cat = 'vaca'; });
@@ -762,6 +768,9 @@
       var fijo = DB.fuente === 'syscaw';
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
+      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
+      $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
+      $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return x.n || ('productor ' + x.p.join(', ')); }).join(' · ') : 'Sin activar';
       $('#sheet').hidden = false;
       if (!fijo) setTimeout(function () { $('#inNombre').focus(); }, 60);
     }
@@ -840,6 +849,8 @@
     function rowHTML(a, o) {
       if (a.bTipo) return rowBajaHTML(a);
       o = o || {};
+      var qd = String(state.q || '').replace(/\s+/g, '');
+      if (o.sub == null && /^\d{5,8}$/.test(qd) && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) o.sub = '<b>ID …' + esc(a.idElec.slice(-8)) + '</b>';
       return '<button class="row" data-rp="' + esc(a.rp) + '">' + tagSVG(a.rp, 54) +
         '<span class="rt">' + (o.right != null ? o.right : chip(a)) + '</span>' +
         '<span class="sub">' + (o.sub != null ? (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + o.sub : subDefault(a)) + '</span></button>';
@@ -912,9 +923,9 @@
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
         if (nPeor) fl.push(['ipeor', 'Peores 10%', nPeor]);
       }
-      return '<div class="searchbox"><label class="sr" for="q">Caravana o nombre</label>' +
+      return '<div class="searchbox"><label class="sr" for="q">Caravana, nombre o ID electrónico (últimos 8 números)</label>' +
         '<svg class="mag" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' +
-        '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana o nombre" value="' + esc(state.q) + '"></div>' + catsHTML() +
+        '<input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Caravana, nombre o ID" value="' + esc(state.q) + '"></div>' + catsHTML() +
         '<div class="filters" role="group" aria-label="Filtrar por estado">' + fl.map(function (f) {
           return '<button class="fchip ' + f[0] + '" data-f="' + f[0] + '" aria-pressed="' + (state.filtro === f[0]) + '">' + f[1] + ' <b>' + f[2] + '</b></button>';
         }).join('') + '</div><div id="results"></div>';
@@ -1065,8 +1076,7 @@
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
       });
       var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? r.ord : '') + '</td><td>' + (r.okSec ? r.sec : '') + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
-      var ult = P[N - 1];
-      return '<section class="card"><h2>Proyección del rodeo · hasta ' + ult.label + ' ' + String(ult.anio).slice(2) + '</h2>' +
+      return '<section class="card"><h2>Proyección del rodeo</h2>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
@@ -1142,7 +1152,7 @@
       }).join('') + '</tbody></table></section>' : '';
       var aviso = '';
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        '<section class="card"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
+        '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
         (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
         (state.cat === 'vaca' || state.cat === 'seca' ? idxCardHTML() : '');
@@ -1433,11 +1443,11 @@
     try { FICHA_AB = JSON.parse(localStorage.getItem('libreta:fichaab')) || {}; } catch (e) {}
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
-        if (sec.classList.contains('datos')) return;
+        if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
         var h2 = sec.querySelector('h2'); if (!h2) return;
         var head = h2.parentNode === sec ? h2 : h2.closest('.ixhead') || h2;
         if (head.parentNode !== sec) return;
-        var key = h2.textContent.trim();
+        var key = h2.textContent.split(' · ')[0].trim();
         sec.classList.add('plg'); if (FICHA_AB[key]) sec.classList.add('open');
         head.classList.add('plgh'); head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0'); head.setAttribute('aria-expanded', !!FICHA_AB[key]); head.dataset.plg = key;
         head.insertAdjacentHTML('beforeend', '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
@@ -1445,10 +1455,177 @@
     }
 
     var LOGO_LIBRETA = '<svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true"><rect x="11" y="6" width="28" height="36" rx="3" fill="#F4D823"/><rect x="11" y="6" width="6" height="36" rx="2" fill="#C9A227"/><path d="M8 12h6M8 19h6M8 26h6M8 33h6" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/><rect x="21" y="14" width="13" height="3" rx="1.5" fill="#12274A"/><rect x="21" y="21" width="10" height="3" rx="1.5" fill="#12274A" opacity=".6"/><rect x="21" y="28" width="12" height="3" rx="1.5" fill="#12274A" opacity=".6"/></svg>';
+    /* ----- pestaña Leche: último control lechero ----- */
+    function solidos(c) { return c[2] >= 2 && c[2] <= 7 && c[3] >= 2 && c[3] <= 5.5 ? c[1] * (c[2] + c[3]) / 100 : null; }
+    function controlLechero() {
+      var H = DB.hist || {}, L = null;
+      DB.animales.forEach(function (a) { var h = H[a.rp]; if (h && h.ct.length) { var f = h.ct[h.ct.length - 1][0]; if (!L || f > L) L = f; } });
+      var V = [];
+      if (L) {
+        var P = null;
+        DB.animales.forEach(function (a) { var h = H[a.rp]; if (h) h.ct.forEach(function (c) { if (A.diffDays(L, c[0]) > 10 && (!P || c[0] > P)) P = c[0]; }); });
+        DB.animales.forEach(function (a) {
+          var h = H[a.rp]; if (!h) return;
+          var c = null, cp = null;
+          h.ct.forEach(function (x) { if (Math.abs(A.diffDays(x[0], L)) <= 3) c = x; if (P && Math.abs(A.diffDays(x[0], P)) <= 3) cp = x; });
+          if (!c || !(c[1] > 0)) return;
+          var parto = null; h.pa.forEach(function (p) { if (p[0] <= c[0]) parto = p; });
+          if (!parto) return;
+          if (cp && cp[0] < parto[0]) cp = null; // el control anterior era de otra lactancia
+          V.push({ a: a, del: A.diffDays(c[0], parto[0]), n: parto[1], lt: c[1], g: c[2], p: c[3], cs: c[4], sol: solidos(c), prev: cp });
+        });
+        return { fecha: L, ant: P, V: V };
+      }
+      // libreta en Excel: último control de cada vaca, sin fechas
+      DB.animales.forEach(function (a) { if ((a.cat === 'vaca' || !a.cat) && a.dLac != null && typeof (a.pr || [])[0] === 'number' && a.pr[0] > 0) V.push({ a: a, del: a.dLac, n: a.pN || 2, lt: a.pr[0], g: null, p: null, cs: null, sol: null, prev: null }); });
+      return { fecha: null, ant: null, V: V };
+    }
+    function prom(l, f) { var s = 0, n = 0; l.forEach(function (x) { var v = f(x); if (v != null && !isNaN(v)) { s += v; n++; } }); return n ? s / n : null; }
+    // evolución mensual del control lechero: últimos 12 meses vs año anterior vs promedio histórico del mismo mes
+    function evolucion(med) {
+      var C = (DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; });
+      if (C.length < 3) return null;
+      var porFecha = {};
+      C.forEach(function (c) { var x = porFecha[c[0]] || (porFecha[c[0]] = { v: 0, l: 0, d: 0, nd: 0 }); x.v += c[2]; x.l += c[3]; if (c[4]) { x.d += c[4] * c[2]; x.nd += c[2]; } });
+      var mes = {};
+      Object.keys(porFecha).forEach(function (f) {
+        var x = porFecha[f], k = f.slice(0, 7), m = mes[k] || (mes[k] = { s: 0, n: 0 });
+        m.s += med === 'lv' ? x.l / x.v : med === 'lt' ? x.l : x.v; m.n++;
+      });
+      var val = function (k) { return mes[k] ? mes[k].s / mes[k].n : null; };
+      var ult = Object.keys(mes).sort().pop(), y = +ult.slice(0, 4), m0 = +ult.slice(5, 7);
+      var out = [], primer = null;
+      for (var i = 11; i >= 0; i--) {
+        var mm = m0 - i, yy = y; while (mm < 1) { mm += 12; yy--; }
+        var k = yy + '-' + pad2(mm), ka = (yy - 1) + '-' + pad2(mm);
+        var hs = []; Object.keys(mes).forEach(function (kk) { if (kk.slice(5) === pad2(mm) && kk < ka) { hs.push(val(kk)); if (!primer || kk < primer) primer = kk; } });
+        out.push({ label: A.MESES[mm - 1], anio: yy, cur: val(k), prev: val(ka), hist: hs.length ? hs.reduce(function (s, x) { return s + x; }, 0) / hs.length : null });
+      }
+      return { meses: out, desde: primer ? primer.slice(0, 4) : null };
+    }
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function evolChart(E, med) {
+      var M = E.meses, W = 340, H = 210, ml = 36, mr = 8, mt = 12, mb = 30;
+      var all = []; M.forEach(function (m) { [m.cur, m.prev, m.hist].forEach(function (v) { if (v != null) all.push(v); }); });
+      var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), pad = (hi - lo) * 0.15 || hi * 0.1 || 1; lo = Math.max(0, lo - pad); hi += pad;
+      var X = function (i) { return ml + i * (W - ml - mr) / 11; }, Y = function (v) { return H - mb - (v - lo) / (hi - lo) * (H - mt - mb); };
+      var fmtY = function (v) { return med === 'lv' ? nf(v, 0) : med === 'lt' ? (v >= 1000 ? nf(v / 1000, 0) + ' mil' : nf(v)) : nf(v); };
+      var s = '';
+      for (var t = 0; t <= 4; t++) { var v = lo + (hi - lo) * t / 4; s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 5) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + fmtY(v) + '</text>'; }
+      M.forEach(function (m, i) { s += '<text class="mlbl" x="' + X(i).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="middle">' + m.label + '</text>'; if (m.label === 'ene' || i === 0) s += '<text class="myear" x="' + X(i).toFixed(1) + '" y="' + (H - 2) + '" text-anchor="middle">' + String(m.anio).slice(2) + '</text>'; });
+      ['hist', 'prev', 'cur'].forEach(function (k) {
+        var seg = [], segs = [];
+        M.forEach(function (m, i) { if (m[k] != null) seg.push(X(i).toFixed(1) + ',' + Y(m[k]).toFixed(1)); else if (seg.length) { segs.push(seg); seg = []; } });
+        if (seg.length) segs.push(seg);
+        segs.forEach(function (sg) { s += sg.length > 1 ? '<polyline class="ev ' + k + '" points="' + sg.join(' ') + '"/>' : ''; if (k !== 'hist') sg.forEach(function (pt) { var c = pt.split(','); s += '<circle class="evp ' + k + '" cx="' + c[0] + '" cy="' + c[1] + '" r="' + (k === 'cur' ? 3.5 : 2.5) + '"/>'; }); });
+      });
+      var u = M[M.length - 1]; if (u.cur != null) s += '<text class="evv" x="' + (X(11) - 4) + '" y="' + (Y(u.cur) - 8).toFixed(1) + '" text-anchor="end">' + fmtY(u.cur) + '</text>';
+      return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Control lechero, últimos 12 meses comparados con el año anterior y el promedio histórico">' + s + '</svg>';
+    }
+    function evolHTML() {
+      var med = state.evMed || 'lv', E = evolucion(med);
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar el respaldo de SysCaw (Ajustes → Actualizar este tambo).</p></section>' : '';
+      var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
+      var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
+      var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
+      var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = (a - b) / b * 100; return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 0) + '%</small>'; };
+      var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td><td>' + d(m.prev) + '</td><td>' + d(m.hist) + '</td></tr>'; }).join('');
+      return '<section class="card fijo"><h2>Últimos 12 meses</h2>' + chips +
+        '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
+        evolChart(E, med) +
+        '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<p class="cap">' + nombre[med] + ' según el control lechero de SysCaw; si hay más de un control en el mes, se promedian. El % compara con el mismo mes del año anterior.</p></section>';
+    }
+    function lecheHTML() {
+      var C = controlLechero(), V = C.V;
+      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
+      var lt = prom(V, function (v) { return v.lt; }), sol = prom(V, function (v) { return v.sol; });
+      var conPrev = V.filter(function (v) { return v.prev && v.prev[1] > 0; });
+      var dif = conPrev.length ? prom(conPrev, function (v) { return v.lt - v.prev[1]; }) : null;
+      var res = '<section class="card fijo"><h2>' + (C.fecha ? 'Control del ' + A.fmt(C.fecha) : 'Último control') + '</h2>' + kv([
+        ['Vacas controladas', nf(V.length)],
+        ['Litros por vaca', nf(lt, 1) + ' L' + (dif != null ? ' <small class="' + (dif >= 0 ? 'up' : 'dn') + '">' + (dif >= 0 ? '+' : '−') + nf(Math.abs(dif), 1) + ' L vs ' + A.fmt(C.ant) + '</small>' : '')],
+        ['Sólidos por vaca', sol != null ? nf(sol, 2) + ' kg <small>' + nf(prom(V, function (v) { return v.sol != null ? v.g : null; }), 2) + '% G · ' + nf(prom(V, function (v) { return v.sol != null ? v.p : null; }), 2) + '% P</small>' : null],
+        ['Días en leche, promedio', nf(prom(V, function (v) { return v.del; }))]
+      ]) + '</section>';
+      var grupo = function (l) { return '<td>' + nf(l.length) + '</td><td>' + nf(prom(l, function (v) { return v.lt; }), 1) + '</td><td>' + (sol != null ? nf(prom(l, function (v) { return v.sol; }), 2) : '–') + '</td>'; };
+      var filas = [['1ª lactancia', function (v) { return v.n === 1; }], ['2ª lactancia', function (v) { return v.n === 2; }], ['3ª o más', function (v) { return v.n >= 3; }], ['0 a 100 días', function (v) { return v.del <= 100; }], ['101 a 200 días', function (v) { return v.del > 100 && v.del <= 200; }], ['Más de 200 días', function (v) { return v.del > 200; }]].map(function (f, i) {
+        var l = V.filter(f[1]); return l.length ? '<tr' + (i === 3 ? ' class="sep"' : '') + '><td>' + f[0] + '</td>' + grupo(l) + '</tr>' : '';
+      }).join('');
+      var tabla = '<section class="card"><h2>Por lactancia y por tercio</h2><table class="tbl"><thead><tr><th></th><th>Vacas</th><th>L/vaca</th><th>Kg sól.</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
+      var caen = conPrev.filter(function (v) { var d = v.prev[1] - v.lt; return d >= 4 && d / v.prev[1] >= 0.2; }).sort(function (x, y) { return (y.prev[1] - y.lt) / y.prev[1] - (x.prev[1] - x.lt) / x.prev[1]; });
+      var caida = C.ant ? '<section class="card"><h2>Cayeron más · ' + caen.length + ' vacas</h2><p class="cap" style="margin:0 0 8px">Bajaron 20% o más (y al menos 4 L) respecto del control del ' + A.fmt(C.ant) + '.</p>' +
+        (caen.length ? caen.slice(0, 40).map(function (v) { var pc = Math.round((v.prev[1] - v.lt) / v.prev[1] * 100); return rowHTML(v.a, { right: '<span class="when late">−' + pc + '%</span>', sub: nf(v.prev[1], 1) + ' → ' + nf(v.lt, 1) + ' L · ' + v.del + ' días en leche' }); }).join('') : '<p class="hint">Ninguna vaca cayó tanto.</p>') + '</section>' : '';
+      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + tabla + caida;
+    }
+
+    /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
+    var PUBKEY = {"kty":"EC","crv":"P-256","x":"-zikzRKxDR2Iml5AuWh6PgDIipwqr1fpHjwct7moAoQ","y":"eWwwwoCwgfWupZrAebMISU7Yx3aUlhEYOoAJ79GFda0"};
+    var ACT = []; try { ACT = JSON.parse(localStorage.getItem('libreta:act')) || []; } catch (e) { ACT = []; }
+    function esVet() { try { return !!localStorage.getItem('libreta:vet'); } catch (e) { return false; } }
+    function habilitado(ids) {
+      if (esVet()) return true;
+      ids = ids || [];
+      if (!ids.length) return ACT.length > 0;
+      return ACT.some(function (x) { return (x.p || []).some(function (q) { return ids.indexOf(q) >= 0; }); });
+    }
+    function bloqueado(nombre) {
+      state.error = 'Este tambo' + (nombre ? ' (' + nombre + ')' : '') + ' no está activado en este teléfono. Pedile el link de activación al Dr. Mauro Torterolo.';
+      render(); toast('Tambo sin activar');
+    }
+    function b64u(bytes) { var s = ''; bytes.forEach(function (b) { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+    function unb64u(t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var s = atob(t), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+    function verificar(token) {
+      try {
+        var parts = token.split('.'), datos = unb64u(parts[0]), firma = unb64u(parts[1]);
+        return crypto.subtle.importKey('jwk', PUBKEY, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']).then(function (k) {
+          return crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, k, firma, datos);
+        }).then(function (ok) { return ok ? JSON.parse(new TextDecoder().decode(datos)) : null; }).catch(function () { return null; });
+      } catch (e) { return Promise.resolve(null); }
+    }
+    function firmar(payload) {
+      var jwk = JSON.parse(new TextDecoder().decode(unb64u(localStorage.getItem('libreta:vet').replace(/^MTV1\./, ''))));
+      var datos = new TextEncoder().encode(JSON.stringify(payload));
+      return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']).then(function (k) {
+        return crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, datos);
+      }).then(function (sig) { return b64u(datos) + '.' + b64u(new Uint8Array(sig)); });
+    }
+    function leerActivacion() {
+      var m = /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
+      if (!m) return Promise.resolve(false);
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+      return verificar(m[1]).then(function (pl) {
+        if (!pl || !pl.p) { toast('El link de activación no es válido.'); return false; }
+        ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]);
+        try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {}
+        toast('Libreta activada para ' + (pl.n || 'este tambo')); state.error = ''; render();
+        return true;
+      });
+    }
+    function modoVet() {
+      if (esVet()) { if (confirm('¿Salir del modo veterinario en este teléfono? Vas a necesitar tu clave para volver.')) { try { localStorage.removeItem('libreta:vet'); } catch (e) {} closeSheet(); toast('Modo veterinario desactivado'); } return; }
+      var k = (prompt('Pegá tu clave de veterinario') || '').trim(); if (!k) return;
+      try { localStorage.setItem('libreta:vet', k); } catch (e) {}
+      firmar({ t: 1 }).then(function (tok) { return verificar(tok); }).then(function (ok) {
+        if (ok) { toast('Modo veterinario activo'); openSheet('Ajustes'); }
+        else { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); }
+      }, function () { try { localStorage.removeItem('libreta:vet'); } catch (e) {} toast('Esa clave no es válida.'); });
+    }
+    function enviarActivacion() {
+      if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
+      firmar({ p: DB.idProd, n: PERFIL.nombre || '', f: today() }).then(function (tok) {
+        // el link siempre lleva a la app oficial, aunque se genere desde la versión de prueba
+        var url = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '') + '#act=' + tok;
+        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
+        if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+      }, function () { toast('No pude generar la activación. Revisá tu clave.'); });
+    }
+
     /* ----- render ----- */
     var NAVS = [
       ['buscar', 'Buscar', '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
       ['tareas', 'Tareas', '<path d="M5 6.5l2 2 3.5-4M5 14.5l2 2 3.5-4M14 7h6M14 15h6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+      ['leche', 'Leche', '<path d="M12 3.5s-6 6.6-6 10.8a6 6 0 0 0 12 0c0-4.2-6-10.8-6-10.8z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>'],
       ['rodeo', 'Rodeo', '<path d="M5 20V11M12 20V4M19 20v-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>']
     ];
     function render() {
@@ -1464,6 +1641,13 @@
         $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = emptyHTML(); return;
       }
+      // sin activación no se muestra ninguna libreta, aunque ya esté cargada en el teléfono
+      if (!habilitado(DB.idProd)) {
+        $('#meta').textContent = 'Libreta sin activar'; nav.hidden = true; $('#ubtn').hidden = true;
+        main.innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Activá tu libreta</h2>' +
+          '<p>Para usar la Libreta de vacas en este teléfono necesitás el link de activación de tu tambo. Pedíselo al Dr. Mauro Torterolo y abrilo desde este mismo navegador.</p></section>';
+        return;
+      }
       nav.hidden = false;
       $('#ubtn').hidden = !DB.unidades;
       if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
@@ -1478,7 +1662,8 @@
       }
       var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
-      else if (state.tab === 'rodeo') main.innerHTML = err + rodeoHTML();
+      else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); }
+      else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); }
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
     }
 
@@ -1497,6 +1682,7 @@
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; try { localStorage.setItem('libreta:fichaab', JSON.stringify(FICHA_AB)); } catch (x) {} return; }
       if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; try { localStorage.setItem('libreta:desp', JSON.stringify(state.desp)); } catch (x) {} render(); return; }
+      if ((el = e.target.closest('[data-ev]'))) { state.evMed = el.dataset.ev; render(); return; }
       if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
@@ -1514,6 +1700,8 @@
       else if (a === 'quitarlogo') { state.draft.logo = ''; paintLogoPreview(); }
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
+      else if (a === 'enviaract') enviarActivacion();
+      else if (a === 'vet') modoVet();
       else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
@@ -1547,6 +1735,7 @@
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
     var listo = loadAll();
+    leerActivacion();
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });

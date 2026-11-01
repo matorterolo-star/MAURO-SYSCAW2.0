@@ -7,7 +7,7 @@
     ctrl: 'CargaCtrlLech.DB', lact: 'TotProdParto.DB', toros: 'Toros General.DB', codigos: 'Codigos Reproductivos.DB',
     bajas: 'Detalle Baja.DB', rodeos: 'NomenclRodeos.DB', elect: 'IdsEnUso.DB'
   };
-  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB' };
+  var OPCIONALES = { tambos: 'Tambos.DB', llaves: 'Llaves.DB', agenda: 'Agenda.DB', maestro: 'MaestroCoLech.DB' };
   var FIELDS = {
     ident: ['ID', 'RP', 'NombreOrigen', 'FNac', 'IDMadre', 'IDPadre', 'IdTipoRodeo', 'UltimoRodeo', 'DescarteCausa', 'FechaBaja', 'ProdVitLitros', 'Tambo', 'BajaCausa', 'BajaDetalle', 'DescarteFecha'],
     serv: ['Vaca', 'Fecha', 'Evento', 'Toro'],
@@ -174,7 +174,18 @@
         if (ll) { if (ll[0] > 0) config.pev = ll[0]; if (ll[1] > 0) config.pevVaq = ll[1]; if (ll[2] > 0) config.secado = ll[2]; }
       } catch (e) {}
     }
-    return { config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
+    // resumen de cada control lechero del tambo (historial completo): fecha, unidad, vacas ordeñadas, litros totales, días en leche promedio
+    var ctrls = [];
+    try {
+      if (files[OPCIONALES.maestro]) PX.readTable(files[OPCIONALES.maestro], { fields: ['Fecha', 'Tambo', 'VacasOrdenadas', 'TotLitros', 'DiasLactProm'], array: true }).rows.forEach(function (r) {
+        var f = okDate(r[0]); if (f && r[2] > 0 && r[3] > 0) ctrls.push([f, r[1] == null ? 0 : r[1], r[2], Math.round(r[3]), r[4] || null]);
+      });
+      ctrls.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+    } catch (e) { ctrls = []; }
+    // número de productor de SysCaw: identifica al tambo para la activación
+    var idProd = [];
+    try { if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: ['IdProd'], array: true }).rows.forEach(function (r) { if (r[0] != null && idProd.indexOf(r[0]) < 0) idProd.push(r[0]); }); } catch (e) { idProd = []; }
+    return { idProd: idProd, ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una
