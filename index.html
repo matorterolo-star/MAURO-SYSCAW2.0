@@ -132,6 +132,8 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .sec{margin-bottom:10px}
 .xlbl{margin:10px 0 6px;font-weight:700;font-size:15px}.xcount{margin:14px 0 12px;font-size:16px}.xcount b{font-size:22px}
 #sheetX .filters{flex-wrap:wrap}
+.xnum{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;font-size:15px}.xnum input{width:74px;min-height:44px;font-size:18px;text-align:center;border:2px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.xtop{width:100%;margin:0 0 12px}
 .infbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:0 0 14px}.infbar .filters{margin:0}
 .ipag{background:#fff;color:#1a1a1a;border:1px solid var(--line);border-radius:8px;padding:18px 18px 10px;margin:0 0 16px;font-family:Calibri,Aptos,"Segoe UI",Arial,sans-serif}
 .iprod{margin:0;text-align:right;font-style:italic;font-size:12px;color:#333}
@@ -466,7 +468,7 @@ details.lac summary .l{flex:1}
 
 <div class="sheet" id="sheetX" hidden>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetXTitle">
-    <h2 id="sheetXTitle">Exportar para tactar</h2>
+    <h2 id="sheetXTitle">Lista de tacto</h2>
     <div id="xopts"></div>
     <div class="sheetbtns">
       <button class="btn primary big" id="btnXok" data-a="xok">Exportar a Excel</button>
