@@ -800,9 +800,13 @@
       };
       fr.readAsDataURL(file);
     }
+    // si en el nombre se pegó un link (por ejemplo el de activación), se usa el link y no queda en el nombre
+    function limpiarNombre(t) { return String(t || '').replace(/https?:\/\/\S*/gi, '').replace(/#act=\S*/g, '').replace(/\s+/g, ' ').trim(); }
     function guardarSheet() {
       if (!state.draft) return;
-      PERFIL = { nombre: DB.fuente === 'syscaw' ? PERFIL.nombre : $('#inNombre').value.trim(), logo: state.draft.logo || '' };
+      var crudo = $('#inNombre').value;
+      if (/#act=/.test(crudo)) leerActivacion(crudo);
+      PERFIL = { nombre: DB.fuente === 'syscaw' ? PERFIL.nombre : limpiarNombre(crudo), logo: state.draft.logo || '' };
       savePerfil(); closeSheet(); render(); toast('Guardado');
     }
 
@@ -2142,6 +2146,13 @@
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
     var listo = loadAll();
+    // arreglo: nombres de tambo que quedaron con un link pegado
+    listo.then(function () {
+      var cambio = false;
+      TAMBOS.lista.forEach(function (t) { var n = limpiarNombre(t.nombre); if (n !== (t.nombre || '')) { t.nombre = n; cambio = true; } });
+      var n2 = limpiarNombre(PERFIL.nombre); if (n2 !== (PERFIL.nombre || '')) { PERFIL.nombre = n2; cambio = true; }
+      if (cambio) { saveTambos(); savePerfil(); render(); }
+    });
     leerActivacion();
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
