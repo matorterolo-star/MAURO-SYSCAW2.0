@@ -284,12 +284,12 @@
         // servicios del ciclo y su resultado
         L.sv.forEach(function (e, i) {
           if (e[0] < cy.ini || e[0] > cy.fin) return;
-          if (L.conc) { if (e[0] === L.conc) { cy.sOk++; C.svs.push({ f: e[0], toro: e[2] || '', r: 'ok' }); } else if (e[0] < L.conc) { cy.sMal++; C.svs.push({ f: e[0], toro: e[2] || '', r: 'mal' }); } return; }
+          if (L.conc) { if (e[0] === L.conc) { cy.sOk++; C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'ok' }); } else if (e[0] < L.conc) { cy.sMal++; C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'mal' }); } return; }
           var luego = L.sv[i + 1] || L.neg.some(function (d) { return d > e[0] && diffDays(d, e[0]) >= 25; });
           // no retorno: solo cuenta si pasaron al menos 24 días desde el servicio (si no, todavía no pudo repetir)
           if (diffDays(ref, e[0]) < 24) return;
           if (luego) cy.sMal++; else cy.sPend++;
-          C.svs.push({ f: e[0], toro: e[2] || '', r: luego ? 'mal' : 'pend' });
+          C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: luego ? 'mal' : 'pend' });
         });
         // servida en un ciclo anterior y todavía sin resultado (sin tacto vacía ni nuevo servicio): no es apta
         // hasta que se la vuelva a servir; si después el tacto da vacía, cuenta para atrás
@@ -1165,34 +1165,25 @@
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
           (alertas.length ? '<p class="ralerta">⚠ Mucha repetición antes del tacto en ' + alertas.join(' y ') + ': la concepción no va a pasar de ese número, y lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>' : '') +
+          torosHTML(C.svs) +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. Va en <b style="color:var(--bad,#c0392b)">rojo</b> cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
-          + torosHTML(C.svs) : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
+          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. Va en <b style="color:var(--bad,#c0392b)">rojo</b> cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
-    // concepción por toro en la temporada: alerta cuando un toro (semen) repite claramente más que el resto
+    // alertas por toro e inseminador en la temporada: aviso solo cuando uno repite claramente más que el resto (sin tabla)
     function torosHTML(svs) {
-      var G = {}, tot = { ok: 0, pend: 0, mal: 0 };
-      svs.forEach(function (s) { var k = (s.toro || 'Sin dato').trim() || 'Sin dato'; G[k] = G[k] || { ok: 0, pend: 0, mal: 0 }; G[k][s.r]++; tot[s.r]++; });
-      var MIN = 10, filas = [], malos = [];
-      Object.keys(G).forEach(function (k) {
-        var g = G[k], n = g.ok + g.pend + g.mal; if (n < MIN || k === 'Sin dato') return;
-        var mx = (g.ok + g.pend) / n * 100, cn = g.ok + g.mal ? g.ok / (g.ok + g.mal) * 100 : null;
-        var rn = tot.ok + tot.pend + tot.mal - n, rmx = rn ? (tot.ok - g.ok + tot.pend - g.pend) / rn * 100 : null;
-        var mal = rmx != null && n >= 20 && rn >= 20 && mx < rmx - 10;
-        if (mal) malos.push(k + ' (' + Math.round(mx) + '% contra ' + Math.round(rmx) + '% del resto)');
-        filas.push({ k: k, n: n, g: g, mx: mx, cn: cn, mal: mal });
-      });
-      if (!filas.length) return '';
-      filas.sort(function (x, y) { return y.n - x.n; });
-      var pc = function (v) { return v == null ? '–' : Math.round(v) + '%'; };
-      return '<h3 class="rsub">Concepción por toro (esta temporada)</h3>' +
-        (malos.length ? '<p class="ralerta">⚠ Repite más que el resto: ' + malos.map(esc).join('; ') + '.</p>' : '') +
-        '<table class="tbl rtbl ttbl"><thead><tr><th>Toro</th><th>Serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
-        filas.map(function (f) {
-          return '<tr><td>' + esc(f.k) + '</td><td>' + f.n + '</td><td>' + pc(f.cn) + '<small>' + f.g.ok + '/' + (f.g.ok + f.g.mal) + '</small></td>' +
-            '<td class="cmax' + (f.mal ? ' alerta' : '') + '">' + (f.mal ? '⚠ ' : '') + pc(f.mx) + '<small>' + (f.g.ok + f.g.pend) + '/' + f.n + '</small></td></tr>';
-        }).join('') + '</tbody></table>' +
-        '<p class="cap">Toros con ' + MIN + ' servicios o más en vacas. Va en <b style="color:#c0392b">rojo</b> cuando el toro tiene 20 servicios o más y su concepción máxima queda más de 10 puntos por debajo de la del resto de los toros juntos (con menos servicios la diferencia puede ser casualidad).</p>';
+      var grupo = function (campo, quien) {
+        var G = {}, tot = { ok: 0, pend: 0, mal: 0 }, out = [];
+        svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; G[k] = G[k] || { ok: 0, pend: 0, mal: 0 }; G[k][s.r]++; tot[s.r]++; });
+        Object.keys(G).forEach(function (k) {
+          var g = G[k], n = g.ok + g.pend + g.mal, rn = tot.ok + tot.pend + tot.mal - n;
+          if (n < 20 || rn < 20) return;
+          var mx = (g.ok + g.pend) / n * 100, rmx = (tot.ok - g.ok + tot.pend - g.pend) / rn * 100;
+          if (mx < rmx - 10) out.push('<p class="ralerta">⚠ ' + quien + ' <b>' + esc(k) + '</b> repite más que el resto: ' + Math.round(mx) + '% de concepción máxima contra ' + Math.round(rmx) + '% del resto (' + n + ' servicios en la temporada).</p>');
+        });
+        return out.join('');
+      };
+      return grupo('toro', 'El toro') + grupo('ins', 'El inseminador');
     }
     // Rodeo: vacas en ordeñe y secas, promedio diario de los 12 meses que terminan en el mes elegido
     var VOVSC = { k: null, r: null };
