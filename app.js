@@ -1157,7 +1157,11 @@
     var VOVSC = { k: null, r: null };
     function vovsHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
-      var ref = DB.fecha || today(), maxMes = ref.slice(0, 7), fin = state.vomes && state.vomes <= maxMes ? state.vomes : maxMes;
+      var ref = DB.fecha || today(), maxMes = ref.slice(0, 7);
+      // las bajas solo se guardan de los últimos 2 años: no dejar elegir meses donde el rodeo quedaría incompleto
+      var dh = DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730), minMes = '';
+      if (dh && dh > '0000') { var y0 = +dh.slice(0, 4), m0 = +dh.slice(5, 7) + (dh.slice(8, 10) === '01' ? 0 : 1) + 11; while (m0 > 12) { m0 -= 12; y0++; } minMes = y0 + '-' + pad2(m0); if (minMes > maxMes) minMes = maxMes; }
+      var fin = state.vomes && state.vomes <= maxMes && (!minMes || state.vomes >= minMes) ? state.vomes : maxMes;
       var y = +fin.slice(0, 4), m = +fin.slice(5, 7), M = [];
       for (var i = 11; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } M.push({ key: yy + '-' + pad2(mm), label: A.MESES[mm - 1], anio: yy }); }
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + fin;
@@ -1179,7 +1183,7 @@
       var filas = M.map(function (mo, i) { var o = r0(R.vo[i]), se = r0(R.vs[i]); return '<tr><td>' + mo.label + ' ' + String(mo.anio).slice(2) + '</td><td>' + (o != null ? o : '–') + '</td><td>' + (se != null ? se : '–') + '</td><td>' + (o != null ? o + (se || 0) : '–') + '</td><td>' + (o != null && o + se ? pct(o, o + se) : '–') + '</td></tr>'; }).reverse().join('');
       var ao = av(R.vo), as = av(R.vs);
       return '<section class="card"><h2>Vacas en ordeñe y secas</h2>' +
-        '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '" max="' + maxMes + '"></label>' +
+        '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '"' + (minMes ? ' min="' + minMes + '"' : '') + ' max="' + maxMes + '"></label>' +
         '<div class="kpis"><div><b>' + (ao != null ? nf(ao) : '–') + '</b><span>En ordeñe, promedio</span></div><div><b>' + (as != null ? nf(as) : '–') + '</b><span>Secas, promedio</span></div><div class="tp"><b>' + (ao != null && ao + as ? pct(ao, ao + as) : '–') + '</b><span>En ordeñe / total</span></div></div>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Vacas en ordeñe y secas por mes">' + s + '</svg>' +
