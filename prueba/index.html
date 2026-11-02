@@ -241,6 +241,10 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .rtbl td small{display:block;font-size:11.5px;color:var(--muted);font-weight:500}
 .rtbl td:first-child small{display:inline}
 .rtbl tr.abierto td{color:var(--muted)}
+.rtbl tr.abierto td.cmax{color:var(--ink);font-weight:700}
+.rtbl td.alerta,.rtbl tr.abierto td.alerta{color:#c0392b;font-weight:800}
+.ralerta{margin:10px 0 4px;padding:10px 12px;border-radius:12px;background:#fdecea;color:#8e1f14;font-weight:700;font-size:14.5px}
+@media (prefers-color-scheme:dark){.ralerta{background:#4a1d18;color:#ffd4cf}.rtbl td.alerta,.rtbl tr.abierto td.alerta{color:#ff8a7a}}
 .rtbl td.enc{text-align:center;font-style:italic;font-size:13.5px}
 .secfecha{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-weight:700;font-size:15px;margin:6px 0 4px}
 .secfecha input{min-height:46px;min-width:220px;font-size:17px;font-weight:600;padding:6px 12px;border:2px solid var(--navy);border-radius:12px;background:var(--surface);color:var(--ink)}
@@ -482,10 +486,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=p79"></script>
-<script src="syscaw.js?v=p79"></script>
+<script src="paradox.js?v=p80"></script>
+<script src="syscaw.js?v=p80"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p79"></script>
+<script src="app.js?v=p80"></script>
 </body>
 </html>
