@@ -2047,10 +2047,14 @@
         var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
           .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
         var suma = function (C) { var T = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0, n: 0 }; C.forEach(function (c) { if (!c.cerrado) return; T.n++; ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { T[k] += c[k]; }); }); return T; };
-        var C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, ref) : [];
+        // temporada de servicios: 9 meses desde el inicio (ej. 1/5 a 31/1); lo de afuera no cuenta
+        var finTemp = function (d) { var y = +d.slice(0, 4), m = +d.slice(5, 7) + 9; if (m > 12) { y++; m -= 12; } return A.addDays(y + '-' + (m < 10 ? '0' : '') + m + '-01', +d.slice(8, 10) - 2); };
+        var finAct = finTemp(ini), C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, finAct < ref ? finAct : ref) : [];
         r.ini = ini; r.ref = ref; r.T = suma(C);
-        var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4);
-        if (iniAnt >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) r.TA = suma(A.ciclos21(an, esPren, iniAnt, pev, A.addDays(ini, -1)));
+        var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4), finAnt = finTemp(iniAnt);
+        if (finAnt >= ini) finAnt = A.addDays(ini, -1);
+        r.iniAnt = iniAnt; r.finAnt = finAnt;
+        if (iniAnt >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) r.TA = suma(A.ciclos21(an, esPren, iniAnt, pev, finAnt));
         r.vacas = DB.animales.filter(function (a) { return !a.cat || a.cat === 'vaca' || a.cat === 'seca'; }).length;
         var D = infDatos('12'); r.ips = D.ips; r.ipp = D.ipp; r.spp = D.spp; r.pg = D.pg; r.vo = D.avo; r.vs = D.avs;
         r.mk = D.M.map(function (m) { return m.key; }); r.pv = D.pv; r.pq = D.pq; r.best = D.best;
@@ -2106,7 +2110,7 @@
           return '<tr>' + nom(f) + '<td>' + v(f.vacas) + '</td><td' + bajo(ts, pTS) + '><b>' + p(f.T.serv, f.T.aptas) + '</b><small>' + f.T.n + ' ciclos</small></td><td' + bajo(tc, pTC) + '>' + p(f.T.sOk, f.T.sOk + f.T.sMal) + '</td><td' + bajo(tpp, pTP) + '><b>' + p(f.T.pren, f.T.aptas) + '</b></td><td>' + (f.TA ? p(f.TA.pren, f.TA.aptas) : '–') + '</td></tr>';
         }).join('') +
         '<tr class="ptot"><td>Población</td><td>' + nf(vac) + '</td><td><b>' + p(Tt.serv, Tt.aptas) + '</b></td><td>' + p(Tt.sOk, Tt.sOk + Tt.sMal) + '</td><td><b>' + p(Tt.pren, Tt.aptas) + '</b></td><td>' + p(TAt.pren, TAt.aptas) + '</td></tr></tbody></table></div>' +
-        '<p class="cap">En <b class="pbajo">rojo</b>, más de 5 puntos por debajo del promedio de la población. Cada tambo usa su propio inicio de servicios y espera voluntaria (los de la pestaña Rodeo). Respaldo en rojo: tiene más de 60 días.</p></section>';
+        '<p class="cap">En <b class="pbajo">rojo</b>, más de 5 puntos por debajo del promedio de la población. Cada tambo usa su propio inicio de servicios y espera voluntaria (los de la pestaña Rodeo). Las temporadas cuentan 9 meses desde ese inicio (por ejemplo, de mayo a enero); <b>Preñez temp. anterior</b> es la misma cuenta (preñadas / aptas, sumando los ciclos cerrados) en la temporada del año pasado. Respaldo en rojo: tiene más de 60 días.</p></section>';
       var av = function (k) { var l = F.map(function (f) { return f[k]; }).filter(function (x) { return x != null && !isNaN(x); }); return l.length ? l.reduce(function (s, x) { return s + x; }, 0) / l.length : null; };
       var R2 = F.slice().sort(function (a, b) { return (a.ips || 999) - (b.ips || 999); });
       var inter = '<section class="card"><h2>Intervalos (últimos 12 meses)</h2><div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th><th>Parto a 1er servicio</th><th>Parto a preñez</th><th>Servicios por preñez</th><th>% preñez general</th></tr></thead><tbody>' +
