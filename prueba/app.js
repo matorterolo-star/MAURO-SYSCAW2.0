@@ -864,7 +864,7 @@
       return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá el respaldo</h2>' +
         '<p>Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
-        '<button class="btn primary big" data-a="load">Elegir archivo</button>' + (!esVet() && !ACT.length ? '<button class="btn big" data-a="pegaract" style="margin-top:10px">Pegar link de activación</button>' : '') + '</section>';
+        '<button class="btn primary big" data-a="load">Elegir archivo</button>' + (!esVet() && !ACT.length ? '<p style="margin:18px 0 8px"><b>¿Todavía no activaste?</b> Escribí tu código:</p>' + codigoHTML() : '') + '</section>';
     }
     // Para venta: descarte programado + más de 300 días en leche + menos de 15 litros en el último control
     var VTA_DEL = 300, VTA_LTS = 15;
@@ -1666,6 +1666,29 @@
         return crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k, datos);
       }).then(function (sig) { return b64u(datos) + '.' + b64u(new Uint8Array(sig)); });
     }
+    // código corto de activación: número de productor de SysCaw + 6 dígitos de control (distintos para productor y operario)
+    var ACT_K = 'gBCSBOVpmL8OCCBwM2XqdlG8';
+    function digitos6(msg) {
+      return crypto.subtle.importKey('raw', new TextEncoder().encode(ACT_K), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+        .then(function (key) { return crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg)); })
+        .then(function (s) { var d = new DataView(s); return ('000000' + (d.getUint32(0) % 1000000)).slice(-6); });
+    }
+    function codigoPara(p, rol) { return digitos6((rol === 'op' ? 'op' : 'prod') + '|' + p).then(function (c) { return p + ' ' + c; }); }
+    function activarCodigo(texto) {
+      var s = String(texto || ''), m = s.match(/\*([\d\s]+)\*/); s = m ? m[1] : s.split(/c[oó]digo:?/i).pop(); var d = s.replace(/\D/g, '');
+      if (d.length < 7) { toast('Revisá el código: tiene que tener al menos 7 números.'); return Promise.resolve(false); }
+      var p = +d.slice(0, -6), c = d.slice(-6);
+      return Promise.all([digitos6('prod|' + p), digitos6('op|' + p)]).then(function (r) {
+        var rol = r[0] === c ? 'prod' : r[1] === c ? 'op' : null;
+        if (!rol) { toast('Ese código no es válido. Revisalo o pedíselo de nuevo al Dr. Torterolo.'); return false; }
+        var pl = { p: [p], n: PERFIL.nombre || '', f: today() }; if (rol === 'op') pl.r = 'op';
+        ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]);
+        try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {}
+        state.error = ''; render(); toast('¡Listo! Libreta activada' + (rol === 'op' ? ' (operario)' : ''));
+        return true;
+      });
+    }
+    function pedirCodigo() { var t = prompt('Escribí el código de activación que te mandó el Dr. Mauro Torterolo'); if (t) activarCodigo(t); }
     function leerActivacion(texto) {
       var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
       if (!m) { if (texto != null) toast('No encontré un link de activación en lo que pegaste.'); return Promise.resolve(false); }
@@ -1679,6 +1702,11 @@
       });
     }
     // pegar el link dentro de la app (sirve cuando el link se abrió en otro navegador, o en el ícono del escritorio del iPhone)
+    function codigoHTML() {
+      return '<input id="actCod" class="actcod" type="text" inputmode="numeric" autocomplete="off" placeholder="Código" aria-label="Código de activación">' +
+        '<button class="btn primary big" data-a="actcod">Activar</button>' +
+        '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Te mandaron un link? Pegalo acá</button>';
+    }
     function pegarActivacion() {
       var pedir = function (pre) { var t = prompt('Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) leerActivacion(t); };
       if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
@@ -1705,14 +1733,16 @@
     }
     function enviarActivacionRol(rol) {
       $('#sheetX').hidden = true;
-      var pl = { p: DB.idProd, n: PERFIL.nombre || '', f: today() }; if (rol === 'op') pl.r = 'op';
-      firmar(pl).then(function (tok) {
-        // el link siempre lleva a la app oficial, aunque se genere desde la versión de prueba
-        var url = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '') + '#act=' + tok;
-        var txt = 'Hola. Este es tu link para activar la Libreta de vacas de *' + (PERFIL.nombre || 'tu tambo') + '*' + (rol === 'op' ? ' (operario)' : '') + '. Abrilo desde el celular donde usás la app:\n' + url + '\n\nDr. Mauro Torterolo';
+      var base = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '');
+      codigoPara(DB.idProd[0], rol).then(function (cod) {
+        var txt = 'Hola. Para usar la *Libreta de vacas* de ' + (PERFIL.nombre || 'tu tambo') + (rol === 'op' ? ' (operario)' : '') + ':\n\n' +
+          '1. Entrá acá: ' + base + '\n' +
+          '2. Escribí este código: *' + cod + '*\n\nDr. Mauro Torterolo';
         if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
-      }, function () { toast('No pude generar la activación. Revisá tu clave.'); });
+        toast('Código: ' + cod);
+      }, function () { toast('No pude generar el código.'); });
     }
+
 
     /* ----- informe anual (solo modo veterinario), con el formato de los informes del Dr. Torterolo; se guarda como PDF desde Imprimir ----- */
     function infMeses(modo) {
@@ -2031,9 +2061,8 @@
       if (!habilitado(DB.idProd)) {
         $('#meta').textContent = 'Libreta sin activar'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Activá tu libreta</h2>' +
-          '<p>Para usar la Libreta de vacas en este teléfono necesitás el link de activación de tu tambo. Pedíselo al Dr. Mauro Torterolo.</p>' +
-          '<p><b>¿Ya lo tenés?</b> Copiá el link desde WhatsApp (mantené apretado el mensaje → Copiar) y tocá el botón.</p>' +
-          '<button class="btn primary big" data-a="pegaract">Pegar link de activación</button></section>';
+          '<p>Escribí el código de activación que te mandó el Dr. Mauro Torterolo.</p>' +
+          codigoHTML() + '</section>';
         return;
       }
       var op = esOperario();
@@ -2099,6 +2128,8 @@
       else if (a === 'actop') enviarActivacionRol('op');
       else if (a === 'vet') modoVet();
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
+      else if (a === 'actcod') { var ic = $('#actCod'); activarCodigo(ic ? ic.value : ''); }
+      else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
       else if (a === 'xok') exportarTactar();
       else if (a === 'xshare') xCompartir();
@@ -2135,6 +2166,7 @@
         if (res.length) { e.target.blur(); openFicha(res[0].rp); }
       }
       if (e.target.id === 'inNombre' && e.key === 'Enter') guardarSheet();
+      if (e.target.id === 'actCod' && e.key === 'Enter') activarCodigo(e.target.value);
       if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
       if (e.key === 'Escape' && !$('#sheetT').hidden) closeSheetT();
       if (e.key === 'Escape' && !$('#sheetU').hidden) cerrarUnidad(null);
