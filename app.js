@@ -772,6 +772,7 @@
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
+      ['#btnPob', '#btnBase', '#btnBaseIn'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
       $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return (x.n || ('productor ' + x.p.join(', '))) + (x.r === 'op' ? ' (operario)' : ''); }).join(' · ') : 'Sin activar';
@@ -815,7 +816,7 @@
 
     /* ----- navegación ----- */
     function setTab(t) {
-      state.tab = t; state.rp = null; state.informe = false;
+      state.tab = t; state.rp = null; state.informe = false; state.pobl = false;
       try { if (location.hash) location.hash = ''; } catch (e) {}
       render(); window.scrollTo(0, 0);
     }
@@ -1985,6 +1986,159 @@
       setTimeout(function () { window.print(); setTimeout(function () { document.title = t; }, 500); }, 50);
     }
 
+    /* ----- Población (solo veterinario): todos los tambos guardados en este equipo ----- */
+    var POB = null;
+    // resumen de un tambo: usa las mismas cuentas que la app, poniendo ese tambo como activo un momento
+    function pobResumen(t, o) {
+      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre' };
+      if (!o || o.fuente !== 'syscaw' || !o.hist) { r.sin = true; return r; }
+      try {
+        TAMBOS.activo = t.id; DB = o; DB.sel = null; aplicarUnidad(); state.ini21 = null; state.pev = null;
+        var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
+        var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
+          .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
+        var suma = function (C) { var T = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0, n: 0 }; C.forEach(function (c) { if (!c.cerrado) return; T.n++; ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { T[k] += c[k]; }); }); return T; };
+        var C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, ref) : [];
+        r.ini = ini; r.ref = ref; r.T = suma(C); r.svs = C.svs || [];
+        var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4);
+        if (iniAnt >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) r.TA = suma(A.ciclos21(an, esPren, iniAnt, pev, A.addDays(ini, -1)));
+        r.vacas = DB.animales.filter(function (a) { return !a.cat || a.cat === 'vaca' || a.cat === 'seca'; }).length;
+        var D = infDatos('12'); r.ips = D.ips; r.ipp = D.ipp; r.spp = D.spp; r.pg = D.pg; r.vo = D.avo; r.vs = D.avs;
+        // leche: último control y promedio de los últimos 12 meses (litros por vaca en ordeñe)
+        var porF = {}; (DB.ctrls || []).forEach(function (c) { var x = porF[c[0]] || (porF[c[0]] = { v: 0, l: 0, d: 0 }); x.v += c[2] || 0; x.l += c[3] || 0; x.d += (c[4] || 0) * (c[2] || 0); });
+        var fs = Object.keys(porF).filter(function (f) { return porF[f].v > 0; }).sort();
+        if (fs.length) {
+          var u = porF[fs[fs.length - 1]]; r.lFecha = fs[fs.length - 1]; r.lv = u.l / u.v; r.del = u.d ? u.d / u.v : null;
+          var d12 = A.addDays(r.lFecha, -365), l12 = fs.filter(function (f) { return f > d12; }).map(function (f) { return porF[f].l / porF[f].v; });
+          r.lv12 = l12.reduce(function (s, x) { return s + x; }, 0) / l12.length;
+        }
+      } catch (e) { r.error = String(e && e.message || e); }
+      finally { DB = g.DB; TAMBOS.activo = g.act; state.ini21 = g.ini21; state.pev = g.pev; }
+      return r;
+    }
+    function pobCalc() {
+      POB = { cargando: true }; render();
+      var L = TAMBOS.lista.slice(), F = [], i = 0;
+      var paso = function () {
+        if (i >= L.length) {
+          var G = function (campo) {
+            var M = {};
+            F.forEach(function (f) { (f.svs || []).forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; var m = M[k] || (M[k] = { ok: 0, mal: 0, pend: 0, t: {} }); m[s.r]++; m.t[f.nombre] = 1; }); });
+            var tot = { ok: 0, mal: 0, pend: 0 }; Object.keys(M).forEach(function (k) { tot.ok += M[k].ok; tot.mal += M[k].mal; tot.pend += M[k].pend; });
+            return Object.keys(M).map(function (k) {
+              var m = M[k], n = m.ok + m.mal + m.pend, rn = tot.ok + tot.mal + tot.pend - n;
+              var mx = n ? (m.ok + m.pend) / n * 100 : null, rmx = rn ? (tot.ok - m.ok + tot.pend - m.pend) / rn * 100 : null;
+              return { k: k, n: n, ok: m.ok, mal: m.mal, pend: m.pend, tambos: Object.keys(m.t), cn: m.ok + m.mal ? m.ok / (m.ok + m.mal) * 100 : null, mx: mx, rmx: rmx, alerta: n >= 20 && rn >= 20 && mx < rmx - 10 };
+            }).filter(function (x) { return x.n >= 20; }).sort(function (a, b) { return b.n - a.n; });
+          };
+          POB = { filas: F, toros: G('toro'), ins: G('ins'), hecho: Date.now() }; render(); return;
+        }
+        var t = L[i++]; POB.prog = i + ' de ' + L.length + ': ' + (t.nombre || ''); render();
+        leerDB(t.id).then(function (o) { F.push(pobResumen(t, o)); setTimeout(paso, 30); }, function () { setTimeout(paso, 30); });
+      };
+      setTimeout(paso, 30);
+    }
+    function abrirPoblacion() {
+      if (!esVet()) return;
+      closeSheet(); state.pobl = true; state.informe = false; pobCalc(); window.scrollTo(0, 0);
+    }
+    function pobHTML() {
+      var bar = '<div class="infbar"><button class="btn" data-a="pobcerrar">Volver</button><button class="btn" data-a="pobcalc">Recalcular</button></div>';
+      if (!POB || POB.cargando) return bar + '<section class="card"><h2>Población de tambos</h2><p class="hint">Calculando… ' + esc(POB && POB.prog || '') + '</p></section>';
+      var F = POB.filas.filter(function (f) { return !f.sin && !f.error; }), sin = POB.filas.filter(function (f) { return f.sin || f.error; });
+      var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; }, v = function (x, d) { return x == null || isNaN(x) ? '–' : nf(x, d || 0); };
+      var hoy = today(), viejo = function (f) { return A.diffDays(hoy, f.ref) > 60; };
+      var Tt = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 }, TAt = { aptas: 0, pren: 0 }, vac = 0;
+      F.forEach(function (f) { ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { Tt[k] += f.T[k]; }); if (f.TA) { TAt.aptas += f.TA.aptas; TAt.pren += f.TA.pren; } vac += f.vacas || 0; });
+      var tp = function (f) { return f.T.aptas ? f.T.pren / f.T.aptas : -1; };
+      var srt = state.pobSort || 'tp', key = { tp: tp, ts: function (f) { return f.T.aptas ? f.T.serv / f.T.aptas : -1; }, tc: function (f) { return f.T.sOk + f.T.sMal ? f.T.sOk / (f.T.sOk + f.T.sMal) : -1; }, vacas: function (f) { return f.vacas || 0; } }[srt] || tp;
+      var R = F.slice().sort(function (a, b) { return key(b) - key(a); });
+      var th = function (k, t) { return '<th><button class="psort" data-ps="' + k + '" aria-pressed="' + (srt === k) + '">' + t + (srt === k ? ' ▾' : '') + '</button></th>'; };
+      var bajo = function (x, prom) { return x != null && prom != null && x < prom - 5 ? ' class="pbajo"' : ''; };
+      var pTS = Tt.aptas ? Tt.serv / Tt.aptas * 100 : null, pTC = Tt.sOk + Tt.sMal ? Tt.sOk / (Tt.sOk + Tt.sMal) * 100 : null, pTP = Tt.aptas ? Tt.pren / Tt.aptas * 100 : null;
+      var nom = function (f) { return '<td class="pnom">' + esc(f.nombre) + '<small' + (viejo(f) ? ' class="pbajo"' : '') + '>respaldo ' + A.fmt(f.ref) + '</small></td>'; };
+      var rep = '<section class="card"><h2>Reproducción: temporada actual</h2>' +
+        '<div class="kpis"><div><b>' + v(pTS) + '%</b><span>Tasa de servicio</span></div><div><b>' + v(pTC) + '%</b><span>Concepción</span></div><div class="tp"><b>' + v(pTP) + '%</b><span>Tasa de preñez</span></div></div>' +
+        '<p class="cap">Promedio de la población: ' + F.length + ' tambos, ' + nf(vac) + ' vacas, ciclos de 21 días cerrados. Tocá un título para ordenar.</p>' +
+        '<div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th>' + th('vacas', 'Vacas') + th('ts', 'Servicio') + th('tc', 'Concep.') + th('tp', 'Preñez') + '<th>Preñez temp. anterior</th></tr></thead><tbody>' +
+        R.map(function (f) {
+          var ts = f.T.aptas ? f.T.serv / f.T.aptas * 100 : null, tc = f.T.sOk + f.T.sMal ? f.T.sOk / (f.T.sOk + f.T.sMal) * 100 : null, tpp = f.T.aptas ? f.T.pren / f.T.aptas * 100 : null;
+          return '<tr>' + nom(f) + '<td>' + v(f.vacas) + '</td><td' + bajo(ts, pTS) + '><b>' + p(f.T.serv, f.T.aptas) + '</b><small>' + f.T.n + ' ciclos</small></td><td' + bajo(tc, pTC) + '>' + p(f.T.sOk, f.T.sOk + f.T.sMal) + '</td><td' + bajo(tpp, pTP) + '><b>' + p(f.T.pren, f.T.aptas) + '</b></td><td>' + (f.TA ? p(f.TA.pren, f.TA.aptas) : '–') + '</td></tr>';
+        }).join('') +
+        '<tr class="ptot"><td>Población</td><td>' + nf(vac) + '</td><td><b>' + p(Tt.serv, Tt.aptas) + '</b></td><td>' + p(Tt.sOk, Tt.sOk + Tt.sMal) + '</td><td><b>' + p(Tt.pren, Tt.aptas) + '</b></td><td>' + p(TAt.pren, TAt.aptas) + '</td></tr></tbody></table></div>' +
+        '<p class="cap">En <b class="pbajo">rojo</b>, más de 5 puntos por debajo del promedio de la población. Cada tambo usa su propio inicio de servicios y espera voluntaria (los de la pestaña Rodeo). Respaldo en rojo: tiene más de 60 días.</p></section>';
+      var av = function (k) { var l = F.map(function (f) { return f[k]; }).filter(function (x) { return x != null && !isNaN(x); }); return l.length ? l.reduce(function (s, x) { return s + x; }, 0) / l.length : null; };
+      var R2 = F.slice().sort(function (a, b) { return (a.ips || 999) - (b.ips || 999); });
+      var inter = '<section class="card"><h2>Intervalos (últimos 12 meses)</h2><div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th><th>Parto a 1er servicio</th><th>Parto a preñez</th><th>Servicios por preñez</th><th>% preñez general</th></tr></thead><tbody>' +
+        R2.map(function (f) { return '<tr>' + nom(f) + '<td>' + v(f.ips) + '</td><td>' + v(f.ipp) + '</td><td>' + v(f.spp, 1) + '</td><td>' + (f.pg == null ? '–' : v(f.pg) + '%') + '</td></tr>'; }).join('') +
+        '<tr class="ptot"><td>Promedio</td><td>' + v(av('ips')) + '</td><td>' + v(av('ipp')) + '</td><td>' + v(av('spp'), 1) + '</td><td>' + (av('pg') == null ? '–' : v(av('pg')) + '%') + '</td></tr></tbody></table></div><p class="cap">Días promedio. Mismas cuentas que el informe anual.</p></section>';
+      var R3 = F.slice().sort(function (a, b) { return (b.lv || 0) - (a.lv || 0); });
+      var po = function (f) { return f.vo != null && f.vo + f.vs ? f.vo / (f.vo + f.vs) * 100 : null; };
+      var lec = '<section class="card"><h2>Leche y rodeo</h2><div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th><th>Litros/vaca último control</th><th>Litros/vaca 12 meses</th><th>Días en leche</th><th>Vacas en ordeñe</th><th>% en ordeñe</th></tr></thead><tbody>' +
+        R3.map(function (f) { return '<tr>' + nom(f) + '<td><b>' + v(f.lv, 1) + '</b><small>' + (f.lFecha ? A.fmt(f.lFecha) : '') + '</small></td><td>' + v(f.lv12, 1) + '</td><td>' + v(f.del) + '</td><td>' + v(f.vo) + '</td><td>' + (po(f) == null ? '–' : v(po(f)) + '%') + '</td></tr>'; }).join('') +
+        '<tr class="ptot"><td>Promedio</td><td>' + v(av('lv'), 1) + '</td><td>' + v(av('lv12'), 1) + '</td><td>' + v(av('del')) + '</td><td>' + v(av('vo')) + '</td><td>–</td></tr></tbody></table></div><p class="cap">Vacas en ordeñe y % en ordeñe: promedio diario de los últimos 12 meses.</p></section>';
+      var grp = function (titulo, L, quien) {
+        if (!L.length) return '<section class="card"><h2>' + titulo + '</h2><p class="hint">Todavía no hay ' + quien + ' con 20 servicios o más en la temporada.</p></section>';
+        var al = L.filter(function (x) { return x.alerta; });
+        return '<section class="card"><h2>' + titulo + '</h2>' +
+          al.map(function (x) { return '<p class="ralerta">⚠ <b>' + esc(x.k) + '</b> repite más que el resto: ' + Math.round(x.mx) + '% de concepción máxima contra ' + Math.round(x.rmx) + '% del resto.</p>'; }).join('') +
+          '<div class="pscroll"><table class="tbl ptbl"><thead><tr><th>' + (quien === 'toros' ? 'Toro' : 'Inseminador') + '</th><th>Tambos</th><th>Servicios</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
+          L.map(function (x) { return '<tr><td class="pnom">' + esc(x.k) + '</td><td>' + x.tambos.length + '<small>' + esc(x.tambos.join(', ')) + '</small></td><td>' + x.n + '</td><td>' + (x.cn == null ? '–' : Math.round(x.cn) + '%') + '<small>' + x.ok + '/' + (x.ok + x.mal) + '</small></td><td' + (x.alerta ? ' class="pbajo"' : '') + '><b>' + (x.alerta ? '⚠ ' : '') + Math.round(x.mx) + '%</b><small>' + (x.ok + x.pend) + '/' + x.n + '</small></td></tr>'; }).join('') +
+          '</tbody></table></div><p class="cap">Servicios en vacas de la temporada actual de cada tambo, con 20 servicios o más. Conc. máx.: cuenta como preñadas las que no repitieron (servicios de 24 días o más). Alerta: más de 10 puntos por debajo del resto de la población.</p></section>';
+      };
+      return '<div class="pob">' + bar +
+        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos con respaldo de SysCaw en este equipo' + (sin.length ? ' · sin respaldo de SysCaw: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
+        '<div class="pobgrid">' + rep + inter + lec + grp('Toros en la población', POB.toros, 'toros') + grp('Inseminadores', POB.ins, 'inseminadores') + '</div></div>';
+    }
+    /* copia de la base: todos los tambos de este equipo en un solo archivo (para pasar a la computadora o guardar) */
+    function exportarBase() {
+      closeSheet(); toast('Preparando la copia…');
+      Promise.all(TAMBOS.lista.map(function (t) { return leerDB(t.id); })).then(function (dbs) {
+        var obj = { tipo: 'libreta-base', v: 1, fecha: today(), tambos: TAMBOS.lista, dbs: {}, ps: {} };
+        TAMBOS.lista.forEach(function (t, i) { if (dbs[i]) obj.dbs[t.id] = dbs[i]; });
+        try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (/^libreta:[a-z0-9]+:t[a-z0-9]+$/i.test(k)) obj.ps[k] = localStorage.getItem(k); } } catch (e) {}
+        var blob = new Blob([JSON.stringify(obj)], { type: 'application/json' }), nombre = 'base-tambos-' + today();
+        var fin = function (b, ext) {
+          var file = null; try { file = new File([b], nombre + ext, { type: ext === '.gz' ? 'application/gzip' : 'application/json' }); } catch (e) {}
+          var bajar = function () { var u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = nombre + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Guardada en Descargas: ' + nombre + ext); };
+          if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') bajar(); });
+          else bajar();
+        };
+        if (root.CompressionStream) new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob().then(function (b) { fin(b, '.gz'); }, function () { fin(blob, '.json'); });
+        else fin(blob, '.json');
+      }, function () { toast('No pude preparar la copia.'); });
+    }
+    function importarBase(file) {
+      if (!file) return;
+      file.arrayBuffer().then(function (buf) {
+        var b = new Uint8Array(buf);
+        if (b[0] === 0x1f && b[1] === 0x8b) {
+          if (!root.DecompressionStream) throw new Error('Este navegador no puede abrir el archivo. Usá Chrome.');
+          return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+        }
+        return new TextDecoder().decode(b);
+      }).then(function (txt) {
+        var o = JSON.parse(txt);
+        if (!o || o.tipo !== 'libreta-base' || !Array.isArray(o.tambos)) throw new Error('Ese archivo no es una copia de la base de tambos.');
+        var nuevos = 0, act = 0, igual = 0, tareas = [];
+        o.tambos.forEach(function (t) {
+          var db = o.dbs && o.dbs[t.id]; if (!db) return;
+          var ex = null; TAMBOS.lista.forEach(function (x) { if (x.id === t.id) ex = x; }); if (!ex) ex = tamboPorNombre(t.nombre);
+          if (ex && ex.fecha && t.fecha && ex.fecha >= t.fecha) { igual++; return; }
+          if (!ex) { ex = { id: t.id, nombre: t.nombre, logo: t.logo || '' }; TAMBOS.lista.push(ex); nuevos++; } else act++;
+          ex.n = t.n; ex.fuente = t.fuente; ex.fecha = t.fecha; if (!ex.logo && t.logo) ex.logo = t.logo;
+          tareas.push(idbSet(dbKey(ex.id), db));
+          Object.keys(o.ps || {}).forEach(function (k) { if (k.slice(-(t.id.length + 1)) === ':' + t.id) { var nk = k.slice(0, -t.id.length) + ex.id; try { if (localStorage.getItem(nk) == null) localStorage.setItem(nk, o.ps[k]); } catch (e) {} } });
+        });
+        return Promise.all(tareas).then(function () {
+          saveTambos();
+          var ir = tamboAct() && DB.animales.length ? Promise.resolve() : abrirTambo((tamboAct() || TAMBOS.lista[0]).id);
+          return ir.then(function () { closeSheet(); render(); toast('Copia cargada: ' + nuevos + ' tambos nuevos, ' + act + ' actualizados' + (igual ? ', ' + igual + ' ya estaban al día' : '') + '.'); if (state.pobl) pobCalc(); });
+        });
+      }).catch(function (e) { toast(e && e.message ? e.message : 'No pude leer el archivo.'); });
+    }
+
     /* ----- exportar a Excel: lista de tacto con filtro previo ----- */
     // criterios: se toma cada uno que esté completo; un animal entra si cumple cualquiera de ellos
     function xMotivos(a, f, hoy, secar) {
@@ -2110,6 +2264,8 @@
       nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
+      document.body.classList.toggle('ancho', !!(state.pobl && esVet()));
+      if (state.pobl && esVet()) { main.innerHTML = pobHTML(); return; }
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
@@ -2131,6 +2287,7 @@
       var row = e.target.closest('[data-rp]');
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
+      if ((el = e.target.closest('[data-ps]'))) { state.pobSort = el.dataset.ps; render(); return; }
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
@@ -2175,6 +2332,11 @@
       else if (a === 'xsave') xGuardar();
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
+      else if (a === 'poblacion') abrirPoblacion();
+      else if (a === 'pobcerrar') { state.pobl = false; render(); window.scrollTo(0, 0); }
+      else if (a === 'pobcalc') pobCalc();
+      else if (a === 'base') exportarBase();
+      else if (a === 'basein') { closeSheet(); $('#baseFile').click(); }
       else if (a === 'infcerrar') { state.informe = false; render(); window.scrollTo(0, 0); }
       else if (a === 'infpdf') pdfInforme();
       else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
@@ -2209,6 +2371,7 @@
     });
     $('#file').addEventListener('change', function (e) { handleFile(e.target.files[0]); e.target.value = ''; });
     $('#logoFile').addEventListener('change', function (e) { procesarLogo(e.target.files[0]); e.target.value = ''; });
+    $('#baseFile').addEventListener('change', function (e) { importarBase(e.target.files[0]); e.target.value = ''; });
     $('#sheet').addEventListener('click', function (e) { if (e.target.id === 'sheet') closeSheet(); });
     $('#sheetT').addEventListener('click', function (e) { if (e.target.id === 'sheetT') closeSheetT(); });
 
