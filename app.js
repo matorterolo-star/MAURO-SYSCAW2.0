@@ -556,7 +556,7 @@
       if (!tamboAct()) { TAMBOS.activo = nuevoTambo(PERFIL.nombre).id; }
       var t = tamboAct();
       DB.guardada = Date.now();
-      t.n = DB.animales.length; t.fuente = DB.fuente; t.fecha = DB.fuente === 'syscaw' ? DB.fecha : DB.cargada;
+      t.n = DB.animales.length; t.fuente = DB.fuente; t.fecha = DB.fuente === 'syscaw' ? DB.fecha : DB.cargada; if (DB.idProd && DB.idProd.length) t.idp = DB.idProd;
       saveTambos();
       var g = DB, k = dbKey(t.id);
       if (DB.todos) { g = {}; Object.keys(DB).forEach(function (k) { if (k !== 'animales' && k !== 'bajas') g[k] = DB[k]; }); }
@@ -572,8 +572,10 @@
     }
     // a qué tambo va un archivo nuevo. 'nuevo' = agregar tambo; si no, el tambo abierto.
     // Si el respaldo es de otro tambo que ya está guardado, va a ese; si es de uno que no está, se agrega (nunca pisa otro tambo).
-    function prepararDestino(nombre) {
+    function prepararDestino(nombre, idp) {
       var act = tamboAct(), igual = tamboPorNombre(nombre), cambio = '';
+      // si el nombre no coincide, se busca por número de productor de SysCaw (solo si hay un único tambo con ese número)
+      if (!igual && idp && idp.length) { var mm = TAMBOS.lista.filter(function (t) { return (t.idp || []).some(function (x) { return idp.indexOf(x) >= 0; }); }); if (mm.length === 1) igual = mm[0]; }
       if (igual) { if (!act || igual.id !== act.id) cambio = 'actualizado'; TAMBOS.activo = igual.id; }
       else if (state.destino === 'nuevo' || !act || (nombre && act.n && normNom(act.nombre) && normNom(act.nombre) !== normNom(nombre))) {
         var t = nuevoTambo(nombre); TAMBOS.activo = t.id; cambio = act && act.n ? 'nuevo' : '';
@@ -651,8 +653,19 @@
         root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
-          var nom = d.tambo || nombreDesdeArchivo(f.name) || '', cambio = prepararDestino(nom);
-          DB = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          var nom = d.tambo || nombreDesdeArchivo(f.name) || '';
+          // tambos guardados antes de esta versión: se averigua su número de productor
+          return Promise.all(TAMBOS.lista.map(function (t) { return t.idp || t.fuente !== 'syscaw' ? null : leerDB(t.id).then(function (o) { if (o && o.idProd) t.idp = o.idProd; }, function () {}); })).then(function () { return { d: d, nom: nom }; });
+        }).then(function (q) {
+          if (!q) return;
+          var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
+          if (!d.tambo && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
+          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
+        }).then(function (r) {
+          if (!r) return;
+          var cambio = r.cambio, nom = r.nom;
+          DB = r.n.db;
           aplicarUnidad();
           busy(false);
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
@@ -660,7 +673,7 @@
           render();
           // el nombre queda fijo: el que trae el respaldo
           PERFIL.nombre = nom || PERFIL.nombre; savePerfil(); render();
-          toast((cambio === 'nuevo' ? 'Tambo nuevo: ' : cambio === 'actualizado' ? 'Actualizado: ' : '') + (PERFIL.nombre ? PERFIL.nombre + ' · ' : '') + DB.animales.length + ' animales');
+          toast((cambio === 'nuevo' ? 'Tambo nuevo: ' : cambio === 'actualizado' ? 'Actualizado: ' : '') + (PERFIL.nombre ? PERFIL.nombre + ' · ' : '') + DB.animales.length + ' animales' + (r.n.bajas ? ' · se ' + (r.n.bajas === 1 ? 'conserva 1 baja' : 'conservan ' + r.n.bajas + ' bajas') + ' de respaldos anteriores' : ''));
         }).catch(function (e) {
           busy(false);
           state.destino = null;
@@ -668,6 +681,38 @@
           state.error = 'No pude leer el respaldo: ' + (e && e.message || e); render();
         });
       }, 30);
+    }
+    // al actualizar un tambo con un respaldo nuevo no se pierde nada de lo que ya estaba: se suma lo que el respaldo nuevo no trae
+    // (bajas viejas que quedaron fuera de los 2 años, su historia y controles lecheros anteriores). Lo del respaldo nuevo manda.
+    function unirRespaldo(N, V) {
+      var out = { db: N, bajas: 0 };
+      if (!V || V.fuente !== 'syscaw' || !V.hist) return out;
+      var ids = N.idProd || [], vids = V.idProd || [];
+      if (ids.length && vids.length && !ids.some(function (x) { return vids.indexOf(x) >= 0; })) return out; // otro productor: no se mezcla
+      var unir = function (a, b) {
+        var vis = {}, r = [];
+        (a || []).concat(b || []).forEach(function (x) { var k = JSON.stringify(x); if (!vis[k]) { vis[k] = 1; r.push(x); } });
+        return r.sort(function (x, y) { return String(x[0]) < String(y[0]) ? -1 : String(x[0]) > String(y[0]) ? 1 : 0; });
+      };
+      var vivo = {}; (N.todos || []).forEach(function (x) { vivo[x.rp] = 1; });
+      var enN = {}; (N.bajasT || []).forEach(function (b) { enN[b.key] = 1; });
+      (V.bajasT || V.bajas || []).forEach(function (b) {
+        var hv = V.hist[b.key]; if (!hv) return;
+        if (enN[b.key]) {
+          // la baja está en los dos: se completa su historia (el respaldo nuevo recorta partos viejos)
+          var hn = N.hist[b.key]; if (!hn) { N.hist[b.key] = hv; return; }
+          ['pa', 'ev', 'ta', 'la', 'ct', 'ab', 'ec', 'mv'].forEach(function (k) { if (hv[k] || hn[k]) hn[k] = unir(hn[k], hv[k]); });
+          return;
+        }
+        if (vivo[b.key]) return;
+        N.bajasT.push(b); N.hist[b.key] = hv; out.bajas++;
+      });
+      var cv = {}; (N.ctrls || []).forEach(function (c) { cv[c[0] + '|' + c[1]] = 1; });
+      (V.ctrls || []).forEach(function (c) { if (!cv[c[0] + '|' + c[1]]) N.ctrls.push(c); });
+      N.ctrls.sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; });
+      var dv = V.desdeHist != null ? V.desdeHist : (V.fecha ? A.addDays(V.fecha, -730) : null);
+      if (dv && (N.desdeHist == null || dv < N.desdeHist)) N.desdeHist = dv;
+      return out;
     }
     /* ----- elegir unidad del respaldo ----- */
     var uResolve = null;
