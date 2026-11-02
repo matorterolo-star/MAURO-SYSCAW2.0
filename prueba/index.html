@@ -339,6 +339,13 @@ body.ancho main.wrap{max-width:1280px}
 .logoprev img{max-width:100%;max-height:100%;object-fit:contain}
 .logobtns{display:flex;flex-wrap:wrap;gap:8px}
 .sheetbtns{display:grid;gap:10px}
+.sguardar{margin-bottom:10px}.scerrar{margin-top:10px}
+.sgrp{display:none;margin:12px 0 -2px;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+/* modo veterinario: primero lo de todos los días; el logo del tambo y Cerrar al final */
+.sheet-card.vet{display:flex;flex-direction:column}
+.sheet-card.vet .sgrp{display:block}
+.sheet-card.vet>h2{order:0}.sheet-card.vet .sacc{order:1}.sheet-card.vet #grpLogo{order:2;margin-top:20px}.sheet-card.vet .field{order:3}.sheet-card.vet .logorow{order:4}.sheet-card.vet .sguardar{order:5;margin:10px 0 0}.sheet-card.vet .scerrar{order:6}.sheet-card.vet>p.actinfo,.sheet-card.vet>.vetlnk{order:7}
+.sheet-card.vet .sacc .sgrp:first-child{margin-top:0}
 .unote{margin:-6px 0 14px;color:var(--muted);font-size:14.5px}
 .ulist{display:grid;gap:8px;margin-bottom:16px}
 .uopt{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 12px;align-items:center;border:2px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--surface)}
@@ -435,6 +442,7 @@ details.lac summary .l{flex:1}
 <div class="sheet" id="sheet" hidden>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h2 id="sheetTitle">Ajustes</h2>
+    <p class="sgrp vonly" id="grpLogo">Este tambo</p>
     <label class="field" for="inNombre">Nombre del tambo
       <input id="inNombre" type="text" autocomplete="off" placeholder="Ej: Agropecuaria Capurro">
     </label>
@@ -445,18 +453,22 @@ details.lac summary .l{flex:1}
         <button class="btn" id="btnQuitarLogo" data-a="quitarlogo" hidden>Quitar</button>
       </div>
     </div>
-    <div class="sheetbtns">
-      <button class="btn primary big" data-a="guardar">Guardar</button>
+    <div class="sheetbtns sguardar"><button class="btn primary big" data-a="guardar">Guardar</button></div>
+    <div class="sheetbtns sacc">
+      <p class="sgrp vonly">Todos los días</p>
       <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
       <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
-      <button class="btn" data-a="informe" id="btnInf" hidden>Informe anual (PDF)</button>
+      <p class="sgrp vonly">Análisis</p>
       <button class="btn" data-a="poblacion" id="btnPob" hidden>Población de tambos</button>
+      <button class="btn" data-a="informe" id="btnInf" hidden>Informe anual (PDF)</button>
+      <p class="sgrp vonly">Productores</p>
+      <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar activación de este tambo</button>
+      <button class="btn" data-a="pedircod" id="btnCod">Activar con código</button>
+      <p class="sgrp vonly">Copia de seguridad</p>
       <button class="btn" data-a="base" id="btnBase" hidden>Guardar copia de la base</button>
       <button class="btn" data-a="basein" id="btnBaseIn" hidden>Cargar copia de la base</button>
-      <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar activación de este tambo</button>
-      <button class="btn" data-a="pedircod">Activar con código</button>
-      <button class="btn" data-a="cerrar">Cancelar</button>
     </div>
+    <div class="sheetbtns scerrar"><button class="btn" data-a="cerrar" id="btnCerrar">Cancelar</button></div>
     <p class="cap actinfo" id="actInfo"></p>
     <button class="vetlnk" data-a="vet" id="btnVet">Modo veterinario</button>
     <p class="cap actinfo">© Dr. Mauro Torterolo · Libreta de vacas. Uso exclusivo de sus clientes.</p>
@@ -501,10 +513,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=p84"></script>
-<script src="syscaw.js?v=p84"></script>
+<script src="paradox.js?v=p85"></script>
+<script src="syscaw.js?v=p85"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p84"></script>
+<script src="app.js?v=p85"></script>
 </body>
 </html>

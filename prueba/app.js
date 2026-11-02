@@ -818,6 +818,9 @@
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn'].forEach(function (s) { $(s).hidden = !esVet(); });
+      $('#sheet .sheet-card').classList.toggle('vet', esVet());
+      $('#btnCod').hidden = esVet();
+      $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
       $('#actInfo').textContent = esVet() ? '' : ACT.length ? 'Activada para: ' + ACT.map(function (x) { return (x.n || ('productor ' + x.p.join(', '))) + (x.r === 'op' ? ' (operario)' : ''); }).join(' · ') : 'Sin activar';
@@ -2044,7 +2047,7 @@
           .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
         var suma = function (C) { var T = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0, n: 0 }; C.forEach(function (c) { if (!c.cerrado) return; T.n++; ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { T[k] += c[k]; }); }); return T; };
         var C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, ref) : [];
-        r.ini = ini; r.ref = ref; r.T = suma(C); r.svs = C.svs || [];
+        r.ini = ini; r.ref = ref; r.T = suma(C);
         var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4);
         if (iniAnt >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) r.TA = suma(A.ciclos21(an, esPren, iniAnt, pev, A.addDays(ini, -1)));
         r.vacas = DB.animales.filter(function (a) { return !a.cat || a.cat === 'vaca' || a.cat === 'seca'; }).length;
@@ -2066,17 +2069,7 @@
       var L = TAMBOS.lista.slice(), F = [], i = 0;
       var paso = function () {
         if (i >= L.length) {
-          var G = function (campo) {
-            var M = {};
-            F.forEach(function (f) { (f.svs || []).forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; var m = M[k] || (M[k] = { ok: 0, mal: 0, pend: 0, t: {} }); m[s.r]++; m.t[f.nombre] = 1; }); });
-            var tot = { ok: 0, mal: 0, pend: 0 }; Object.keys(M).forEach(function (k) { tot.ok += M[k].ok; tot.mal += M[k].mal; tot.pend += M[k].pend; });
-            return Object.keys(M).map(function (k) {
-              var m = M[k], n = m.ok + m.mal + m.pend, rn = tot.ok + tot.mal + tot.pend - n;
-              var mx = n ? (m.ok + m.pend) / n * 100 : null, rmx = rn ? (tot.ok - m.ok + tot.pend - m.pend) / rn * 100 : null;
-              return { k: k, n: n, ok: m.ok, mal: m.mal, pend: m.pend, tambos: Object.keys(m.t), cn: m.ok + m.mal ? m.ok / (m.ok + m.mal) * 100 : null, mx: mx, rmx: rmx, alerta: n >= 20 && rn >= 20 && mx < rmx - 10 };
-            }).filter(function (x) { return x.n >= 20; }).sort(function (a, b) { return b.n - a.n; });
-          };
-          POB = { filas: F, toros: G('toro'), ins: G('ins'), hecho: Date.now() }; render(); return;
+          POB = { filas: F, hecho: Date.now() }; render(); return;
         }
         var t = L[i++]; POB.prog = i + ' de ' + L.length + ': ' + (t.nombre || ''); render();
         leerDB(t.id).then(function (o) { F.push(pobResumen(t, o)); setTimeout(paso, 30); }, function () { setTimeout(paso, 30); });
@@ -2122,19 +2115,10 @@
       var lec = '<section class="card"><h2>Leche y rodeo</h2><div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th><th>Litros/vaca último control</th><th>Litros/vaca 12 meses</th><th>Días en leche</th><th>Vacas en ordeñe</th><th>% en ordeñe</th></tr></thead><tbody>' +
         R3.map(function (f) { return '<tr>' + nom(f) + '<td><b>' + v(f.lv, 1) + '</b><small>' + (f.lFecha ? A.fmt(f.lFecha) : '') + '</small></td><td>' + v(f.lv12, 1) + '</td><td>' + v(f.del) + '</td><td>' + v(f.vo) + '</td><td>' + (po(f) == null ? '–' : v(po(f)) + '%') + '</td></tr>'; }).join('') +
         '<tr class="ptot"><td>Promedio</td><td>' + v(av('lv'), 1) + '</td><td>' + v(av('lv12'), 1) + '</td><td>' + v(av('del')) + '</td><td>' + v(av('vo')) + '</td><td>–</td></tr></tbody></table></div><p class="cap">Vacas en ordeñe y % en ordeñe: promedio diario de los últimos 12 meses.</p></section>';
-      var grp = function (titulo, L, quien) {
-        if (!L.length) return '<section class="card"><h2>' + titulo + '</h2><p class="hint">Todavía no hay ' + quien + ' con 20 servicios o más en la temporada.</p></section>';
-        var al = L.filter(function (x) { return x.alerta; });
-        return '<section class="card"><h2>' + titulo + '</h2>' +
-          al.map(function (x) { return '<p class="ralerta">⚠ <b>' + esc(x.k) + '</b> repite más que el resto: ' + Math.round(x.mx) + '% de concepción máxima contra ' + Math.round(x.rmx) + '% del resto.</p>'; }).join('') +
-          '<div class="pscroll"><table class="tbl ptbl"><thead><tr><th>' + (quien === 'toros' ? 'Toro' : 'Inseminador') + '</th><th>Tambos</th><th>Servicios</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
-          L.map(function (x) { return '<tr><td class="pnom">' + esc(x.k) + '</td><td>' + x.tambos.length + '<small>' + esc(x.tambos.join(', ')) + '</small></td><td>' + x.n + '</td><td>' + (x.cn == null ? '–' : Math.round(x.cn) + '%') + '<small>' + x.ok + '/' + (x.ok + x.mal) + '</small></td><td' + (x.alerta ? ' class="pbajo"' : '') + '><b>' + (x.alerta ? '⚠ ' : '') + Math.round(x.mx) + '%</b><small>' + (x.ok + x.pend) + '/' + x.n + '</small></td></tr>'; }).join('') +
-          '</tbody></table></div><p class="cap">Servicios en vacas de la temporada actual de cada tambo, con 20 servicios o más. Conc. máx.: cuenta como preñadas las que no repitieron (servicios de 24 días o más). Alerta: más de 10 puntos por debajo del resto de la población.</p></section>';
-      };
       return '<div class="pob">' + bar +
         '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos con respaldo de SysCaw en este equipo' + (sin.length ? ' · sin respaldo de SysCaw: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
-        '<div class="pobgrid">' + rep + inter + lec + grp('Toros en la población', POB.toros, 'toros') + grp('Inseminadores', POB.ins, 'inseminadores') + '</div></div>';
+        '<div class="pobgrid">' + rep + inter + lec + '</div></div>';
     }
     /* copia de la base: todos los tambos de este equipo en un solo archivo (para pasar a la computadora o guardar) */
     function exportarBase() {
@@ -2287,7 +2271,7 @@
       $('#logo').className = 'logo' + (PERFIL.logo ? ' has' : '');
       $('#tbtn').hidden = TAMBOS.lista.length < 2;
       if (TAMBOS.lista.length > 1) $('#tbtnTxt').textContent = TAMBOS.lista.length + ' tambos · cambiar';
-      $('#nTambos').textContent = TAMBOS.lista.length > 1 ? 'Tambos (' + TAMBOS.lista.length + ')' : 'Agregar otro tambo';
+      $('#nTambos').textContent = TAMBOS.lista.length > 1 ? (esVet() ? 'Cambiar o agregar tambo (' : 'Tambos (') + TAMBOS.lista.length + ')' : 'Agregar otro tambo';
       if (!DB.animales.length) {
         $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = emptyHTML(); return;
