@@ -2052,6 +2052,7 @@
         if (iniAnt >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) r.TA = suma(A.ciclos21(an, esPren, iniAnt, pev, A.addDays(ini, -1)));
         r.vacas = DB.animales.filter(function (a) { return !a.cat || a.cat === 'vaca' || a.cat === 'seca'; }).length;
         var D = infDatos('12'); r.ips = D.ips; r.ipp = D.ipp; r.spp = D.spp; r.pg = D.pg; r.vo = D.avo; r.vs = D.avs;
+        r.mk = D.M.map(function (m) { return m.key; }); r.pv = D.pv; r.pq = D.pq; r.best = D.best;
         // leche: último control y promedio de los últimos 12 meses (litros por vaca en ordeñe)
         var porF = {}; (DB.ctrls || []).forEach(function (c) { var x = porF[c[0]] || (porF[c[0]] = { v: 0, l: 0, d: 0 }); x.v += c[2] || 0; x.l += c[3] || 0; x.d += (c[4] || 0) * (c[2] || 0); });
         var fs = Object.keys(porF).filter(function (f) { return porF[f].v > 0; }).sort();
@@ -2115,10 +2116,37 @@
       var lec = '<section class="card"><h2>Leche y rodeo</h2><div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th><th>Litros/vaca último control</th><th>Litros/vaca 12 meses</th><th>Días en leche</th><th>Vacas en ordeñe</th><th>% en ordeñe</th></tr></thead><tbody>' +
         R3.map(function (f) { return '<tr>' + nom(f) + '<td><b>' + v(f.lv, 1) + '</b><small>' + (f.lFecha ? A.fmt(f.lFecha) : '') + '</small></td><td>' + v(f.lv12, 1) + '</td><td>' + v(f.del) + '</td><td>' + v(f.vo) + '</td><td>' + (po(f) == null ? '–' : v(po(f)) + '%') + '</td></tr>'; }).join('') +
         '<tr class="ptot"><td>Promedio</td><td>' + v(av('lv'), 1) + '</td><td>' + v(av('lv12'), 1) + '</td><td>' + v(av('del')) + '</td><td>' + v(av('vo')) + '</td><td>–</td></tr></tbody></table></div><p class="cap">Vacas en ordeñe y % en ordeñe: promedio diario de los últimos 12 meses.</p></section>';
+      // partos de los últimos 12 meses, en % de las vacas promedio (en ordeñe + secas) de cada tambo
+      var fin = F.reduce(function (s, f) { return f.mk && f.mk[11] > s ? f.mk[11] : s; }, '');
+      var par = '';
+      if (fin) {
+        var MK = []; for (var i = 11; i >= 0; i--) { var yy = +fin.slice(0, 4), mm = +fin.slice(5, 7) - i; while (mm < 1) { mm += 12; yy--; } MK.push({ key: yy + '-' + pad2(mm), label: A.MESES[mm - 1], anio: yy }); }
+        var den = 0, sv = MK.map(function () { return 0; }), sq = sv.slice();
+        var vmf = function (f) { return (f.vo || 0) + (f.vs || 0); };
+        F.forEach(function (f) { if (!f.mk || !vmf(f)) return; den += vmf(f); f.mk.forEach(function (k, j) { var ix = -1; MK.forEach(function (m, q) { if (m.key === k) ix = q; }); if (ix >= 0) { sv[ix] += f.pv[j]; sq[ix] += f.pq[j]; } }); });
+        var pv = sv.map(function (x) { return den ? x / den * 100 : null; }), pq = sq.map(function (x) { return den ? x / den * 100 : null; });
+        var tv = sv.reduce(function (s, x) { return s + x; }, 0), tq = sq.reduce(function (s, x) { return s + x; }, 0);
+        var sum = function (l) { return l.reduce(function (s, x) { return s + x; }, 0); };
+        var R4 = F.filter(function (f) { return f.mk && vmf(f); }).sort(function (x, y) { return (sum(y.pv) + sum(y.pq)) / vmf(y) - (sum(x.pv) + sum(x.pq)) / vmf(x); });
+        par = '<section class="card"><h2>Partos de los últimos 12 meses</h2>' +
+          '<div class="kpis"><div><b>' + v(den ? tv / den * 100 : null) + '%</b><span>Vacas</span></div><div><b>' + v(den ? tq / den * 100 : null) + '%</b><span>Vaquillonas</span></div><div class="tp"><b>' + v(den ? (tv + tq) / den * 100 : null) + '%</b><span>Total</span></div></div>' +
+          '<div class="mleg"><span><i class="pv1"></i>Vacas</span><span><i class="pv3"></i>Vaquillonas</span></div>' +
+          '<div class="pchart">' + infBarras(MK, [{ v: pv.map(function (x) { return x == null ? null : Math.round(x * 10) / 10; }), c: 'b1' }, { v: pq.map(function (x) { return x == null ? null : Math.round(x * 10) / 10; }), c: 'b3' }], 190, { valores: false }) + '</div>' +
+          '<p class="cap">Partos de cada mes en % de las vacas promedio (en ordeñe + secas) de la población. Sin abortos. El último mes puede estar incompleto según la fecha del respaldo.</p>' +
+          '<div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th><th>Vacas</th><th>Vaquillonas</th><th>Total</th><th>Mes con más partos</th><th>Mejores 6 meses seguidos</th></tr></thead><tbody>' +
+          R4.map(function (f) {
+            var d = vmf(f), a1 = sum(f.pv), a2 = sum(f.pq), tt = a1 + a2, pk = 0;
+            f.mk.forEach(function (k, j) { if (f.pv[j] + f.pq[j] > f.pv[pk] + f.pq[pk]) pk = j; });
+            var b6 = f.best && tt ? f.best.s / tt * 100 : null, m6 = f.best ? A.MESES[+f.mk[f.best.i].slice(5, 7) - 1] + '–' + A.MESES[+f.mk[f.best.i + 5].slice(5, 7) - 1] : '';
+            return '<tr>' + nom(f) + '<td>' + v(a1 / d * 100) + '%</td><td>' + v(a2 / d * 100) + '%</td><td><b>' + v(tt / d * 100) + '%</b></td><td>' + (tt ? A.MESES[+f.mk[pk].slice(5, 7) - 1] + ' ' + f.mk[pk].slice(2, 4) + '<small>' + v((f.pv[pk] + f.pq[pk]) / d * 100, 1) + '% de las vacas</small>' : '–') + '</td><td>' + (b6 == null ? '–' : v(b6) + '%<small>' + m6 + '</small>') + '</td></tr>';
+          }).join('') +
+          '<tr class="ptot"><td>Población</td><td>' + v(den ? tv / den * 100 : null) + '%</td><td>' + v(den ? tq / den * 100 : null) + '%</td><td>' + v(den ? (tv + tq) / den * 100 : null) + '%</td><td></td><td></td></tr></tbody></table></div>' +
+          '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
+      }
       return '<div class="pob">' + bar +
         '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos con respaldo de SysCaw en este equipo' + (sin.length ? ' · sin respaldo de SysCaw: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
-        '<div class="pobgrid">' + rep + inter + lec + '</div></div>';
+        '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
     /* copia de la base: todos los tambos de este equipo en un solo archivo (para pasar a la computadora o guardar) */
     function exportarBase() {
