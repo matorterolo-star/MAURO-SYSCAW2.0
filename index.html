@@ -342,12 +342,18 @@ body.ancho main.wrap{max-width:1280px}
 .logobtns{display:flex;flex-wrap:wrap;gap:8px}
 .sheetbtns{display:grid;gap:10px}
 .sguardar{margin-bottom:10px}.scerrar{margin-top:10px}
-.sgrp{display:none;margin:12px 0 -2px;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-/* modo veterinario: primero lo de todos los días; el logo del tambo y Cerrar al final */
-.sheet-card.vet{display:flex;flex-direction:column}
-.sheet-card.vet .sgrp{display:block}
-.sheet-card.vet>h2{order:0}.sheet-card.vet .sacc{order:1}.sheet-card.vet #grpLogo{order:2;margin-top:20px}.sheet-card.vet .field{order:3}.sheet-card.vet .logorow{order:4}.sheet-card.vet .sguardar{order:5;margin:10px 0 0}.sheet-card.vet .scerrar{order:6}.sheet-card.vet>p.actinfo,.sheet-card.vet>.vetlnk{order:7}
-.sheet-card.vet .sacc .sgrp:first-child{margin-top:0}
+.sacc,.sgb{display:grid;gap:10px}
+.sgh{display:none}
+/* modo veterinario: bloques que se despliegan; sin nombre ni logo del tambo */
+.sheet-card.vet .field,.sheet-card.vet .logorow,.sheet-card.vet .sguardar{display:none!important}
+.sheet-card.vet .sacc{gap:8px}
+.sheet-card.vet .sgh{display:flex;width:100%;align-items:center;justify-content:space-between;min-height:54px;padding:0 16px;border:1.5px solid var(--navy);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;font-size:17px;font-weight:800;cursor:pointer}
+.sheet-card.vet .sgh::after{content:'';width:9px;height:9px;border-right:2.5px solid currentColor;border-bottom:2.5px solid currentColor;transform:rotate(45deg);margin:-4px 4px 0}
+.sheet-card.vet .sg.abierto .sgh{background:var(--navy);color:#fff}
+.sheet-card.vet .sg.abierto .sgh::after{transform:rotate(-135deg);margin-top:4px}
+.sheet-card.vet .sgb{display:none;padding:10px 0 6px 12px}
+.sheet-card.vet .sg.abierto .sgb{display:grid}
+@media (prefers-color-scheme:dark){.sheet-card.vet .sgh{border-color:var(--gold)}.sheet-card.vet .sg.abierto .sgh{background:var(--gold);color:#111}}
 .unote{margin:-6px 0 14px;color:var(--muted);font-size:14.5px}
 .ulist{display:grid;gap:8px;margin-bottom:16px}
 .uopt{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 12px;align-items:center;border:2px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--surface)}
@@ -444,7 +450,6 @@ details.lac summary .l{flex:1}
 <div class="sheet" id="sheet" hidden>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h2 id="sheetTitle">Ajustes</h2>
-    <p class="sgrp vonly" id="grpLogo">Este tambo</p>
     <label class="field" for="inNombre">Nombre del tambo
       <input id="inNombre" type="text" autocomplete="off" placeholder="Ej: Agropecuaria Capurro">
     </label>
@@ -456,19 +461,23 @@ details.lac summary .l{flex:1}
       </div>
     </div>
     <div class="sheetbtns sguardar"><button class="btn primary big" data-a="guardar">Guardar</button></div>
-    <div class="sheetbtns sacc">
-      <p class="sgrp vonly">Todos los días</p>
-      <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
-      <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
-      <p class="sgrp vonly">Análisis</p>
-      <button class="btn" data-a="poblacion" id="btnPob" hidden>Población de tambos</button>
-      <button class="btn" data-a="informe" id="btnInf" hidden>Informe anual (PDF)</button>
-      <p class="sgrp vonly">Productores</p>
-      <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar activación de este tambo</button>
-      <button class="btn" data-a="pedircod" id="btnCod">Activar con código</button>
-      <p class="sgrp vonly">Copia de seguridad</p>
-      <button class="btn" data-a="base" id="btnBase" hidden>Guardar copia de la base</button>
-      <button class="btn" data-a="basein" id="btnBaseIn" hidden>Cargar copia de la base</button>
+    <div class="sacc">
+      <div class="sg abierto"><button class="sgh" data-sg>Todos los días</button><div class="sgb">
+        <button class="btn" data-a="cambiar">Actualizar este tambo (cargar respaldo o libreta)</button>
+        <button class="btn" data-a="tambos" id="nTambos">Agregar otro tambo</button>
+      </div></div>
+      <div class="sg"><button class="sgh" data-sg>Activación de productores</button><div class="sgb">
+        <button class="btn" data-a="enviaract" id="btnAct" hidden>Enviar código de activación de este tambo</button>
+        <button class="btn" data-a="pedircod" id="btnCod">Activar con código</button>
+      </div></div>
+      <div class="sg"><button class="sgh" data-sg>Población e informes</button><div class="sgb">
+        <button class="btn" data-a="poblacion" id="btnPob" hidden>Población de tambos</button>
+        <button class="btn" data-a="informe" id="btnInf" hidden>Informe anual (PDF)</button>
+      </div></div>
+      <div class="sg"><button class="sgh" data-sg>Copia de seguridad</button><div class="sgb">
+        <button class="btn" data-a="base" id="btnBase" hidden>Guardar copia de la base</button>
+        <button class="btn" data-a="basein" id="btnBaseIn" hidden>Cargar copia de la base</button>
+      </div></div>
     </div>
     <div class="sheetbtns scerrar"><button class="btn" data-a="cerrar" id="btnCerrar">Cancelar</button></div>
     <p class="cap actinfo" id="actInfo"></p>
