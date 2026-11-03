@@ -1366,9 +1366,16 @@
           var mx = (g.ok + g.pend) / n * 100, rmx = (tot.ok - g.ok + tot.pend - g.pend) / rn * 100;
           if (mx < rmx - 10) out.push('<p class="ralerta">⚠ ' + quien + ' <b>' + esc(k) + '</b> repite más que el resto: ' + Math.round(mx) + '% de concepción máxima contra ' + Math.round(rmx) + '% del resto (' + n + ' servicios en la temporada).</p>');
         });
-        return out.join('');
+        return out;
       };
-      return grupo('toro', 'El toro') + grupo('ins', 'El inseminador');
+      // una sola línea; los avisos se ven al tocarla
+      var T = grupo('toro', 'El toro'), I = grupo('ins', 'El inseminador'), n = T.length + I.length;
+      if (!n) return '';
+      var qu = T.length && I.length ? 'toro o inseminador' : T.length ? (T.length === 1 ? 'toro' : 'toros') : (I.length === 1 ? 'inseminador' : 'inseminadores');
+      var txt = n === 1 ? '1 ' + qu + ' repite más que el resto' : n + ' ' + qu + (T.length && I.length ? '' : '') + ' repiten más que el resto';
+      if (T.length && I.length) txt = n + ' avisos de toro o inseminador';
+      return '<button class="ralbtn" data-a="toroal" aria-expanded="' + !!state.toroAb + '"><span>⚠ ' + txt + '</span><span class="chev">' + (state.toroAb ? 'ocultar' : 'ver') + '</span></button>' +
+        (state.toroAb ? T.concat(I).join('') : '');
     }
     // Rodeo: vacas en ordeñe y secas, promedio diario de los 12 meses que terminan en el mes elegido
     var VOVSC = { k: null, r: null };
@@ -2661,6 +2668,7 @@
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
       else if (a === 'inicio') irInicio();
+      else if (a === 'toroal') { state.toroAb = !state.toroAb; render(); }
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'actprod') enviarActivacionRol('prod');
       else if (a === 'actop') enviarActivacionRol('op');

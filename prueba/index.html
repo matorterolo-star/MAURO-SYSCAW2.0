@@ -284,7 +284,10 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .rtbl tr.abierto td{color:var(--muted)}
 .rtbl tr.abierto td.cmax{color:var(--ink);font-weight:700}
 .rtbl td.alerta,.rtbl tr.abierto td.alerta{color:#c0392b;font-weight:800}
-.rtbl td[data-cal]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.rtbl td[data-cal]{cursor:pointer}
+.ralbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:10px 0 4px;padding:9px 12px;border:0;border-radius:12px;background:#fdecea;color:#8e1f14;font:inherit;font-weight:700;font-size:14px;text-align:left;cursor:pointer;min-height:44px}
+.ralbtn .chev{flex:none;font-size:12.5px;text-decoration:underline;text-underline-offset:2px}
+@media (prefers-color-scheme:dark){.ralbtn{background:#4a1d18;color:#ffd4cf}}
 .rtbl tr.ralrow td{padding:0 0 6px;border:0;text-align:left;white-space:normal}
 .rtbl tr.ralrow .ralerta{margin:2px 0 4px}
 .ralhint{margin-top:6px}
@@ -576,6 +579,6 @@ details.lac summary .l{flex:1}
 <script src="fosapp.js?v=p101"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p106"></script>
+<script src="app.js?v=p107"></script>
 </body>
 </html>
