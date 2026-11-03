@@ -869,7 +869,8 @@
       fr.onload = function () {
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: solo en el modo veterinario
-          if (!esVet()) { state.destino = null; state.error = 'La base de FOSAPP se carga solo en el modo veterinario.'; render(); return; }
+          // fuera del modo veterinario no se reconoce: se responde como cualquier archivo que la app no lee
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
           cargarRespaldo(fr.result, f, true); return;
         }
         if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
@@ -1985,6 +1986,7 @@
     // operario: solo Buscar y la ficha. El tipo de acceso va dentro de la firma.
     function esOperario() { return !esVet() && ACT.length > 0 && !ACT.some(function (x) { return x.r !== 'op'; }); }
     function enviarActivacion() {
+      if (DB.origen === 'fosapp') { toast('Los tambos de FOSAPP son solo para el modo veterinario: no se activan para productores.'); return; }
       if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
       closeSheet();
       $('#sheetXTitle').textContent = '¿Para quién es la activación?';
@@ -1993,6 +1995,7 @@
       $('#sheetX').hidden = false;
     }
     function enviarActivacionRol(rol) {
+      if (DB.origen === 'fosapp') { toast('Los tambos de FOSAPP son solo para el modo veterinario: no se activan para productores.'); return; }
       $('#sheetX').hidden = true;
       var base = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '');
       codigoPara(DB.idProd[0], rol).then(function (cod) {
