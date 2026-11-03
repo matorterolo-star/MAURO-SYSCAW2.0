@@ -596,8 +596,10 @@
     }
     // deja activo un tambo: carga su libreta y sus ajustes
     function abrirTambo(id) {
-      TAMBOS.activo = id; saveTambos();
+      TAMBOS.activo = id;
       var t = tamboAct() || { nombre: '', logo: '' };
+      if (t.id) t.uso = Date.now();
+      saveTambos();
       PERFIL = { nombre: t.nombre || '', logo: t.logo || '' };
       DB = { animales: [], cargada: null, archivo: '' };
       state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'buscar';
@@ -688,9 +690,37 @@
     function closeSheetT() { $('#sheetT').hidden = true; }
     function elegirTambo(id) {
       closeSheetT();
-      if (id === TAMBOS.activo) return;
+      var deInicio = state.inicio; state.inicio = false;
+      if (id === TAMBOS.activo) { if (deInicio) { render(); window.scrollTo(0, 0); } return; }
       busy(true, 'Abriendo tambo…');
       abrirTambo(id).then(function () { busy(false); render(); window.scrollTo(0, 0); toast((PERFIL.nombre || 'Tambo') + ': ' + DB.animales.length + ' animales'); });
+    }
+    /* ----- inicio del modo veterinario: aparece al abrir la app; desde ahí se elige el tambo ----- */
+    function irInicio() { closeSheet(); closeSheetT(); state.inicio = true; state.pobl = false; state.informe = false; state.rp = null; try { if (location.hash) location.hash = ''; } catch (e) {} render(); window.scrollTo(0, 0); }
+    function inicioHTML() {
+      var fecha = new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' });
+      var L = TAMBOS.lista.slice().sort(function (a, b) { return (b.uso || 0) - (a.uso || 0) || (a.nombre || '').localeCompare(b.nombre || '', 'es'); });
+      var ult = L.length && L[0].uso ? L[0].id : null, hoy = today();
+      var tot = 0; L.forEach(function (t) { tot += t.n || 0; });
+      var filas = L.map(function (t) {
+        var d = t.fecha ? A.diffDays(hoy, t.fecha) : null;
+        var cls = d == null ? '' : d > 45 ? ' late' : d <= 14 ? ' ok' : '';
+        var hace = d == null ? '–' : d <= 0 ? 'hoy' : d === 1 ? 'ayer' : d + ' días';
+        var ini = (t.nombre || '?').trim().charAt(0).toUpperCase() || '?';
+        return '<button class="itambo" data-tambo="' + t.id + '" data-nom="' + esc(normNom(t.nombre)) + '">' +
+          '<span class="ilogo' + (t.logo ? ' has' : '') + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : esc(ini)) + '</span>' +
+          '<span class="itx"><b>' + esc(t.nombre || 'Sin nombre') + '</b>' +
+          '<span>' + (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + A.fmt(t.fecha) : '') + '</span></span>' +
+          '<span class="irt"><span class="when' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
+      }).join('');
+      return '<section class="ihola"><p class="ifecha">' + esc(fecha.charAt(0).toUpperCase() + fecha.slice(1)) + '</p>' +
+        '<p class="hint">' + (L.length ? L.length + (L.length === 1 ? ' tambo' : ' tambos') + ' en este teléfono · ' + nf(tot) + ' animales' : 'Todavía no hay tambos cargados.') + '</p></section>' +
+        (L.length > 6 ? '<div class="searchbox"><input id="qTambo" type="search" placeholder="Buscar tambo" autocomplete="off" aria-label="Buscar tambo"></div>' : '') +
+        '<div class="ilist" id="ilist">' + filas + '</div>' +
+        '<p class="hint ihint">La fecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
+        '<div class="iacc"><button class="btn primary big" data-a="tnuevo">Agregar tambo</button>' +
+        (L.length > 1 ? '<button class="btn" data-a="poblacion">Población de tambos</button>' : '') +
+        '<button class="btn" data-a="ajustes">Ajustes</button></div>';
     }
     function byRp(rp) {
       for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i];
@@ -2319,7 +2349,7 @@
     }
     function abrirPoblacion() {
       if (!esVet()) return;
-      closeSheet(); state.pobl = true; state.informe = false; pobCalc(); window.scrollTo(0, 0);
+      closeSheet(); state.pobIni = !!state.inicio; state.inicio = false; state.pobl = true; state.informe = false; pobCalc(); window.scrollTo(0, 0);
     }
     function pobHTML() {
       var bar = '<div class="infbar"><button class="btn" data-a="pobcerrar">Volver</button><button class="btn" data-a="pobcalc">Recalcular</button></div>';
@@ -2540,6 +2570,18 @@
       $('#tbtn').hidden = TAMBOS.lista.length < 2;
       if (TAMBOS.lista.length > 1) $('#tbtnTxt').textContent = TAMBOS.lista.length + ' tambos · cambiar';
       $('#nTambos').textContent = TAMBOS.lista.length > 1 ? (esVet() ? 'Cambiar o agregar tambo (' : 'Tambos (') + TAMBOS.lista.length + ')' : 'Agregar otro tambo';
+      // modo veterinario: el botón del encabezado vuelve al inicio
+      var vet = esVet();
+      $('#tbtn').dataset.a = vet ? 'inicio' : 'tambos';
+      if (vet && TAMBOS.lista.length) { $('#tbtn').hidden = false; $('#tbtnTxt').textContent = 'Inicio · ' + TAMBOS.lista.length + (TAMBOS.lista.length === 1 ? ' tambo' : ' tambos'); }
+      if (state.inicio && vet && TAMBOS.lista.length) {
+        $('#nombre').textContent = 'Inicio'; document.title = 'Libreta · inicio';
+        $('#logo').innerHTML = LOGO_LIBRETA; $('#logo').className = 'logo';
+        $('#meta').textContent = 'Modo veterinario'; nav.hidden = true; $('#ubtn').hidden = true; $('#tbtn').hidden = true;
+        document.body.classList.remove('ancho');
+        main.innerHTML = inicioHTML(); return;
+      }
+      state.inicio = false;
       if (!DB.animales.length) {
         $('#meta').textContent = 'Sin libreta cargada'; nav.hidden = true; $('#ubtn').hidden = true;
         main.innerHTML = emptyHTML(); return;
@@ -2614,6 +2656,7 @@
       else if (a === 'quitarlogo') { state.draft.logo = ''; paintLogoPreview(); }
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
+      else if (a === 'inicio') irInicio();
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'actprod') enviarActivacionRol('prod');
       else if (a === 'actop') enviarActivacionRol('op');
@@ -2631,7 +2674,7 @@
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
-      else if (a === 'pobcerrar') { state.pobl = false; render(); window.scrollTo(0, 0); }
+      else if (a === 'pobcerrar') { state.pobl = false; if (state.pobIni) { state.pobIni = false; state.inicio = true; } render(); window.scrollTo(0, 0); }
       else if (a === 'pobcalc') pobCalc();
       else if (a === 'base') exportarBase();
       else if (a === 'vetclave') copiarClaveVet();
@@ -2654,6 +2697,7 @@
       if (e.target.dataset && e.target.dataset.vn) { var w = parseInt(e.target.value, 10); state.vtaDraft[e.target.dataset.vn] = w > 0 ? w : null; vtaCuenta(); return; }
       if (e.target.dataset && e.target.dataset.xn) { var v = parseInt(e.target.value, 10); state.xf[e.target.dataset.xn] = v > 0 ? v : null; xActualizarCuenta(); return; }
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
+      if (e.target.id === 'qTambo') { var k = normNom(e.target.value); document.querySelectorAll('#ilist .itambo').forEach(function (b) { b.hidden = !!k && b.dataset.nom.indexOf(k) < 0; }); }
     });
     document.addEventListener('keydown', function (e) {
       if (e.target.id === 'q' && e.key === 'Enter') {
@@ -2668,7 +2712,7 @@
       if (e.key === 'Escape' && !$('#sheetT').hidden) closeSheetT();
       if (e.key === 'Escape' && !$('#sheetU').hidden) cerrarUnidad(null);
     });
-    $('#file').addEventListener('change', function (e) { handleFile(e.target.files[0]); e.target.value = ''; });
+    $('#file').addEventListener('change', function (e) { if (e.target.files[0]) state.inicio = false; handleFile(e.target.files[0]); e.target.value = ''; });
     $('#logoFile').addEventListener('change', function (e) { procesarLogo(e.target.files[0]); e.target.value = ''; });
     $('#baseFile').addEventListener('change', function (e) { importarBase(e.target.files[0]); e.target.value = ''; });
     $('#sheet').addEventListener('click', function (e) { if (e.target.id === 'sheet') closeSheet(); });
@@ -2676,6 +2720,7 @@
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
     var listo = loadAll();
+    state.inicio = esVet() && TAMBOS.lista.length > 0 && !/^#ficha-/.test(location.hash);
     // arreglo: nombres de tambo que quedaron con un link pegado
     listo.then(function () {
       var cambio = false;
