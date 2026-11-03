@@ -1495,12 +1495,13 @@
         var L = DB.animales.filter(function (a) { return grupo(a) === k; }), p = L.filter(function (a) { return a.estado === 'prenada'; }).length;
         return '<tr><td>' + GL[k] + '</td><td>' + nf(L.length) + '</td><td>' + (k === 'ternera' ? '' : nf(p) + ' <small>' + pct(p, L.length) + '</small>') + '</td></tr>';
       }).join('');
-      return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        '<section class="card"><h2>Partos probables por mes</h2>' +
+      var probables = '<section class="card"><h2>Partos probables por mes</h2>' +
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
-        (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
-        partosOcHTML() + vovsHTML() + proyHTML() + repHTML() + idxCardHTML() + vidaHTML();
+        (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
+      // orden: lo que pasó (partos, ordeñe y secas), lo que viene (partos, rodeo), y después índice, reproducción y línea de vida
+      return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
+        partosOcHTML() + vovsHTML() + probables + proyHTML() + idxCardHTML() + repHTML() + vidaHTML();
     }
     function rodeoHTML() {
       if (state.cat === 'todas') return rodeoTodasHTML();
