@@ -199,20 +199,22 @@
     });
     for (var i = 0; i < (nMeses || 12); i++) {
       var yy = y + Math.floor((m + i) / 12), mm = (m + i) % 12, D = i === 0 ? hoy : yy + '-' + pad(mm + 1) + '-15';
-      var r = { label: MESES[mm], anio: yy, ord: 0, sec: 0, pre: 0, preQ: 0, okPre: !lim || addDays(D, PREPARTO) <= lim, okSec: !lim || addDays(D, SECADO) <= lim };
+      var r = { label: MESES[mm], anio: yy, ord: 0, sec: 0, pre: 0, preQ: 0, delS: 0, delN: 0, okPre: !lim || addDays(D, PREPARTO) <= lim, okSec: !lim || addDays(D, SECADO) <= lim };
+      // días en leche promedio de las vacas en ordeñe ese día (desde el último parto, o el parto probable si ya parió)
+      var dl = function (f) { if (f && f <= D) { r.delS += diffDays(D, f); r.delN++; } };
       info.forEach(function (x) {
         var c = x.a.cat || 'vaca';
         if (c === 'ternera') return;
         if (c === 'vaquillona') {
           if (!x.P || D < x.R) return;
-          if (D < x.P) { r.pre++; r.preQ++; } else r.ord++;
+          if (D < x.P) { r.pre++; r.preQ++; } else { r.ord++; dl(x.P); }
           return;
         }
-        if (!x.P) { if (c === 'seca') r.sec++; else r.ord++; return; }
-        if (D >= x.P) r.ord++;
+        if (!x.P) { if (c === 'seca') r.sec++; else { r.ord++; dl(x.a.pFecha); } return; }
+        if (D >= x.P) { r.ord++; dl(x.P); }
         else if (D >= x.R) r.pre++;
         else if (D >= x.S || c === 'seca') r.sec++;
-        else r.ord++;
+        else { r.ord++; dl(x.a.pFecha); }
       });
       out.push(r);
     }
@@ -1195,6 +1197,13 @@
       });
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes">' + s + '</svg>';
     }
+    // números de vacas y vaquillonas adentro de cada tramo de la barra, solo si el tramo da la altura para leerlos
+    function numsDentro(x, bw, base, hv, hq, nv, nq) {
+      var t = '', cx = (x + bw / 2).toFixed(1);
+      if (nq && nv && hv >= 11) t += '<text class="minv" x="' + cx + '" y="' + (base - hv / 2 + 3.5).toFixed(1) + '" text-anchor="middle">' + nv + '</text>';
+      if (nq && nv && hq >= 11) t += '<text class="minq" x="' + cx + '" y="' + (base - hv - hq / 2 + 3.5).toFixed(1) + '" text-anchor="middle">' + nq + '</text>';
+      return t;
+    }
     function mesesStack(mv, mq) {
       var tot = mv.map(function (m, i) { return m.n + mq[i].n; });
       var max = Math.max.apply(null, tot); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
@@ -1205,6 +1214,7 @@
         if (tot[i]) {
           if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + m.label + ': ' + m.n + ' vacas</title></rect>';
           if (hq) s += '<rect class="mbq" x="' + x.toFixed(1) + '" y="' + (base - hv - hq).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hq.toFixed(1) + '"><title>' + m.label + ': ' + mq[i].n + ' vaquillonas</title></rect>';
+          s += numsDentro(x, bw, base, hv, hq, m.n, mq[i].n);
           s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (base - hv - hq - 4).toFixed(1) + '" text-anchor="middle">' + tot[i] + '</text>';
         } else s += '<rect class="mzero" x="' + x.toFixed(1) + '" y="' + (H - 28) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"/>';
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>';
@@ -1254,12 +1264,12 @@
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + r.label + '</text>';
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
       });
-      var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? r.ord : '') + '</td><td>' + (r.okSec ? r.sec : '') + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
+      var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? r.ord : '') + '</td><td>' + (r.okSec && r.delN ? Math.round(r.delS / r.delN) : '') + '</td><td>' + (r.okSec ? r.sec : '') + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
       return '<section class="card"><h2>Proyección del rodeo</h2>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
-        '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">A mitad de cada mes. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe. Solo con preñeces confirmadas por tacto: lo que todavía depende de vacas sin diagnóstico queda en blanco.</p></section>';
+        '<table class="tbl ptbl ptbl6"><thead><tr><th>Mes</th><th>Ordeñe</th><th>DEL</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<p class="cap">A mitad de cada mes. DEL: días en leche promedio de las vacas en ordeñe. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe. Solo con preñeces confirmadas por tacto: lo que todavía depende de vacas sin diagnóstico queda en blanco.</p></section>';
     }
     /* ----- reproducción cada 21 días ----- */
     var PEVS = [40, 45, 50, 60];
@@ -1329,8 +1339,8 @@
     }
     // Rodeo: vacas en ordeñe y secas, promedio diario de los 12 meses que terminan en el mes elegido
     var VOVSC = { k: null, r: null };
-    function vovsHTML() {
-      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+    // los 12 meses que terminan en el mes elegido ("Hasta el mes"), compartidos por Vacas en ordeñe y secas y Partos ocurridos
+    function rangoVO() {
       var ref = DB.fecha || today(), maxMes = ref.slice(0, 7);
       // las bajas solo se guardan de los últimos 2 años: no dejar elegir meses donde el rodeo quedaría incompleto
       var dh = DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730), minMes = '';
@@ -1340,7 +1350,43 @@
       for (var i = 11; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } M.push({ key: yy + '-' + pad2(mm), label: A.MESES[mm - 1], anio: yy }); }
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + fin;
       if (VOVSC.k !== k) VOVSC = { k: k, r: vovsMeses(M) };
-      var R = VOVSC.r, r0 = function (v) { return v == null ? null : Math.round(v); };
+      return { M: M, fin: fin, minMes: minMes, maxMes: maxMes, y: y, m: m, R: VOVSC.r };
+    }
+    function selMesHTML(G, id) { return '<label class="secfecha">Hasta el mes <input type="month" id="' + id + '" value="' + G.fin + '"' + (G.minMes ? ' min="' + G.minMes + '"' : '') + ' max="' + G.maxMes + '"></label>'; }
+    // Partos ocurridos en los 12 meses: vacas y vaquillonas (sin abortos), en % de la vaca masa promedio
+    function partosOcHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var G = rangoVO(), M = G.M, keys = M.map(function (x) { return x.key; }), pv = M.map(function () { return 0; }), pq = pv.slice(), ab = 0;
+      infLista().forEach(function (x) { x.h.pa.forEach(function (p) {
+        var k = keys.indexOf(p[0].slice(0, 7)); if (k < 0 || !enSel(unidadEn(x, p[0]))) return;
+        if (/^A/.test(p[2] || '')) { ab++; return; }
+        if (p[1] === 1) pq[k]++; else pv[k]++;
+      }); });
+      var tv = pv.reduce(function (a, b) { return a + b; }, 0), tq = pq.reduce(function (a, b) { return a + b; }, 0);
+      var vms = G.R.vm.filter(function (v) { return v != null; }), vm = vms.length ? vms.reduce(function (a, b) { return a + b; }, 0) / vms.length : null;
+      var pc = function (n) { return vm ? nf(n / vm * 100, 1) + '%' : '–'; };
+      var max = Math.max.apply(null, pv.map(function (v, i) { return v + pq[i]; })) || 1, W = 340, H = 160, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '', kk = (H - 48) / max;
+      M.forEach(function (mo, i) {
+        var x = padx + i * (bw + gap), base = H - 26, hv = pv[i] * kk, hq = pq[i] * kk, t = pv[i] + pq[i];
+        if (t) {
+          if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + mo.label + ': ' + pv[i] + ' vacas</title></rect>';
+          if (hq) s += '<rect class="mbq" x="' + x.toFixed(1) + '" y="' + (base - hv - hq).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hq.toFixed(1) + '"><title>' + mo.label + ': ' + pq[i] + ' vaquillonas</title></rect>';
+          s += numsDentro(x, bw, base, hv, hq, pv[i], pq[i]);
+          s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (base - hv - hq - 4).toFixed(1) + '" text-anchor="middle">' + t + '</text>';
+        } else s += '<rect class="mzero" x="' + x.toFixed(1) + '" y="' + (H - 28) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"/>';
+        s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + mo.label + '</text>';
+        if (mo.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(mo.anio).slice(2) + '</text>';
+      });
+      return '<section class="card"><h2>Partos ocurridos</h2>' + selMesHTML(G, 'pomes') +
+        '<div class="kpis kpis2"><div><b>' + nf(tv) + '</b><span>Partos de vacas · ' + pc(tv) + '</span></div><div><b>' + nf(tq) + '</b><span>Partos de vaquillonas · ' + pc(tq) + '</span></div></div>' +
+        '<div class="mleg"><span><i class="v"></i>Vacas</span><span><i class="q"></i>Vaquillonas</span></div>' +
+        '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos ocurridos por mes, vacas y vaquillonas">' + s + '</svg>' +
+        '<p class="cap">Partos de los 12 meses que terminan en ' + A.MESES[G.m - 1] + ' ' + G.y + ', sin abortos' + (ab ? ' (hubo ' + ab + ')' : '') + '. Los % son sobre la vaca masa promedio de esos meses (ordeñe + secas: ' + (vm != null ? nf(vm) : '–') + '). El mes del respaldo puede estar incompleto.</p></section>';
+    }
+    function vovsHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var G = rangoVO(), M = G.M, fin = G.fin, minMes = G.minMes, maxMes = G.maxMes, y = G.y, m = G.m;
+      var R = G.R, r0 = function (v) { return v == null ? null : Math.round(v); };
       var W = 340, H = 170, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '';
       var max = Math.max.apply(null, R.vm.map(function (v) { return v || 0; })) || 1, kk = (H - 48) / max;
       M.forEach(function (mo, i) {
@@ -1371,7 +1417,7 @@
         motivosHTML(MV, BJ.venta) +
         '<p class="cap">Vacas con al menos un parto dadas de baja en ' + SRC() + ' entre el ' + A.fmt(d0) + ' y el ' + A.fmt(d1) + '. El % es sobre la vaca masa promedio de esos 12 meses (ordeñe + secas: ' + (vmp != null ? nf(vmp) : '–') + ').</p>';
       return '<section class="card"><h2>Vacas en ordeñe y secas</h2>' +
-        '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '"' + (minMes ? ' min="' + minMes + '"' : '') + ' max="' + maxMes + '"></label>' +
+        selMesHTML(G, 'vomes') +
         '<div class="kpis"><div><b>' + (ao != null ? nf(ao) : '–') + '</b><span>En ordeñe, promedio</span></div><div><b>' + (as != null ? nf(as) : '–') + '</b><span>Secas, promedio</span></div><div class="tp"><b>' + (ao != null && ao + as ? pct(ao, ao + as) : '–') + '</b><span>En ordeñe / total</span></div></div>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Vacas en ordeñe y secas por mes">' + s + '</svg>' +
@@ -1458,12 +1504,13 @@
         var L = DB.animales.filter(function (a) { return grupo(a) === k; }), p = L.filter(function (a) { return a.estado === 'prenada'; }).length;
         return '<tr><td>' + GL[k] + '</td><td>' + nf(L.length) + '</td><td>' + (k === 'ternera' ? '' : nf(p) + ' <small>' + pct(p, L.length) + '</small>') + '</td></tr>';
       }).join('');
-      return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        '<section class="card"><h2>Partos probables por mes</h2>' +
+      var probables = '<section class="card"><h2>Proyección de partos</h2>' +
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
-        (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
-        vovsHTML() + proyHTML() + repHTML() + idxCardHTML() + vidaHTML();
+        (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
+      // orden: lo que pasó (partos, ordeñe y secas), lo que viene (partos, rodeo), y después índice, reproducción y línea de vida
+      return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
+        partosOcHTML() + vovsHTML() + probables + proyHTML() + idxCardHTML() + repHTML() + vidaHTML();
     }
     function rodeoHTML() {
       if (state.cat === 'todas') return rodeoTodasHTML();
@@ -1483,7 +1530,7 @@
       var aviso = '';
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
         '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
-        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
+        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Proyección de partos</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
         (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '');
     }
@@ -2588,7 +2635,7 @@
       else if (a === 'ucancel') cerrarUnidad(null);
     });
     document.addEventListener('change', function (e) {
-      if (e.target.id === 'vomes' && e.target.value) { state.vomes = e.target.value; render(); return; }
+      if ((e.target.id === 'vomes' || e.target.id === 'pomes') && e.target.value) { state.vomes = e.target.value; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
