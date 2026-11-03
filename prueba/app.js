@@ -1330,15 +1330,18 @@
         if (ok + mal >= 30) { hab = ok / (ok + mal) * 100; habTxt = 'temporada ' + A.fmt(iniAnt).slice(-4); }
       }
       if (hab == null && T.sOk + T.sMal) { hab = T.sOk / (T.sOk + T.sMal) * 100; habTxt = 'los ciclos cerrados de esta temporada'; }
-      var alertas = [];
+      var hayRojo = false;
+      // el aviso de cada ciclo en rojo aparece solo al tocarlo, debajo de su fila
       var filas = C.map(function (c) {
         var dn = c.sOk + c.sMal + c.sPend, mx = dn ? (c.sOk + c.sPend) / dn * 100 : null, mal = hab != null && mx != null && mx < hab - 10;
-        if (mal && !c.cerrado) alertas.push('ciclo ' + c.n + ' (' + Math.round(mx) + '%)');
-        var cmax = '<td class="cmax' + (mal ? ' alerta' : '') + '">' + (dn ? (mal ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '<small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
+        if (mal) hayRojo = true;
+        var ab = mal && state.cicloAl === c.n;
+        var cmax = '<td class="cmax' + (mal ? ' alerta' : '') + '"' + (mal ? ' data-cal="' + c.n + '" role="button" tabindex="0" aria-expanded="' + ab + '"' : '') + '>' + (dn ? (mal ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '<small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
+        var aviso = ab ? '<tr class="ralrow"><td colspan="6"><p class="ralerta">⚠ Ciclo ' + c.n + ': mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '%' + (c.cerrado ? '' : ' y la concepción no va a pasar de ese número') + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p></td></tr>' : '';
         return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
           '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
           (c.cerrado ? '<td>' + p(c.sOk, c.sOk + c.sMal) + '<small>' + c.sOk + '/' + (c.sOk + c.sMal) + '</small></td>' + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
-            : '<td class="enc">en curso</td>' + cmax + '<td class="enc">–</td>') + '</tr>';
+            : '<td class="enc">en curso</td>' + cmax + '<td class="enc">–</td>') + '</tr>' + aviso;
       }).join('');
       var pevTxt = DB.config && DB.config.pev ? SRC() + ': ' + DB.config.pev : 'sin dato en ' + SRC();
       return '<section class="card rep"><h2>Reproducción cada 21 días</h2>' +
@@ -1346,8 +1349,8 @@
         '<div class="secsel"><span>Espera voluntaria</span>' + PEVS.map(function (n) { return '<button class="fchip plain" data-pev="' + n + '" aria-pressed="' + (pev === n) + '">' + n + '</button>'; }).join('') + '<span>días <small>(' + pevTxt + ')</small></span></div>' +
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
-          (alertas.length ? '<p class="ralerta">⚠ Mucha repetición antes del tacto en ' + alertas.join(' y ') + ': la concepción no va a pasar de ese número, y lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>' : '') +
           torosHTML(C.svs) +
+          (hayRojo ? '<p class="cap ralhint">Tocá un ⚠ en rojo para ver el aviso de ese ciclo.</p>' : '') +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
           '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. Va en <b style="color:var(--bad,#c0392b)">rojo</b> cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
@@ -2626,6 +2629,7 @@
       var row = e.target.closest('[data-rp]');
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
+      if ((el = e.target.closest('[data-cal]'))) { var nc = +el.dataset.cal; state.cicloAl = state.cicloAl === nc ? null : nc; render(); return; }
       if ((el = e.target.closest('[data-sg]'))) { el.parentNode.classList.toggle('abierto'); return; }
       if ((el = e.target.closest('[data-ps]'))) { state.pobSort = el.dataset.ps; render(); return; }
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
