@@ -1265,15 +1265,18 @@
       var filas = M.map(function (mo, i) { var o = r0(R.vo[i]), se = r0(R.vs[i]); return '<tr><td>' + mo.label + ' ' + String(mo.anio).slice(2) + '</td><td>' + (o != null ? o : '–') + '</td><td>' + (se != null ? se : '–') + '</td><td>' + (o != null ? o + (se || 0) : '–') + '</td><td>' + (o != null && o + se ? pct(o, o + se) : '–') + '</td></tr>'; }).reverse().join('');
       var ao = av(R.vo), as = av(R.vs);
       // vacas adultas (con al menos un parto) vendidas y muertas en los mismos 12 meses, sobre la vaca masa promedio
-      var d0 = M[0].key + '-01', d1 = A.addDays((m === 12 ? (y + 1) + '-01' : y + '-' + pad2(m + 1)) + '-01', -1), BJ = { venta: 0, muerte: 0, baja: 0 };
+      var d0 = M[0].key + '-01', d1 = A.addDays((m === 12 ? (y + 1) + '-01' : y + '-' + pad2(m + 1)) + '-01', -1), BJ = { venta: 0, muerte: 0, baja: 0 }, MV = {};
       (DB.bajas || []).forEach(function (b) {
         if (!b.bFecha || b.bFecha < d0 || b.bFecha > d1) return;
         var h = DB.hist[b.key], adulta = h && h.pa ? h.pa.some(function (pp) { return pp[0] <= b.bFecha; }) : (b.cat === 'vaca' || b.cat === 'seca');
-        if (adulta) BJ[b.bTipo in BJ ? b.bTipo : 'baja']++;
+        if (!adulta) return;
+        BJ[b.bTipo in BJ ? b.bTipo : 'baja']++;
+        if (b.bTipo === 'venta') { var cz = (b.bCausa || '').trim() || 'Sin motivo'; MV[cz] = (MV[cz] || 0) + 1; }
       });
       var vmp = ao != null ? ao + (as || 0) : null, pv = function (n) { return vmp ? nf(n / vmp * 100, 1) + '%' : '–'; }, nb = BJ.venta + BJ.muerte + BJ.baja;
       var bajasH = '<h3 class="h">Vacas adultas vendidas y muertas</h3>' +
         '<div class="kpis"><div><b>' + BJ.venta + '</b><span>Vendidas · ' + pv(BJ.venta) + '</span></div><div><b>' + BJ.muerte + '</b><span>Muertas · ' + pv(BJ.muerte) + '</span></div><div class="tp"><b>' + pv(nb) + '</b><span>Total ' + nb + (BJ.baja ? ' (' + BJ.baja + ' sin tipo)' : '') + '</span></div></div>' +
+        motivosHTML(MV, BJ.venta) +
         '<p class="cap">Vacas con al menos un parto dadas de baja en SysCaw entre el ' + A.fmt(d0) + ' y el ' + A.fmt(d1) + '. El % es sobre la vaca masa promedio de esos 12 meses (ordeñe + secas: ' + (vmp != null ? nf(vmp) : '–') + ').</p>';
       return '<section class="card"><h2>Vacas en ordeñe y secas</h2>' +
         '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '"' + (minMes ? ' min="' + minMes + '"' : '') + ' max="' + maxMes + '"></label>' +
@@ -1282,6 +1285,16 @@
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Vacas en ordeñe y secas por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Total</th><th>% ordeñe</th></tr></thead><tbody>' + filas + '</tbody></table>' +
         '<p class="cap">Promedio de todos los días de cada mes, calculado con los partos, secados y bajas de SysCaw.</p>' + bajasH + '</section>';
+    }
+    // línea de proporción de motivos de venta: los 5 más frecuentes y el resto en "Otros"
+    var MCOL = ['#2E6FBA', '#D08A1E', '#3C9A6B', '#B5486B', '#7A5CC4', '#8A8F98'];
+    function motivosHTML(MV, tot) {
+      if (!tot) return '';
+      var L = Object.keys(MV).map(function (k) { return [k, MV[k]]; }).sort(function (a, b) { return b[1] - a[1] || (a[0] < b[0] ? -1 : 1); });
+      if (L.length > 6) { var resto = L.slice(5).reduce(function (t, x) { return t + x[1]; }, 0); L = L.slice(0, 5).concat([['Otros', resto]]); }
+      var bar = L.map(function (x, i) { return '<i style="flex:' + x[1] + ';background:' + MCOL[i] + '" title="' + esc(x[0]) + ': ' + x[1] + '"></i>'; }).join('');
+      var leg = L.map(function (x, i) { return '<li><i style="background:' + MCOL[i] + '"></i><span>' + esc(x[0]) + '</span><b>' + Math.round(x[1] / tot * 100) + '%</b><small>' + x[1] + '</small></li>'; }).join('');
+      return '<h3 class="h">Motivos de venta</h3><div class="pbar" role="img" aria-label="Proporción de motivos de venta">' + bar + '</div><ul class="pleg">' + leg + '</ul>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
