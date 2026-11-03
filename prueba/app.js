@@ -381,14 +381,18 @@
         if (np && np[0] >= d24 && p[0] >= desdeOk) { var iv = diffDays(np[0], p[0]); if (iv > 300 && iv < 800) Z.iep.push(iv); }
         if (p[0] < d24 || p[0] < desdeOk) return;
         var G = (p[1] || i + 1) === 1 ? Z.l1 : Z.la, hasta = np ? np[0] : '9999';
-        var sv = S.filter(function (e) { return e[0] > p[0] && e[0] < hasta; });
+        // mismas reglas que el índice: primer celo o servicio, concepción estimada con el parto siguiente, vacías de 150 días o más penalizan
+        var evs = ev.filter(function (e) { return e[0] > p[0] && e[0] < hasta; }), sv = evs.filter(function (e) { return e[1] === 'S'; });
         var abierta = diffDays(x.baja && x.baja < ref ? x.baja : ref, p[0]);
-        if (sv.length) { var pc = diffDays(sv[0][0], p[0]); if (pc > 0 && pc < 250) G.pc.push(pc); }
-        var c = concDe(sv, h, p[0], np);
-        if (abierta >= 150 || c) {
-          G.n++;
-          if (c) { G.pren++; var da = diffDays(c, p[0]); if (da > 0) G.da.push(Math.min(da, 300)); G.spc.push(Math.min(sv.filter(function (e) { return e[0] <= c; }).length, 6)); }
-        }
+        if (evs.length) { var pc = diffDays(evs[0][0], p[0]); if (pc > 0) G.pc.push(Math.min(pc, 150)); }
+        var c = concDe(sv, h, p[0], np), estim = false;
+        if (!c && np) { c = addDays(np[0], -GEST); estim = true; }
+        var da = null, spc = null;
+        if (c) { da = diffDays(c, p[0]); spc = estim ? null : sv.filter(function (e) { return e[0] <= c; }).length || null; }
+        else if (abierta >= 150) { da = abierta; spc = sv.length + 1; }
+        if (c || abierta >= 150) { G.n++; if (c) G.pren++; }
+        if (da != null && da > 0) G.da.push(Math.min(da, 300));
+        if (spc) G.spc.push(Math.min(spc, 6));
       });
       // salida del rodeo: vacas adultas dadas de baja en los últimos 12 meses
       if (x.baja && x.baja >= d12 && x.baja <= ref && pa.length && pa[0][0] <= x.baja) {
@@ -1390,8 +1394,8 @@
       var paso = function (cls, ico, tit, big, det) { return '<li class="lv-' + cls + '"><span class="lvi">' + ico + '</span><div><h4>' + tit + '</h4><b>' + big + '</b>' + (det ? '<small>' + det + '</small>' : '') + '</div></li>'; };
       var lac = function (G, cls, tit) {
         if (!G.nPc && !G.n) return '';
-        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.pc != null ? n1(G.pc, 0) + ' días' : '–') + '<em> al 1er servicio</em>',
-          (G.da != null ? 'Se preña a los <b>' + n1(G.da, 0) + ' días</b> del parto' : '') + (G.spc != null ? ' · <b>' + n1(G.spc) + '</b> servicios por preñez' : '') + (G.pren150 != null ? ' · ' + Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : ''));
+        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.pc != null ? n1(G.pc, 0) + ' días' : '–') + '<em> al 1er celo o servicio</em>',
+          (G.da != null ? 'Días abiertos: <b>' + n1(G.da, 0) + '</b>' : '') + (G.spc != null ? ' · <b>' + n1(G.spc) + '</b> servicios por preñez' : '') + (G.pren150 != null ? ' · ' + Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : ''));
       };
       var lista = '<ol class="lvlist">' +
         paso('n', '●', 'Nace', 'Empieza la recría', '') +
@@ -1405,7 +1409,7 @@
         '</ol>';
       return '<section class="card lvcard"><h2>La vaca ' + esc(nom || 'del tambo') + '</h2><p class="cap" style="margin:0 0 6px">La vida promedio de una vaca en este tambo.</p>' +
         '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
-        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Preñez: servicio que coincide con el parto siguiente o con el último tacto positivo. % preñadas: de las vacas con más de 150 días de paridas.</p></section>';
+        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas.</p></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
