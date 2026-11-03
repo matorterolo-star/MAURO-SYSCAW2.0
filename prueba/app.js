@@ -346,7 +346,7 @@
     L.forEach(function (x) { var h = x.h; if (h && h.ev && h.ev.length && h.ev[0][0] < minEv) minEv = h.ev[0][0]; });
     var desdeOk = addDays(minEv, 60); // eventos con registros de servicios completos
     var mes = function (d) { return d / 30.44; };
-    var Z = { e1s: [], spcV: [], ePren: [], e1p: [], l1: { pc: [], da: [], spc: [], n: 0, pren: 0 }, la: { pc: [], da: [], spc: [], n: 0, pren: 0 }, iep: [], salEdad: [], salLac: [] };
+    var Z = { e1s: [], spcV: [], ePren: [], e1p: [], l1: { pc: [], da: [], spc: [], n: 0, pren: 0 }, la: { pc: [], da: [], spc: [], n: 0, pren: 0 }, iep: [], salEdad: [], salLac: [], seca: [], gP: [], gM: [] };
     // fecha de concepción de un tramo: el servicio que cuadra con el parto siguiente (±15 días) o el último antes del tacto positivo
     var concDe = function (sv, h, desde, np) {
       if (np) {
@@ -379,6 +379,10 @@
       pa.forEach(function (p, i) {
         var np = pa[i + 1];
         if (np && np[0] >= d24 && p[0] >= desdeOk) { var iv = diffDays(np[0], p[0]); if (iv > 300 && iv < 800) Z.iep.push(iv); }
+        // días seca: del cierre de la lactancia (SysCaw) al parto siguiente
+        if (np && np[0] >= d24 && p[5] && p[5] < np[0]) { var ds = diffDays(np[0], p[5]); if (ds >= 10 && ds <= 200) Z.seca.push(ds); }
+        // largo de gestación: fecha de servicio que SysCaw asigna al parto; primíparas y multíparas
+        if (p[0] >= d24 && p[4] && p[4] < p[0] && !/^A/.test(p[2] || '')) { var gl = diffDays(p[0], p[4]); if (gl >= 260 && gl <= 300) ((p[1] || i + 1) === 1 ? Z.gP : Z.gM).push(gl); }
         if (p[0] < d24 || p[0] < desdeOk) return;
         var G = (p[1] || i + 1) === 1 ? Z.l1 : Z.la, hasta = np ? np[0] : '9999';
         // mismas reglas que el índice: primer celo o servicio, concepción estimada con el parto siguiente, vacías de 150 días o más penalizan
@@ -404,7 +408,7 @@
     var et = function (G) { return { pc: m(G.pc), nPc: G.pc.length, da: m(G.da), spc: m(G.spc), n: G.n, pren150: G.n ? G.pren / G.n : null }; };
     return {
       e1s: m(Z.e1s), nE1s: Z.e1s.length, spcV: m(Z.spcV), nSpcV: Z.spcV.length, ePren: m(Z.ePren), e1p: m(Z.e1p), nE1p: Z.e1p.length,
-      l1: et(Z.l1), la: et(Z.la), iep: m(Z.iep), nIep: Z.iep.length, salEdad: m(Z.salEdad), salLac: m(Z.salLac), nSal: Math.max(Z.salEdad.length, Z.salLac.length),
+      l1: et(Z.l1), la: et(Z.la), iep: m(Z.iep), nIep: Z.iep.length, salEdad: m(Z.salEdad), salLac: m(Z.salLac), nSal: Math.max(Z.salEdad.length, Z.salLac.length), seca: m(Z.seca), nSeca: Z.seca.length, gP: m(Z.gP), nGP: Z.gP.length, gM: m(Z.gM), nGM: Z.gM.length,
       desde: d24
     };
   }
@@ -1394,8 +1398,8 @@
       var paso = function (cls, ico, tit, big, det) { return '<li class="lv-' + cls + '"><span class="lvi">' + ico + '</span><div><h4>' + tit + '</h4><b>' + big + '</b>' + (det ? '<small>' + det + '</small>' : '') + '</div></li>'; };
       var lac = function (G, cls, tit) {
         if (!G.nPc && !G.n) return '';
-        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.pc != null ? n1(G.pc, 0) + ' días' : '–') + '<em> al 1er celo o servicio</em>',
-          (G.da != null ? 'Días abiertos: <b>' + n1(G.da, 0) + '</b>' : '') + (G.spc != null ? ' · <b>' + n1(G.spc) + '</b> servicios por preñez' : '') + (G.pren150 != null ? ' · ' + Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : ''));
+        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.da != null ? n1(G.da, 0) + ' días' : '–') + '<em> abiertos</em>',
+          [G.pc != null ? '<b>' + n1(G.pc, 0) + '</b> días al 1er celo o servicio' : null, G.spc != null ? '<b>' + n1(G.spc) + '</b> servicios por preñez' : null, G.pren150 != null ? Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : null].filter(Boolean).join(' · '));
       };
       var lista = '<ol class="lvlist">' +
         paso('n', '●', 'Nace', 'Empieza la recría', '') +
@@ -1407,9 +1411,12 @@
         lac(r.la, 'la', 'Vacas adultas (2ª lactancia o más)') +
         (r.nSal ? paso('x', '→', 'Sale del tambo', (r.salEdad != null ? n1(r.salEdad) + ' años' : '–') + '<em> de edad</em>', (r.salLac != null ? 'Con <b>' + n1(r.salLac) + '</b> lactancias en promedio' : '') + ' · ' + r.nSal + ' vacas vendidas o muertas en 12 meses') : '') +
         '</ol>';
+      var chip = function (v, t, n) { return v == null ? '' : '<div><b>' + n1(v, 0) + '<em> días</em></b><span>' + t + '</span><small>de ' + n + '</small></div>'; };
+      var extra = chip(r.seca, 'Seca', r.nSeca) + chip(r.gP, 'Gestación primíparas', r.nGP) + chip(r.gM, 'Gestación multíparas', r.nGM);
+      if (extra) lista += '<div class="lvx">' + extra + '</div>';
       return '<section class="card lvcard"><h2>La vaca ' + esc(nom || 'del tambo') + '</h2><p class="cap" style="margin:0 0 6px">La vida promedio de una vaca en este tambo.</p>' +
         '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
-        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas.</p></section>';
+        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio que SysCaw asigna al parto hasta el parto.</p></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
