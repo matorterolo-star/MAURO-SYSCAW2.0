@@ -698,7 +698,6 @@
     /* ----- inicio del modo veterinario: aparece al abrir la app; desde ahí se elige el tambo ----- */
     function irInicio() { closeSheet(); closeSheetT(); state.inicio = true; state.pobl = false; state.informe = false; state.rp = null; try { if (location.hash) location.hash = ''; } catch (e) {} render(); window.scrollTo(0, 0); }
     function inicioHTML() {
-      var h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
       var fecha = new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' });
       var L = TAMBOS.lista.slice().sort(function (a, b) { return (b.uso || 0) - (a.uso || 0) || (a.nombre || '').localeCompare(b.nombre || '', 'es'); });
       var ult = L.length && L[0].uso ? L[0].id : null, hoy = today();
@@ -714,7 +713,7 @@
           '<span>' + (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + A.fmt(t.fecha) : '') + '</span></span>' +
           '<span class="irt"><span class="when' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
       }).join('');
-      return '<section class="ihola"><p class="ifecha">' + esc(fecha.charAt(0).toUpperCase() + fecha.slice(1)) + '</p><h2>' + saludo + ', Dr. Torterolo</h2>' +
+      return '<section class="ihola"><p class="ifecha">' + esc(fecha.charAt(0).toUpperCase() + fecha.slice(1)) + '</p>' +
         '<p class="hint">' + (L.length ? L.length + (L.length === 1 ? ' tambo' : ' tambos') + ' en este teléfono · ' + nf(tot) + ' animales' : 'Todavía no hay tambos cargados.') + '</p></section>' +
         (L.length > 6 ? '<div class="searchbox"><input id="qTambo" type="search" placeholder="Buscar tambo" autocomplete="off" aria-label="Buscar tambo"></div>' : '') +
         '<div class="ilist" id="ilist">' + filas + '</div>' +
