@@ -96,6 +96,19 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .fchip[aria-pressed="true"] b{color:rgba(255,255,255,.8)}
 @media (prefers-color-scheme:dark){.fchip[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#14233F}.fchip[aria-pressed="true"] b{color:rgba(20,35,63,.75)}}
 .h{font-size:15px;margin:8px 0 8px;color:var(--muted);font-weight:600}
+.lvsvg{width:100%;height:auto;display:block;margin:4px 0 10px;overflow:visible}
+.lvbar{fill:var(--line)}.lvrec{fill:var(--ciclando)}.lvpro{fill:var(--prenada)}.lvdot{fill:var(--surface)}.lvtk{stroke:var(--muted);stroke-width:1}
+.lvyr{font-size:9px;fill:var(--muted)}.lvlb{font-size:10.5px;font-weight:700;fill:var(--ink)}.lvval{font-size:10px;fill:var(--muted);font-weight:600}
+.lvd{stroke:var(--surface);stroke-width:2.5}
+.lv-n{--c:var(--muted)}.lv-s{--c:var(--servida)}.lv-p{--c:var(--prenada)}.lv-r{--c:var(--ciclando)}.lv-l1{--c:var(--apta)}.lv-la{--c:var(--apta)}.lv-x{--c:var(--vacia)}
+.lvd.lv-n,.lvd.lv-s,.lvd.lv-p,.lvd.lv-r,.lvd.lv-x{fill:var(--c)}
+.lvlist{list-style:none;margin:0 0 8px;padding:0;position:relative}
+.lvlist li{display:flex;gap:12px;position:relative;padding:0 0 14px}
+.lvlist li:not(:last-child)::before{content:"";position:absolute;left:16px;top:34px;bottom:2px;width:2px;background:var(--line)}
+.lvi{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--surface);background:var(--c)}
+.lvlist h4{margin:1px 0 1px;font-size:13px;color:var(--muted);font-weight:600}
+.lvlist b{font-size:18px}.lvlist b em{font-style:normal;font-size:13px;font-weight:500;color:var(--muted)}
+.lvlist small{display:block;font-size:13.5px;color:var(--ink);margin-top:2px;line-height:1.4}.lvlist small b{font-size:13.5px}
 .pbar{display:flex;height:16px;border-radius:8px;overflow:hidden;gap:2px;margin:4px 0 10px}.pbar i{display:block;min-width:4px}
 .pleg{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:5px;font-size:14px}.pleg li{display:flex;align-items:center;gap:8px}.pleg li>i{width:11px;height:11px;border-radius:3px;flex:none}.pleg span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pleg b{min-width:38px;text-align:right}.pleg small{color:var(--muted);min-width:26px;text-align:right}
 .hint{color:var(--muted);margin:16px 2px}
@@ -530,6 +543,6 @@ details.lac summary .l{flex:1}
 <script src="syscaw.js?v=p87"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p90"></script>
+<script src="app.js?v=p91"></script>
 </body>
 </html>

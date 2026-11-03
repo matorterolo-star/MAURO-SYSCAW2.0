@@ -339,6 +339,71 @@
     }
     return out;
   }
+  // Línea de vida del tambo: promedios de las etapas de la vaca, con lo que pasó en los últimos 2 años
+  // L: [{ h: historia, baja: fecha de baja o null }]
+  function lineaVida(L, esPren, ref) {
+    var minEv = '9999', d24 = addDays(ref, -730), d12 = addDays(ref, -365);
+    L.forEach(function (x) { var h = x.h; if (h && h.ev && h.ev.length && h.ev[0][0] < minEv) minEv = h.ev[0][0]; });
+    var desdeOk = addDays(minEv, 60); // eventos con registros de servicios completos
+    var mes = function (d) { return d / 30.44; };
+    var Z = { e1s: [], spcV: [], ePren: [], e1p: [], l1: { pc: [], da: [], spc: [], n: 0, pren: 0 }, la: { pc: [], da: [], spc: [], n: 0, pren: 0 }, iep: [], salEdad: [], salLac: [] };
+    // fecha de concepción de un tramo: el servicio que cuadra con el parto siguiente (±15 días) o el último antes del tacto positivo
+    var concDe = function (sv, h, desde, np) {
+      if (np) {
+        var est = addDays(np[0], -GEST), best = null;
+        sv.forEach(function (e) { var d = Math.abs(diffDays(e[0], est)); if (d <= 15 && (!best || d < best[1])) best = [e[0], d]; });
+        return best ? best[0] : null;
+      }
+      var pos = (h.ta || []).filter(function (t) { return t[0] > desde && esPren(t[1]); });
+      if (!pos.length) return null;
+      var T = pos[pos.length - 1][0], an = sv.filter(function (e) { return e[0] <= T; });
+      return an.length ? an[an.length - 1][0] : null;
+    };
+    L.forEach(function (x) {
+      var h = x.h; if (!h) return;
+      var pa = (h.pa || []).filter(function (p) { return p[0]; }), ev = h.ev || [], S = ev.filter(function (e) { return e[1] === 'S'; });
+      var fn = h.fn && h.fn > '1980' ? h.fn : null;
+      // recría: hasta el primer parto
+      var p1 = pa.length && pa[0][1] === 1 ? pa[0] : null, tieneP = pa.length > 0;
+      if (!tieneP || p1) {
+        var svq = S.filter(function (e) { return !p1 || e[0] < p1[0]; });
+        if (fn && svq.length && svq[0][0] >= desdeOk && svq[0][0] >= d24) { var e1 = mes(diffDays(svq[0][0], fn)); if (e1 > 8 && e1 < 40) Z.e1s.push(e1); }
+        var cq = svq.length && svq[0][0] >= desdeOk ? concDe(svq, h, svq[0][0], p1) : null;
+        if (cq && cq >= d24 && !(x.baja && !p1 && x.baja < cq)) {
+          Z.spcV.push(Math.min(svq.filter(function (e) { return e[0] <= cq; }).length, 6));
+          if (fn) { var ep = mes(diffDays(cq, fn)); if (ep > 8 && ep < 40) Z.ePren.push(ep); }
+        }
+        if (p1 && fn && p1[0] >= d24) { var ea = mes(diffDays(p1[0], fn)); if (ea > 17 && ea < 50) Z.e1p.push(ea); }
+      }
+      // lactancias: parto a servicio, parto a preñez, servicios por preñez
+      pa.forEach(function (p, i) {
+        var np = pa[i + 1];
+        if (np && np[0] >= d24 && p[0] >= desdeOk) { var iv = diffDays(np[0], p[0]); if (iv > 300 && iv < 800) Z.iep.push(iv); }
+        if (p[0] < d24 || p[0] < desdeOk) return;
+        var G = (p[1] || i + 1) === 1 ? Z.l1 : Z.la, hasta = np ? np[0] : '9999';
+        var sv = S.filter(function (e) { return e[0] > p[0] && e[0] < hasta; });
+        var abierta = diffDays(x.baja && x.baja < ref ? x.baja : ref, p[0]);
+        if (sv.length) { var pc = diffDays(sv[0][0], p[0]); if (pc > 0 && pc < 250) G.pc.push(pc); }
+        var c = concDe(sv, h, p[0], np);
+        if (abierta >= 150 || c) {
+          G.n++;
+          if (c) { G.pren++; var da = diffDays(c, p[0]); if (da > 0) G.da.push(Math.min(da, 300)); G.spc.push(Math.min(sv.filter(function (e) { return e[0] <= c; }).length, 6)); }
+        }
+      });
+      // salida del rodeo: vacas adultas dadas de baja en los últimos 12 meses
+      if (x.baja && x.baja >= d12 && x.baja <= ref && pa.length && pa[0][0] <= x.baja) {
+        if (fn) { var ey = diffDays(x.baja, fn) / 365.25; if (ey > 1.5 && ey < 20) Z.salEdad.push(ey); }
+        var nl = Math.max.apply(null, pa.map(function (p) { return p[1] || 0; })); if (nl > 0) Z.salLac.push(nl);
+      }
+    });
+    var m = function (v) { return v.length ? idxMedia(v) : null; };
+    var et = function (G) { return { pc: m(G.pc), nPc: G.pc.length, da: m(G.da), spc: m(G.spc), n: G.n, pren150: G.n ? G.pren / G.n : null }; };
+    return {
+      e1s: m(Z.e1s), nE1s: Z.e1s.length, spcV: m(Z.spcV), nSpcV: Z.spcV.length, ePren: m(Z.ePren), e1p: m(Z.e1p), nE1p: Z.e1p.length,
+      l1: et(Z.l1), la: et(Z.la), iep: m(Z.iep), nIep: Z.iep.length, salEdad: m(Z.salEdad), salLac: m(Z.salLac), nSal: Math.max(Z.salEdad.length, Z.salLac.length),
+      desde: d24
+    };
+  }
   function indice(animales, hist, esPren, ref, esVac) {
     esVac = esVac || function () { return false; };
     var minEv = '9999';
@@ -464,7 +529,7 @@
     var prom = { pe: ref0.pe.m, da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
     return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
-  var api = { MESES: MESES, indice: indice, ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
+  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') initUI(api);
 
@@ -1296,6 +1361,52 @@
       var leg = L.map(function (x, i) { return '<li><i style="background:' + MCOL[i] + '"></i><span>' + esc(x[0]) + '</span><b>' + Math.round(x[1] / tot * 100) + '%</b><small>' + x[1] + '</small></li>'; }).join('');
       return '<h3 class="h">Motivos de venta</h3><div class="pbar" role="img" aria-label="Proporción de motivos de venta">' + bar + '</div><ul class="pleg">' + leg + '</ul>';
     }
+    // Línea de vida del tambo (reemplaza el cuadro de animales por categoría)
+    var LVC = { k: null, r: null };
+    function vidaHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + DB.animales.length;
+      if (LVC.k !== k) {
+        var L = DB.animales.map(function (a) { return { h: DB.hist[a.rp], baja: null }; })
+          .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], baja: b.bFecha || null }; }));
+        var r = null; try { r = A.lineaVida(L, esPren, DB.fecha || today()); } catch (e) { r = null; }
+        LVC = { k: k, r: r };
+      }
+      var r = LVC.r; if (!r) return '';
+      var n1 = function (x, d) { return x == null ? '–' : nf(x, d == null ? 1 : d); };
+      var nom = (PERFIL.nombre || '').split(' - ')[0].trim();
+      // regla de edad: nacimiento → salida
+      var e2p = r.e1p != null && r.iep != null ? r.e1p + r.iep / 30.44 : null, eSal = r.salEdad != null ? r.salEdad * 12 : null;
+      var fin = eSal != null && eSal > (r.e1p || 0) ? eSal : null, maxM = Math.max(fin || e2p || r.e1p || 36, 36) * 1.02, W = 340, x0 = 8, x1 = W - 8, X = function (v) { return x0 + (x1 - x0) * v / maxM; };
+      var svg = '<rect class="lvbar" x="' + x0 + '" y="30" width="' + (x1 - x0) + '" height="14" rx="7"/>', lb = function (x, y, t, c, an) { return '<text class="' + c + '" x="' + x.toFixed(1) + '" y="' + y + '" text-anchor="' + (an || 'middle') + '">' + t + '</text>'; };
+      if (r.e1p != null) {
+        var xp = X(r.e1p), xf = fin != null ? X(fin) : x1;
+        svg += '<rect class="lvrec" x="' + x0 + '" y="30" width="' + (xp - x0).toFixed(1) + '" height="14" rx="7"/><rect class="lvpro" x="' + xp.toFixed(1) + '" y="30" width="' + (xf - xp).toFixed(1) + '" height="14" rx="7"/>';
+        svg += lb((x0 + xp) / 2, 22, 'Recría', 'lvlb') + lb((xp + xf) / 2, 22, 'En producción' + (r.salLac != null ? ' · ' + n1(r.salLac) + ' lactancias' : ''), 'lvlb');
+        [r.e1s, r.ePren].forEach(function (v) { if (v != null) svg += '<circle class="lvdot" cx="' + X(v).toFixed(1) + '" cy="37" r="3.5"/>'; });
+        if (e2p != null) svg += '<circle class="lvdot" cx="' + X(e2p).toFixed(1) + '" cy="37" r="3.5"/>';
+        svg += lb(x0, 62, 'Nace', 'lvval', 'start') + lb(xp, 62, '1er parto ' + n1(r.e1p) + ' m', 'lvval', xp > W * 0.6 ? 'end' : 'middle') + (fin != null ? lb(xf, 62, 'Sale ' + n1(fin / 12) + ' años', 'lvval', 'end') : '');
+      }
+      var paso = function (cls, ico, tit, big, det) { return '<li class="lv-' + cls + '"><span class="lvi">' + ico + '</span><div><h4>' + tit + '</h4><b>' + big + '</b>' + (det ? '<small>' + det + '</small>' : '') + '</div></li>'; };
+      var lac = function (G, cls, tit) {
+        if (!G.nPc && !G.n) return '';
+        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.pc != null ? n1(G.pc, 0) + ' días' : '–') + '<em> al 1er servicio</em>',
+          (G.da != null ? 'Se preña a los <b>' + n1(G.da, 0) + ' días</b> del parto' : '') + (G.spc != null ? ' · <b>' + n1(G.spc) + '</b> servicios por preñez' : '') + (G.pren150 != null ? ' · ' + Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : ''));
+      };
+      var lista = '<ol class="lvlist">' +
+        paso('n', '●', 'Nace', 'Empieza la recría', '') +
+        (r.e1s != null ? paso('s', '1', 'Primer servicio', n1(r.e1s) + ' meses<em> de edad</em>', 'De ' + r.nE1s + ' vaquillonas') : '') +
+        (r.spcV != null || r.ePren != null ? paso('p', '✓', 'Se preña', (r.ePren != null ? n1(r.ePren) + ' meses' : '–') + '<em> de edad</em>', r.spcV != null ? '<b>' + n1(r.spcV) + '</b> servicios por preñez (de ' + r.nSpcV + ')' : '') : '') +
+        (r.e1p != null ? paso('r', '★', 'Primer parto', n1(r.e1p) + ' meses<em> de edad</em>', 'De ' + r.nE1p + ' partos de vaquillona') : '') +
+        lac(r.l1, 'l1', 'Primera lactancia') +
+        (r.iep != null ? paso('r', '↻', 'Intervalo entre partos', n1(r.iep, 0) + ' días', n1(r.iep / 30.44) + ' meses (de ' + r.nIep + ')') : '') +
+        lac(r.la, 'la', 'Vacas adultas (2ª lactancia o más)') +
+        (r.nSal ? paso('x', '→', 'Sale del tambo', (r.salEdad != null ? n1(r.salEdad) + ' años' : '–') + '<em> de edad</em>', (r.salLac != null ? 'Con <b>' + n1(r.salLac) + '</b> lactancias en promedio' : '') + ' · ' + r.nSal + ' vacas vendidas o muertas en 12 meses') : '') +
+        '</ol>';
+      return '<section class="card lvcard"><h2>La vaca ' + esc(nom || 'del tambo') + '</h2><p class="cap" style="margin:0 0 6px">La vida promedio de una vaca en este tambo.</p>' +
+        '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
+        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Preñez: servicio que coincide con el parto siguiente o con el último tacto positivo. % preñadas: de las vacas con más de 150 días de paridas.</p></section>';
+    }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
       var rv = A.resumen(V, h), rq = A.resumen(Q, h);
@@ -1310,8 +1421,7 @@
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>' +
-        vovsHTML() + proyHTML() + repHTML() + idxCardHTML() +
-        '<section class="card"><h2>' + nf(DB.animales.length) + ' animales</h2><table class="tbl"><thead><tr><th>Categoría</th><th>Animales</th><th>Preñadas</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
+        vovsHTML() + proyHTML() + repHTML() + idxCardHTML() + vidaHTML();
     }
     function rodeoHTML() {
       if (state.cat === 'todas') return rodeoTodasHTML();
