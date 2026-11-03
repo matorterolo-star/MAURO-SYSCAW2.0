@@ -1371,16 +1371,28 @@
     }
     // Línea de vida del tambo (reemplaza el cuadro de animales por categoría)
     var LVC = { k: null, r: null };
+    function vidaFoto(r) { var o = {}, rd = function (x) { return x == null ? null : Math.round(x * 10) / 10; };
+      ['e1s', 'ePren', 'spcV', 'e1p', 'iep', 'salEdad', 'salLac', 'seca', 'gP', 'gM'].forEach(function (k) { o[k] = rd(r[k]); });
+      o.l1da = rd(r.l1.da); o.lada = rd(r.la.da); o.l1pc = rd(r.l1.pc); o.lapc = rd(r.la.pc); o.l1spc = rd(r.l1.spc); o.laspc = rd(r.la.spc); return o; }
     function vidaHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + DB.animales.length;
       if (LVC.k !== k) {
         var L = DB.animales.map(function (a) { return { h: DB.hist[a.rp], baja: null }; })
           .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], baja: b.bFecha || null }; }));
-        var r = null; try { r = A.lineaVida(L, esPren, DB.fecha || today()); } catch (e) { r = null; }
-        LVC = { k: k, r: r };
+        var ref = DB.fecha || today(), r = null; try { r = A.lineaVida(L, esPren, ref); } catch (e) { r = null; }
+        // foto fija al 1 de julio: se calcula una sola vez (con el primer respaldo posterior) y queda guardada para comparar
+        var t = tamboAct(), y = +ref.slice(0, 4) - (ref.slice(5) < '07-01' ? 1 : 0), fj = y + '-07-01', sk = DB.sel ? DB.sel.join(',') : '', ant = null;
+        if (r && t) {
+          t.vida = t.vida || {}; var V = t.vida[sk] || (t.vida[sk] = {});
+          if (!V[fj] && fj > (DB.desdeHist || '0000')) { try { var f = A.lineaVida(L, esPren, fj); if (f.nE1p || f.l1.n || f.la.n) { V[fj] = vidaFoto(f); saveTambos(); } } catch (e) {} }
+          // se compara con la última foto que tenga al menos 6 meses de diferencia con este respaldo
+          Object.keys(V).sort().forEach(function (d) { if (A.diffDays(ref, d) >= 180) ant = { f: d, v: V[d] }; });
+        }
+        LVC = { k: k, r: r, ant: ant };
       }
-      var r = LVC.r; if (!r) return '';
+      var r = LVC.r, ant = LVC.ant; if (!r) return '';
+      var vs = function (key, d, u) { var x = ant && ant.v[key]; return x == null ? '' : '<span class="lvant">jul ' + ant.f.slice(2, 4) + ': ' + n1(x, d) + (u || '') + '</span>'; };
       var n1 = function (x, d) { return x == null ? '–' : nf(x, d == null ? 1 : d); };
       var nom = (PERFIL.nombre || '').split(' - ')[0].trim();
       // regla de edad: nacimiento → salida
@@ -1396,27 +1408,27 @@
         svg += lb(x0, 62, 'Nace', 'lvval', 'start') + lb(xp, 62, '1er parto ' + n1(r.e1p) + ' m', 'lvval', xp > W * 0.6 ? 'end' : 'middle') + (fin != null ? lb(xf, 62, 'Sale ' + n1(fin / 12) + ' años', 'lvval', 'end') : '');
       }
       var paso = function (cls, ico, tit, big, det) { return '<li class="lv-' + cls + '"><span class="lvi">' + ico + '</span><div><h4>' + tit + '</h4><b>' + big + '</b>' + (det ? '<small>' + det + '</small>' : '') + '</div></li>'; };
-      var lac = function (G, cls, tit) {
+      var lac = function (G, cls, tit, kk) {
         if (!G.nPc && !G.n) return '';
-        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.da != null ? n1(G.da, 0) + ' días' : '–') + '<em> abiertos</em>',
+        return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.da != null ? n1(G.da, 0) + ' días' : '–') + '<em> abiertos</em>' + vs(kk + 'da', 0, ' d'),
           [G.pc != null ? '<b>' + n1(G.pc, 0) + '</b> días al 1er celo o servicio' : null, G.spc != null ? '<b>' + n1(G.spc) + '</b> servicios por preñez' : null, G.pren150 != null ? Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : null].filter(Boolean).join(' · '));
       };
       var lista = '<ol class="lvlist">' +
         paso('n', '●', 'Nace', 'Empieza la recría', '') +
-        (r.e1s != null ? paso('s', '1', 'Primer servicio', n1(r.e1s) + ' meses<em> de edad</em>', 'De ' + r.nE1s + ' vaquillonas') : '') +
-        (r.spcV != null || r.ePren != null ? paso('p', '✓', 'Se preña', (r.ePren != null ? n1(r.ePren) + ' meses' : '–') + '<em> de edad</em>', r.spcV != null ? '<b>' + n1(r.spcV) + '</b> servicios por preñez (de ' + r.nSpcV + ')' : '') : '') +
-        (r.e1p != null ? paso('r', '★', 'Primer parto', n1(r.e1p) + ' meses<em> de edad</em>', 'De ' + r.nE1p + ' partos de vaquillona') : '') +
-        lac(r.l1, 'l1', 'Primera lactancia') +
-        (r.iep != null ? paso('r', '↻', 'Intervalo entre partos', n1(r.iep, 0) + ' días', n1(r.iep / 30.44) + ' meses (de ' + r.nIep + ')') : '') +
-        lac(r.la, 'la', 'Vacas adultas (2ª lactancia o más)') +
-        (r.nSal ? paso('x', '→', 'Sale del tambo', (r.salEdad != null ? n1(r.salEdad) + ' años' : '–') + '<em> de edad</em>', (r.salLac != null ? 'Con <b>' + n1(r.salLac) + '</b> lactancias en promedio' : '') + ' · ' + r.nSal + ' vacas vendidas o muertas en 12 meses') : '') +
+        (r.e1s != null ? paso('s', '1', 'Primer servicio', n1(r.e1s) + ' meses<em> de edad</em>' + vs('e1s', 1, ' m'), 'De ' + r.nE1s + ' vaquillonas') : '') +
+        (r.spcV != null || r.ePren != null ? paso('p', '✓', 'Se preña', (r.ePren != null ? n1(r.ePren) + ' meses' : '–') + '<em> de edad</em>' + vs('ePren', 1, ' m'), r.spcV != null ? '<b>' + n1(r.spcV) + '</b> servicios por preñez (de ' + r.nSpcV + ')' : '') : '') +
+        (r.e1p != null ? paso('r', '★', 'Primer parto', n1(r.e1p) + ' meses<em> de edad</em>' + vs('e1p', 1, ' m'), 'De ' + r.nE1p + ' partos de vaquillona') : '') +
+        lac(r.l1, 'l1', 'Primera lactancia', 'l1') +
+        (r.iep != null ? paso('r', '↻', 'Intervalo entre partos', n1(r.iep, 0) + ' días' + vs('iep', 0, ' d'), n1(r.iep / 30.44) + ' meses (de ' + r.nIep + ')') : '') +
+        lac(r.la, 'la', 'Vacas adultas (2ª lactancia o más)', 'la') +
+        (r.nSal ? paso('x', '→', 'Sale del tambo', (r.salEdad != null ? n1(r.salEdad) + ' años' : '–') + '<em> de edad</em>' + vs('salEdad', 1, ' años'), (r.salLac != null ? 'Con <b>' + n1(r.salLac) + '</b> lactancias en promedio' : '') + ' · ' + r.nSal + ' vacas vendidas o muertas en 12 meses') : '') +
         '</ol>';
-      var chip = function (v, t, n) { return v == null ? '' : '<div><b>' + n1(v, 0) + '<em> días</em></b><span>' + t + '</span><small>de ' + n + '</small></div>'; };
-      var extra = chip(r.seca, 'Seca', r.nSeca) + chip(r.gP, 'Gestación primíparas', r.nGP) + chip(r.gM, 'Gestación multíparas', r.nGM);
+      var chip = function (v, t, n, key) { var x = ant && ant.v[key]; return v == null ? '' : '<div><b>' + n1(v, 0) + '<em> días</em></b><span>' + t + '</span><small>' + (x != null ? 'jul ' + ant.f.slice(2, 4) + ': ' + n1(x, 0) + ' d' : 'de ' + n) + '</small></div>'; };
+      var extra = chip(r.seca, 'Seca', r.nSeca, 'seca') + chip(r.gP, 'Gestación primíparas', r.nGP, 'gP') + chip(r.gM, 'Gestación multíparas', r.nGM, 'gM');
       if (extra) lista += '<div class="lvx">' + extra + '</div>';
       return '<section class="card lvcard"><h2>La vaca ' + esc(nom || 'del tambo') + '</h2><p class="cap" style="margin:0 0 6px">La vida promedio de una vaca en este tambo.</p>' +
         '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
-        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio que SysCaw asigna al parto hasta el parto.</p></section>';
+        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio que SysCaw asigna al parto hasta el parto.' + (ant ? ' En gris, la foto fija del 1/7/' + ant.f.slice(0, 4) + ' (los mismos 24 meses hasta esa fecha), para ver la evolución.' : ' Cada 1 de julio se guarda una foto fija de estos números para comparar con los años siguientes.') + '</p></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
