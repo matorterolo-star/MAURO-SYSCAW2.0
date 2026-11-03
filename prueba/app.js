@@ -1197,6 +1197,13 @@
       });
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos probables por mes">' + s + '</svg>';
     }
+    // números de vacas y vaquillonas adentro de cada tramo de la barra, solo si el tramo da la altura para leerlos
+    function numsDentro(x, bw, base, hv, hq, nv, nq) {
+      var t = '', cx = (x + bw / 2).toFixed(1);
+      if (nq && nv && hv >= 11) t += '<text class="minv" x="' + cx + '" y="' + (base - hv / 2 + 3.5).toFixed(1) + '" text-anchor="middle">' + nv + '</text>';
+      if (nq && nv && hq >= 11) t += '<text class="minq" x="' + cx + '" y="' + (base - hv - hq / 2 + 3.5).toFixed(1) + '" text-anchor="middle">' + nq + '</text>';
+      return t;
+    }
     function mesesStack(mv, mq) {
       var tot = mv.map(function (m, i) { return m.n + mq[i].n; });
       var max = Math.max.apply(null, tot); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
@@ -1207,6 +1214,7 @@
         if (tot[i]) {
           if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + m.label + ': ' + m.n + ' vacas</title></rect>';
           if (hq) s += '<rect class="mbq" x="' + x.toFixed(1) + '" y="' + (base - hv - hq).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hq.toFixed(1) + '"><title>' + m.label + ': ' + mq[i].n + ' vaquillonas</title></rect>';
+          s += numsDentro(x, bw, base, hv, hq, m.n, mq[i].n);
           s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (base - hv - hq - 4).toFixed(1) + '" text-anchor="middle">' + tot[i] + '</text>';
         } else s += '<rect class="mzero" x="' + x.toFixed(1) + '" y="' + (H - 28) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"/>';
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>';
@@ -1363,6 +1371,7 @@
         if (t) {
           if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + mo.label + ': ' + pv[i] + ' vacas</title></rect>';
           if (hq) s += '<rect class="mbq" x="' + x.toFixed(1) + '" y="' + (base - hv - hq).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hq.toFixed(1) + '"><title>' + mo.label + ': ' + pq[i] + ' vaquillonas</title></rect>';
+          s += numsDentro(x, bw, base, hv, hq, pv[i], pq[i]);
           s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (base - hv - hq - 4).toFixed(1) + '" text-anchor="middle">' + t + '</text>';
         } else s += '<rect class="mzero" x="' + x.toFixed(1) + '" y="' + (H - 28) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"/>';
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + mo.label + '</text>';
@@ -1495,7 +1504,7 @@
         var L = DB.animales.filter(function (a) { return grupo(a) === k; }), p = L.filter(function (a) { return a.estado === 'prenada'; }).length;
         return '<tr><td>' + GL[k] + '</td><td>' + nf(L.length) + '</td><td>' + (k === 'ternera' ? '' : nf(p) + ' <small>' + pct(p, L.length) + '</small>') + '</td></tr>';
       }).join('');
-      var probables = '<section class="card"><h2>Partos probables por mes</h2>' +
+      var probables = '<section class="card"><h2>Proyección de partos</h2>' +
         '<div class="mleg"><span><i class="v"></i>Vacas <b>' + nf(sv) + '</b></span><span><i class="q"></i>Vaquillonas <b>' + nf(sq) + '</b></span></div>' +
         mesesStack(rv.meses, rq.meses) +
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
@@ -1521,7 +1530,7 @@
       var aviso = '';
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
         '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
-        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Partos probables por mes</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
+        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Proyección de partos</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
         (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '');
     }
