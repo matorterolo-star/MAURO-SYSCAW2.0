@@ -363,6 +363,7 @@ body.ancho main.wrap{max-width:1280px}
 .sgh{display:none}
 /* modo veterinario: bloques que se despliegan; sin nombre ni logo del tambo */
 .sheet-card.vet .field,.sheet-card.vet .logorow,.sheet-card.vet .sguardar{display:none!important}
+.sheet-card.vet.fos label[for=inNombre]{display:block!important}.sheet-card.vet.fos .sguardar{display:block!important}
 .sheet-card.vet .sacc{gap:8px}
 .sheet-card.vet .sgh{display:flex;width:100%;align-items:center;justify-content:space-between;min-height:54px;padding:0 16px;border:1.5px solid var(--navy);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;font-size:17px;font-weight:800;cursor:pointer}
 .sheet-card.vet .sgh::after{content:'';width:9px;height:9px;border-right:2.5px solid currentColor;border-bottom:2.5px solid currentColor;transform:rotate(45deg);margin:-4px 4px 0}
@@ -541,10 +542,11 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="xlsx.full.min.js"></script>
-<script src="paradox.js?v=p87"></script>
-<script src="syscaw.js?v=p87"></script>
+<script src="paradox.js?v=p95"></script>
+<script src="syscaw.js?v=p95"></script>
+<script src="fosapp.js?v=p95"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p94"></script>
+<script src="app.js?v=p95"></script>
 </body>
 </html>

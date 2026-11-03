@@ -720,10 +720,21 @@
     function busy(on, msg) { $('#busy').hidden = !on; if (msg) $('#busyMsg').innerHTML = msg; }
     function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
     function esRar(buf) { var u = new Uint8Array(buf, 0, Math.min(4, buf.byteLength)); return u[0] === 0x52 && u[1] === 0x61 && u[2] === 0x72 && u[3] === 0x21; }
-    function cargarRespaldo(buf, f) {
-      busy(true, 'Leyendo respaldo de SysCaw…<small>Puede tardar unos segundos</small>');
+    // sql.js (lector de la base de FOSAPP): se descarga recién la primera vez que se usa
+    function cargarSqlJs() {
+      if (root.initSqlJs) return Promise.resolve(root.initSqlJs);
+      return new Promise(function (ok, mal) {
+        var s = document.createElement('script'); s.src = 'sql-wasm.js?v=1';
+        s.onload = function () { root.initSqlJs ? ok(root.initSqlJs) : mal(new Error('no se pudo cargar el lector de FOSAPP')); };
+        s.onerror = function () { mal(new Error('no se pudo descargar el lector de FOSAPP (hace falta internet la primera vez)')); };
+        document.head.appendChild(s);
+      });
+    }
+    function cargarRespaldo(buf, f, fosapp) {
+      busy(true, (fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true }).then(function (d) {
+        (fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+          : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
           var nom = d.tambo || nombreDesdeArchivo(f.name) || '';
@@ -732,8 +743,8 @@
         }).then(function (q) {
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
-          if (!d.tambo && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
-          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw' };
+          if ((!d.tambo || d.origen === 'fosapp') && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
+          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
           if (!r) return;
@@ -856,6 +867,11 @@
       if (!f) return;
       var fr = new FileReader();
       fr.onload = function () {
+        if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
+          // base de FOSAPP: solo en el modo veterinario
+          if (!esVet()) { state.destino = null; state.error = 'La base de FOSAPP se carga solo en el modo veterinario.'; render(); return; }
+          cargarRespaldo(fr.result, f, true); return;
+        }
         if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
         if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
         try {
@@ -885,13 +901,14 @@
       $('#sheetTitle').textContent = titulo || 'Ajustes';
       $('#inNombre').value = state.draft.nombre;
       // con respaldo de SysCaw el nombre es el del respaldo y no se edita
-      var fijo = DB.fuente === 'syscaw';
+      var fijo = DB.fuente === 'syscaw' && DB.origen !== 'fosapp'; // con FOSAPP el nombre lo pone el veterinario
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
-      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length);
+      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && DB.origen !== 'fosapp');
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
+      $('#sheet .sheet-card').classList.toggle('fos', esVet() && DB.origen === 'fosapp'); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.toggle('abierto', i === 0); });
       $('#btnCod').hidden = esVet();
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
@@ -932,7 +949,7 @@
       if (!state.draft) return;
       var crudo = $('#inNombre').value;
       if (/#act=/.test(crudo)) leerActivacion(crudo);
-      PERFIL = { nombre: DB.fuente === 'syscaw' ? PERFIL.nombre : limpiarNombre(crudo), logo: state.draft.logo || '' };
+      PERFIL = { nombre: DB.fuente === 'syscaw' && DB.origen !== 'fosapp' ? PERFIL.nombre : (limpiarNombre(crudo) || PERFIL.nombre), logo: state.draft.logo || '' };
       savePerfil(); closeSheet(); render(); toast('Guardado');
     }
 
@@ -988,7 +1005,7 @@
     }
     function emptyHTML() {
       return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá el respaldo</h2>' +
-        '<p>Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
+        '<p>Elegí el respaldo de SysCaw (.rar)' + (esVet() ? ', la base de FOSAPP (.zip)' : '') + ' o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
         '<button class="btn primary big" data-a="load">Elegir archivo</button>' + (!esVet() && !ACT.length ? '<p style="margin:18px 0 8px"><b>¿Todavía no activaste?</b> Escribí tu código:</p>' + codigoHTML() : '') + '</section>';
     }
@@ -1252,6 +1269,7 @@
       if (!f) { var h = today(), y = +h.slice(0, 4); if (h.slice(5) < '05-22') y--; f = y + '-05-22'; }
       return (state.ini21 = f);
     }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : 'SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     function repHTML() {
@@ -1281,7 +1299,7 @@
           (c.cerrado ? '<td>' + p(c.sOk, c.sOk + c.sMal) + '<small>' + c.sOk + '/' + (c.sOk + c.sMal) + '</small></td>' + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
             : '<td class="enc">en curso</td>' + cmax + '<td class="enc">–</td>') + '</tr>';
       }).join('');
-      var pevTxt = DB.config && DB.config.pev ? 'SysCaw: ' + DB.config.pev : 'sin dato en SysCaw';
+      var pevTxt = DB.config && DB.config.pev ? SRC() + ': ' + DB.config.pev : 'sin dato en ' + SRC();
       return '<section class="card rep"><h2>Reproducción cada 21 días</h2>' +
         '<label class="secfecha">Inicio de servicios <input type="date" id="ini21" value="' + ini + '" max="' + ref + '"></label>' +
         '<div class="secsel"><span>Espera voluntaria</span>' + PEVS.map(function (n) { return '<button class="fchip plain" data-pev="' + n + '" aria-pressed="' + (pev === n) + '">' + n + '</button>'; }).join('') + '<span>días <small>(' + pevTxt + ')</small></span></div>' +
@@ -1350,14 +1368,14 @@
       var bajasH = '<h3 class="h">Vacas adultas vendidas y muertas</h3>' +
         '<div class="kpis"><div><b>' + BJ.venta + '</b><span>Vendidas · ' + pv(BJ.venta) + '</span></div><div><b>' + BJ.muerte + '</b><span>Muertas · ' + pv(BJ.muerte) + '</span></div><div class="tp"><b>' + pv(nb) + '</b><span>Total ' + nb + (BJ.baja ? ' (' + BJ.baja + ' sin tipo)' : '') + '</span></div></div>' +
         motivosHTML(MV, BJ.venta) +
-        '<p class="cap">Vacas con al menos un parto dadas de baja en SysCaw entre el ' + A.fmt(d0) + ' y el ' + A.fmt(d1) + '. El % es sobre la vaca masa promedio de esos 12 meses (ordeñe + secas: ' + (vmp != null ? nf(vmp) : '–') + ').</p>';
+        '<p class="cap">Vacas con al menos un parto dadas de baja en ' + SRC() + ' entre el ' + A.fmt(d0) + ' y el ' + A.fmt(d1) + '. El % es sobre la vaca masa promedio de esos 12 meses (ordeñe + secas: ' + (vmp != null ? nf(vmp) : '–') + ').</p>';
       return '<section class="card"><h2>Vacas en ordeñe y secas</h2>' +
         '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '"' + (minMes ? ' min="' + minMes + '"' : '') + ' max="' + maxMes + '"></label>' +
         '<div class="kpis"><div><b>' + (ao != null ? nf(ao) : '–') + '</b><span>En ordeñe, promedio</span></div><div><b>' + (as != null ? nf(as) : '–') + '</b><span>Secas, promedio</span></div><div class="tp"><b>' + (ao != null && ao + as ? pct(ao, ao + as) : '–') + '</b><span>En ordeñe / total</span></div></div>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Vacas en ordeñe y secas por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Total</th><th>% ordeñe</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">Promedio de todos los días de cada mes, calculado con los partos, secados y bajas de SysCaw.</p>' + bajasH + '</section>';
+        '<p class="cap">Promedio de todos los días de cada mes, calculado con los partos, secados y bajas de ' + SRC() + '.</p>' + bajasH + '</section>';
     }
     // línea de proporción de motivos de venta: los 5 más frecuentes y el resto en "Otros"
     var MCOL = ['#2E6FBA', '#D08A1E', '#3C9A6B', '#B5486B', '#7A5CC4', '#8A8F98'];
@@ -1428,7 +1446,7 @@
       if (extra) lista += '<div class="lvx">' + extra + '</div>';
       return '<section class="card lvcard"><h2>La vaca ' + esc(nom || 'del tambo') + '</h2><p class="cap" style="margin:0 0 6px">La vida promedio de una vaca en este tambo.</p>' +
         '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
-        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según SysCaw. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio que SysCaw asigna al parto hasta el parto.' + (ant ? ' En gris, la foto fija del 1/7/' + ant.f.slice(0, 4) + ' (los mismos 24 meses hasta esa fecha), para ver la evolución.' : ' Cada 1 de julio se guarda una foto fija de estos números para comparar con los años siguientes.') + '</p></section>';
+        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según ' + SRC() + '. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio de la preñez hasta el parto.' + (ant ? ' En gris, la foto fija del 1/7/' + ant.f.slice(0, 4) + ' (los mismos 24 meses hasta esa fecha), para ver la evolución.' : ' Cada 1 de julio se guarda una foto fija de estos números para comparar con los años siguientes.') + '</p></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
@@ -1705,9 +1723,9 @@
         ])) +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
-        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en SysCaw.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
+        (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en ' + SRC() + '.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
-        '<p class="src">Respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
+        '<p class="src">' + (DB.origen === 'fosapp' ? 'Base FOSAPP' : 'Respaldo SysCaw') + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }
     function fichaHTML(a) {
       if (a.bTipo) return fichaBajaHTML(a);
@@ -1748,7 +1766,7 @@
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         idxFichaHTML(a) +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
-        (h ? '<p class="src">Historial del respaldo SysCaw' + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
+        (h ? '<p class="src">Historial ' + (DB.origen === 'fosapp' ? 'de la base FOSAPP' : 'del respaldo SysCaw') + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
@@ -1836,7 +1854,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar el respaldo de SysCaw (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -1846,7 +1864,7 @@
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">' + nombre[med] + ' según el control lechero de SysCaw; si hay más de un control en el mes, se promedian. El % compara con el mismo mes del año anterior.</p></section>';
+        '<p class="cap">' + nombre[med] + ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian. El % compara con el mismo mes del año anterior.</p></section>';
     }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
@@ -2125,7 +2143,7 @@
         sec('Relación VO/VM', '<div class="irow"><div class="ibox">' + infBarras(D.M, [{ v: D.vo.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b1' }, { v: D.vm.map(function (v) { return v == null ? null : Math.round(v); }), c: 'b2' }], 190) +
           '<div class="ileg"><span><i class="b1"></i>VO</span><span><i class="b2"></i>VM</span></div></div>' +
           lado('<small>REL VO/VM</small><b>' + (D.avo != null && D.avm ? nf(D.avo / D.avm, 2) : '–') + '</b><span>' + f1(D.avo) + ' VO<br>' + f1(D.avs) + ' VS<br>' + f1(D.avm) + ' VM</span>') + '</div>' +
-          '<p class="inote">Promedio diario de cada mes, calculado con los partos, secados y bajas de SysCaw. VM = vacas en ordeñe + secas.</p>') +
+          '<p class="inote">Promedio diario de cada mes, calculado con los partos, secados y bajas de ' + SRC() + '. VM = vacas en ordeñe + secas.</p>') +
         sec('Partos ocurridos', '<div class="irow">' + lado('<small>PARTOS VACA</small><b>' + tv + '</b><span>' + (D.avm ? nf(tv / D.avm * 100, 0) + '% VM' : '') + '</span>') +
           '<div class="ibox">' + infBarras(D.M, [{ v: D.pv, c: 'b1' }, { v: D.pq, c: 'b3' }], 170, { valores: false, marco: tt && D.best.s ? { i: D.best.i, t: nf(D.best.s / tt * 100, 0) + ' %' } : null }) +
           '<table class="itbl"><tr><th></th>' + D.M.map(function (m) { return '<th>' + m.label.charAt(0).toUpperCase() + m.label.slice(1) + String(m.anio).slice(2) + '</th>'; }).join('') + '</tr>' +
@@ -2479,7 +2497,7 @@
       nav.hidden = op;
       $('#ubtn').hidden = !DB.unidades;
       if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
-      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? 'respaldo SysCaw del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? (DB.origen === 'fosapp' ? 'base FOSAPP del ' : 'respaldo SysCaw del ') + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
       nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
