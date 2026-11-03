@@ -2214,7 +2214,7 @@
     var POB = null;
     // resumen de un tambo: usa las mismas cuentas que la app, poniendo ese tambo como activo un momento
     function pobResumen(t, o) {
-      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre' };
+      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && o.origen === 'fosapp' ? 'fosapp' : 'syscaw' };
       if (!o || o.fuente !== 'syscaw' || !o.hist) { r.sin = true; return r; }
       try {
         TAMBOS.activo = t.id; DB = o; DB.sel = null; aplicarUnidad(); state.ini21 = null; state.pev = null;
@@ -2324,7 +2324,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos con respaldo de SysCaw en este equipo' + (sin.length ? ' · sin respaldo de SysCaw: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, ns = F.length - nf2; return [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : ''].filter(Boolean).join(' y '); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
