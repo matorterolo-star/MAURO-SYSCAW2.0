@@ -909,7 +909,7 @@
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && DB.origen !== 'fosapp');
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
-      ['#btnPob', '#btnBase', '#btnBaseIn'].forEach(function (s) { $(s).hidden = !esVet(); });
+      ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && DB.origen === 'fosapp'); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.toggle('abierto', i === 0); });
@@ -2021,6 +2021,16 @@
       if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
       else pedir('');
     }
+    /* copia de la clave de veterinario: para pasar el modo veterinario a otro teléfono (las activaciones de los productores dependen de esta clave) */
+    function copiarClaveVet() {
+      var k = ''; try { k = localStorage.getItem('libreta:vet') || ''; } catch (e) {}
+      if (!esVet() || !k) { toast('El modo veterinario no está activo en este teléfono.'); return; }
+      if (!confirm('Tu clave de veterinario da acceso a todo y firma las activaciones de los productores. Guardala en un lugar seguro y no se la pases a nadie. ¿Copiarla?')) return;
+      closeSheet();
+      var manual = function () { prompt('Copiá tu clave (mantené apretado el texto para seleccionarlo):', k); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(k).then(function () { toast('Clave copiada. Pegala en un lugar seguro.'); }, manual);
+      else manual();
+    }
     function modoVet() {
       if (esVet()) { if (confirm('¿Salir del modo veterinario en este teléfono? Vas a necesitar tu clave para volver.')) { try { localStorage.removeItem('libreta:vet'); } catch (e) {} closeSheet(); toast('Modo veterinario desactivado'); } return; }
       var k = (prompt('Pegá tu clave de veterinario') || '').trim(); if (!k) return;
@@ -2624,6 +2634,7 @@
       else if (a === 'pobcerrar') { state.pobl = false; render(); window.scrollTo(0, 0); }
       else if (a === 'pobcalc') pobCalc();
       else if (a === 'base') exportarBase();
+      else if (a === 'vetclave') copiarClaveVet();
       else if (a === 'basein') { closeSheet(); $('#baseFile').click(); }
       else if (a === 'infcerrar') { state.informe = false; render(); window.scrollTo(0, 0); }
       else if (a === 'infpdf') pdfInforme();
