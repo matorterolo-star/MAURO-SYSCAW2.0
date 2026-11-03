@@ -1264,13 +1264,24 @@
       var av = function (l) { var v = l.filter(function (x) { return x != null; }); return v.length ? v.reduce(function (a1, b1) { return a1 + b1; }, 0) / v.length : null; };
       var filas = M.map(function (mo, i) { var o = r0(R.vo[i]), se = r0(R.vs[i]); return '<tr><td>' + mo.label + ' ' + String(mo.anio).slice(2) + '</td><td>' + (o != null ? o : '–') + '</td><td>' + (se != null ? se : '–') + '</td><td>' + (o != null ? o + (se || 0) : '–') + '</td><td>' + (o != null && o + se ? pct(o, o + se) : '–') + '</td></tr>'; }).reverse().join('');
       var ao = av(R.vo), as = av(R.vs);
+      // vacas adultas (con al menos un parto) vendidas y muertas en los mismos 12 meses, sobre la vaca masa promedio
+      var d0 = M[0].key + '-01', d1 = A.addDays((m === 12 ? (y + 1) + '-01' : y + '-' + pad2(m + 1)) + '-01', -1), BJ = { venta: 0, muerte: 0, baja: 0 };
+      (DB.bajas || []).forEach(function (b) {
+        if (!b.bFecha || b.bFecha < d0 || b.bFecha > d1) return;
+        var h = DB.hist[b.key], adulta = h && h.pa ? h.pa.some(function (pp) { return pp[0] <= b.bFecha; }) : (b.cat === 'vaca' || b.cat === 'seca');
+        if (adulta) BJ[b.bTipo in BJ ? b.bTipo : 'baja']++;
+      });
+      var vmp = ao != null ? ao + (as || 0) : null, pv = function (n) { return vmp ? nf(n / vmp * 100, 1) + '%' : '–'; }, nb = BJ.venta + BJ.muerte + BJ.baja;
+      var bajasH = '<h3 class="h">Vacas adultas vendidas y muertas</h3>' +
+        '<div class="kpis"><div><b>' + BJ.venta + '</b><span>Vendidas · ' + pv(BJ.venta) + '</span></div><div><b>' + BJ.muerte + '</b><span>Muertas · ' + pv(BJ.muerte) + '</span></div><div class="tp"><b>' + pv(nb) + '</b><span>Total ' + nb + (BJ.baja ? ' (' + BJ.baja + ' sin tipo)' : '') + '</span></div></div>' +
+        '<p class="cap">Vacas con al menos un parto dadas de baja en SysCaw entre el ' + A.fmt(d0) + ' y el ' + A.fmt(d1) + '. El % es sobre la vaca masa promedio de esos 12 meses (ordeñe + secas: ' + (vmp != null ? nf(vmp) : '–') + ').</p>';
       return '<section class="card"><h2>Vacas en ordeñe y secas</h2>' +
         '<label class="secfecha">Hasta el mes <input type="month" id="vomes" value="' + fin + '"' + (minMes ? ' min="' + minMes + '"' : '') + ' max="' + maxMes + '"></label>' +
         '<div class="kpis"><div><b>' + (ao != null ? nf(ao) : '–') + '</b><span>En ordeñe, promedio</span></div><div><b>' + (as != null ? nf(as) : '–') + '</b><span>Secas, promedio</span></div><div class="tp"><b>' + (ao != null && ao + as ? pct(ao, ao + as) : '–') + '</b><span>En ordeñe / total</span></div></div>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Vacas en ordeñe y secas por mes">' + s + '</svg>' +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Ordeñe</th><th>Secas</th><th>Total</th><th>% ordeñe</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">Promedio de todos los días de cada mes, calculado con los partos, secados y bajas de SysCaw.</p></section>';
+        '<p class="cap">Promedio de todos los días de cada mes, calculado con los partos, secados y bajas de SysCaw.</p>' + bajasH + '</section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
