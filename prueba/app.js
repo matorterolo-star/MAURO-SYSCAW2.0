@@ -706,19 +706,19 @@
       var filas = L.map(function (t) {
         var d = t.fecha ? A.diffDays(hoy, t.fecha) : null;
         var cls = d == null ? '' : d > 45 ? ' late' : d <= 14 ? ' ok' : '';
-        var hace = d == null ? 'sin datos' : d <= 0 ? 'hoy' : d === 1 ? 'ayer' : 'hace ' + d + ' días';
+        var hace = d == null ? '–' : d <= 0 ? 'hoy' : d === 1 ? 'ayer' : d + ' días';
         var ini = (t.nombre || '?').trim().charAt(0).toUpperCase() || '?';
         return '<button class="itambo" data-tambo="' + t.id + '" data-nom="' + esc(normNom(t.nombre)) + '">' +
           '<span class="ilogo' + (t.logo ? ' has' : '') + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : esc(ini)) + '</span>' +
-          '<span class="itx"><b>' + esc(t.nombre || 'Sin nombre') + (t.id === ult ? ' <small>último abierto</small>' : '') + '</b>' +
-          '<span>' + (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + (t.fuente === 'syscaw' ? 'respaldo del ' : 'libreta del ') + A.fmt(t.fecha) : '') + '</span></span>' +
-          '<span class="when' + cls + '">' + hace + '</span></button>';
+          '<span class="itx"><b>' + esc(t.nombre || 'Sin nombre') + '</b>' +
+          '<span>' + (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + A.fmt(t.fecha) : '') + '</span></span>' +
+          '<span class="irt"><span class="when' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
       }).join('');
       return '<section class="ihola"><p class="ifecha">' + esc(fecha.charAt(0).toUpperCase() + fecha.slice(1)) + '</p><h2>' + saludo + ', Dr. Torterolo</h2>' +
         '<p class="hint">' + (L.length ? L.length + (L.length === 1 ? ' tambo' : ' tambos') + ' en este teléfono · ' + nf(tot) + ' animales' : 'Todavía no hay tambos cargados.') + '</p></section>' +
         (L.length > 6 ? '<div class="searchbox"><input id="qTambo" type="search" placeholder="Buscar tambo" autocomplete="off" aria-label="Buscar tambo"></div>' : '') +
         '<div class="ilist" id="ilist">' + filas + '</div>' +
-        '<p class="hint ihint">La fecha de la derecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
+        '<p class="hint ihint">La fecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
         '<div class="iacc"><button class="btn primary big" data-a="tnuevo">Agregar tambo</button>' +
         (L.length > 1 ? '<button class="btn" data-a="poblacion">Población de tambos</button>' : '') +
         '<button class="btn" data-a="ajustes">Ajustes</button></div>';
