@@ -1387,7 +1387,7 @@
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
     function vaqZafra(y, ref) {
       var d0 = y + '-05-01', d1 = (y + 1) + '-04-30';
-      var R = { serv: 0, ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0, nVaq: 0, pren: 0, vac: 0, espera: 0, baja: 0, edad: [], meses: {}, toros: {} };
+      var R = { serv: 0, ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0, nVaq: 0, pren: 0, vac: 0, espera: 0, baja: 0, edad: [], meses: {}, toros: {}, ins: {} };
       var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null }; }).concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha || null }; }));
       an.forEach(function (x) {
         var h = x.h; if (!h || !h.ev) return;
@@ -1419,6 +1419,8 @@
           var M = R.meses[k] = R.meses[k] || { ok: 0, mal: 0, pend: 0 }; M[r]++;
           var tk = String(e[2] || '').trim() || 'Sin dato de toro', B = R.toros[tk] = R.toros[tk] || { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; B[r]++;
           if (i === 0 && r !== 'pend') B[r === 'ok' ? 's1ok' : 's1mal']++;
+          var ik = String(e[3] || '').trim() || 'Sin dato de inseminador', I = R.ins[ik] = R.ins[ik] || { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; I[r]++;
+          if (i === 0 && r !== 'pend') I[r === 'ok' ? 's1ok' : 's1mal']++;
           if (i === 0 && r !== 'pend') R[r === 'ok' ? 's1ok' : 's1mal']++;
         });
         var cz = conc && conc >= d0 && conc <= d1;
@@ -1432,15 +1434,16 @@
       return R;
     }
     // por semen (toro): los de 5 servicios o más, el resto junto en "Otros"
-    function torosVaqHTML(Z, zt) {
+    function torosVaqHTML(Z, zt, campo, titulo, col) {
+      campo = campo || 'toros'; titulo = titulo || 'Por semen'; col = col || 'Toro';
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
-      var L = Object.keys(Z.toros).map(function (k) { var b = Z.toros[k]; return { k: k, b: b, n: b.ok + b.mal + b.pend }; }).sort(function (a, b) { return b.n - a.n; });
+      var G = Z[campo], L = Object.keys(G).map(function (k) { var b = G[k]; return { k: k, b: b, n: b.ok + b.mal + b.pend }; }).sort(function (a, b) { return b.n - a.n; });
       if (!L.length) return '';
       var big = L.filter(function (t) { return t.n >= 5; }), chic = L.filter(function (t) { return t.n < 5; });
       if (chic.length) { var o = { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; chic.forEach(function (t) { Object.keys(o).forEach(function (q) { o[q] += t.b[q]; }); }); big.push({ k: 'Otros (' + chic.length + ')', b: o, n: o.ok + o.mal + o.pend, otros: true }); }
-      return '<h3 class="vh3">Por semen · zafra ' + zt + '</h3><table class="tbl rtbl vtbl"><thead><tr><th>Toro</th><th>Serv.</th><th>1er serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
+      return '<h3 class="vh3">' + titulo + ' · zafra ' + zt + '</h3><table class="tbl rtbl vtbl"><thead><tr><th>' + col + '</th><th>Serv.</th><th>1er serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
         big.map(function (t) { var b = t.b; return '<tr><td>' + (t.otros ? '<i>' + esc(t.k) + '</i>' : '<b>' + esc(t.k) + '</b>') + '</td><td>' + t.n + '</td><td>' + p(b.s1ok, b.s1ok + b.s1mal) + '<small>' + b.s1ok + '/' + (b.s1ok + b.s1mal) + '</small></td><td>' + p(b.ok, b.ok + b.mal) + '<small>' + b.ok + '/' + (b.ok + b.mal) + '</small></td><td>' + p(b.ok + b.pend, t.n) + '</td></tr>'; }).join('') +
-        '</tbody></table><p class="cap">Con pocos servicios (menos de 20) la diferencia entre toros puede ser casualidad.</p>';
+        '</tbody></table>' + (campo === 'ins' ? '<p class="cap">Con pocos servicios (menos de 20) la diferencia entre toros o inseminadores puede ser casualidad.</p>' : '');
     }
     function vaqHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
@@ -1470,7 +1473,7 @@
         fila('Edad al 1er servicio', function (R) { return R.edadMed != null ? nf(R.edadMed, 1) + ' <small>meses</small>' : '–'; }) +
         '</tbody></table>' +
         (sinS ? '<p class="cap"><b>' + sinS + (sinS === 1 ? ' vaquillona' : ' vaquillonas') + '</b> de 15 meses o más en el rodeo todavía sin servicio.</p>' : '') +
-        torosVaqHTML(Z, zt(y)) +
+        torosVaqHTML(Z, zt(y)) + torosVaqHTML(Z, zt(y), 'ins', 'Por inseminador', 'Inseminador') +
         (meses ? '<h3 class="vh3">Por mes · zafra ' + zt(y) + '</h3><table class="tbl rtbl"><thead><tr><th>Mes</th><th>Servicios</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' + meses + '</tbody></table>' : '') +
         '<p class="cap"><b>Concepción:</b> servicios que preñaron / servicios con resultado conocido (por tacto, parto o nuevo servicio). <b>Conc. máx.:</b> contando como preñadas las servidas que no repitieron ni dieron vacía al tacto (solo servicios con 24 días o más). <b>Preñadas:</b> vaquillonas que quedaron preñadas en la zafra / servidas que siguen en el rodeo o se preñaron antes de salir. <b>Edad al 1er servicio:</b> mediana. Las vaquillonas vendidas o muertas sin preñez no cuentan para el % de preñadas.</p>' +
         '</section>';
@@ -1670,7 +1673,7 @@
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
       // orden: lo que pasó (partos, ordeñe y secas), lo que viene (partos, rodeo), y después índice, reproducción y línea de vida
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        partosOcHTML() + vovsHTML() + probables + proyHTML() + idxCardHTML() + repHTML() + vaqHTML() + vidaHTML();
+        partosOcHTML() + vovsHTML() + probables + proyHTML() + idxCardHTML() + repHTML() + vidaHTML();
     }
     function rodeoHTML() {
       if (state.cat === 'todas') return rodeoTodasHTML();
@@ -1692,7 +1695,8 @@
         '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
         (state.cat === 'ternera' ? '' : '<section class="card"><h2>Proyección de partos</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
-        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '');
+        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '') +
+        (state.cat === 'vaquillona' ? vaqHTML() : '');
     }
 
     /* ----- ficha ----- */
