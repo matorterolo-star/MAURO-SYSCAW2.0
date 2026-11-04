@@ -1304,11 +1304,33 @@
     /* ----- reproducción cada 21 días ----- */
     var PEVS = [40, 45, 50, 60];
     function pevActual() { return state.pev || (DB.config && DB.config.pev) || 45; }
+    // por defecto: el primer servicio a una vaca (con al menos un parto) desde el 1 de mayo de la zafra; el productor lo puede cambiar
+    function iniZafra() {
+      if (state.ini21def !== undefined && state.ini21def.db === DB) return state.ini21def.f;
+      var ref = DB.fecha || today(), y = +ref.slice(0, 4); if (ref.slice(5) < '05-01') y--;
+      var prim = function (d0) {
+        var best = null; if (!DB.hist) return null;
+        DB.animales.map(function (a) { return DB.hist[a.rp]; }).concat((DB.bajas || []).map(function (b) { return DB.hist[b.key]; })).forEach(function (h) {
+          if (!h || !h.pa || !h.pa.length || !h.ev) return; var p0 = h.pa[0][0];
+          h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] >= d0 && e[0] <= ref && e[0] > p0 && (!best || e[0] < best)) best = e[0]; });
+        });
+        return best;
+      };
+      // si todavía no hay servicios en esta zafra, la anterior
+      var f = prim(y + '-05-01') || prim((y - 1) + '-05-01');
+      state.ini21def = { db: DB, f: f };
+      return f;
+    }
     function inicio21() {
       var f = state.ini21;
       if (!f) f = getP('ini21');
+      if (!f) f = iniZafra();
       if (!f) { var h = today(), y = +h.slice(0, 4); if (h.slice(5) < '05-22') y--; f = y + '-05-22'; }
       return (state.ini21 = f);
+    }
+    function ini21Default() {
+      try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
+      state.ini21 = null; render();
     }
     function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : 'SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
@@ -1330,27 +1352,131 @@
         if (ok + mal >= 30) { hab = ok / (ok + mal) * 100; habTxt = 'temporada ' + A.fmt(iniAnt).slice(-4); }
       }
       if (hab == null && T.sOk + T.sMal) { hab = T.sOk / (T.sOk + T.sMal) * 100; habTxt = 'los ciclos cerrados de esta temporada'; }
-      var alertas = [];
+      var hayRojo = false;
+      // el aviso de cada ciclo en rojo aparece solo al tocarlo, debajo de su fila
       var filas = C.map(function (c) {
-        var dn = c.sOk + c.sMal + c.sPend, mx = dn ? (c.sOk + c.sPend) / dn * 100 : null, mal = hab != null && mx != null && mx < hab - 10;
-        if (mal && !c.cerrado) alertas.push('ciclo ' + c.n + ' (' + Math.round(mx) + '%)');
-        var cmax = '<td class="cmax' + (mal ? ' alerta' : '') + '">' + (dn ? (mal ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '<small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
+        // ciclo cerrado: la alerta va en la concepción real; ciclo en curso: en la concepción máxima
+        var dn = c.sOk + c.sMal + c.sPend, mx = dn ? (c.sOk + c.sPend) / dn * 100 : null, dr = c.sOk + c.sMal, cr = dr ? c.sOk / dr * 100 : null;
+        // tactado: ciclo cerrado y como mucho un 10% de sus servicios sin resultado de tacto todavía
+        var tact = c.cerrado && c.sPend <= dn * 0.1;
+        var val = tact ? cr : mx, mal = hab != null && val != null && val < hab - 10;
+        if (mal) hayRojo = true;
+        var ab = mal && state.cicloAl === c.n;
+        var marca = function (cls) { return '<td class="' + cls + (mal ? ' alerta' : '') + '"' + (mal ? ' data-cal="' + c.n + '" role="button" tabindex="0" aria-expanded="' + ab + '"' : '') + '>'; };
+        var cmax = (tact ? '<td class="cmax">' : marca('cmax')) + (dn ? (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '<small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
+        var creal = (tact ? marca('creal') : '<td class="creal">') + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '<small>' + c.sOk + '/' + dr + '</small></td>';
+        var aviso = ab ? '<tr class="ralrow"><td colspan="6"><p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p></td></tr>' : '';
         return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
           '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
-          (c.cerrado ? '<td>' + p(c.sOk, c.sOk + c.sMal) + '<small>' + c.sOk + '/' + (c.sOk + c.sMal) + '</small></td>' + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
-            : '<td class="enc">en curso</td>' + cmax + '<td class="enc">–</td>') + '</tr>';
+          (c.cerrado ? creal + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
+            : '<td class="enc">en curso</td>' + cmax + '<td class="enc">–</td>') + '</tr>' + aviso;
       }).join('');
       var pevTxt = DB.config && DB.config.pev ? SRC() + ': ' + DB.config.pev : 'sin dato en ' + SRC();
       return '<section class="card rep"><h2>Reproducción cada 21 días</h2>' +
         '<label class="secfecha">Inicio de servicios <input type="date" id="ini21" value="' + ini + '" max="' + ref + '"></label>' +
+        (function () { var d = iniZafra(); if (!d) return ''; return d === ini ? '<p class="cap inidef">Primer servicio a una vaca de la zafra (desde el 1 de mayo).</p>' : '<p class="cap inidef">Primer servicio de la zafra: ' + A.fmt(d) + ' · <button class="lnk" data-a="ini21def">usar esa fecha</button></p>'; })() +
         '<div class="secsel"><span>Espera voluntaria</span>' + PEVS.map(function (n) { return '<button class="fchip plain" data-pev="' + n + '" aria-pressed="' + (pev === n) + '">' + n + '</button>'; }).join('') + '<span>días <small>(' + pevTxt + ')</small></span></div>' +
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
-          (alertas.length ? '<p class="ralerta">⚠ Mucha repetición antes del tacto en ' + alertas.join(' y ') + ': la concepción no va a pasar de ese número, y lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>' : '') +
           torosHTML(C.svs) +
+          (hayRojo ? '<p class="cap ralhint">Tocá un ⚠ en rojo para ver el aviso de ese ciclo.</p>' : '') +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. Va en <b style="color:var(--bad,#c0392b)">rojo</b> cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo. Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
+    }
+    /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
+    function vaqZafra(y, ref) {
+      var d0 = y + '-05-01', d1 = (y + 1) + '-04-30';
+      var R = { serv: 0, ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0, nVaq: 0, pren: 0, vac: 0, espera: 0, baja: 0, edad: [], meses: {}, toros: {}, ins: {} };
+      var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null }; }).concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha || null }; }));
+      an.forEach(function (x) {
+        var h = x.h; if (!h || !h.ev) return;
+        var p1 = h.pa && h.pa.length ? h.pa[0][0] : '9999';
+        var sv = h.ev.filter(function (e) { return e[1] === 'S' && e[0] < p1; });
+        var svz = sv.filter(function (e) { return e[0] >= d0 && e[0] <= d1 && e[0] <= ref; });
+        if (!svz.length) return;
+        // concepción: por el parto (fecha de concepción o servicio compatible con la gestación) o por el último tacto positivo
+        var conc = null;
+        if (p1 !== '9999') {
+          conc = h.pa[0][4] || null;
+          if (!conc) { var est = A.addDays(p1, -A.GEST), best = null; sv.forEach(function (e) { var d = Math.abs(A.diffDays(e[0], est)); if (d <= 20 && (!best || d < best[1])) best = [e[0], d]; }); conc = best ? best[0] : null; }
+        } else {
+          var pos = (h.ta || []).filter(function (t) { return t[0] > sv[0][0] && esPren(t[1]); });
+          if (pos.length) { var T = pos[pos.length - 1][0], antes = sv.filter(function (e) { return e[0] <= T; }); conc = antes.length ? antes[antes.length - 1][0] : null; }
+        }
+        var neg = (h.ta || []).filter(function (t) { return t[0] > sv[0][0] && t[0] < p1 && !esPren(t[1]); }).map(function (t) { return t[0]; });
+        R.nVaq++;
+        if (h.fn && h.fn > '1980') R.edad.push(A.diffDays(svz[0][0], h.fn) / 30.44);
+        svz.forEach(function (e, i) {
+          var r = null, k = e[0].slice(0, 7);
+          if (conc) r = e[0] === conc ? 'ok' : e[0] < conc ? 'mal' : null;
+          else {
+            var j = sv.indexOf(e), luego = (sv[j + 1] && sv[j + 1][0] <= ref) || neg.some(function (d) { return d > e[0] && A.diffDays(d, e[0]) >= 25; });
+            r = luego ? 'mal' : A.diffDays(ref, e[0]) < 24 ? null : 'pend';
+          }
+          if (!r) return;
+          R.serv++; R[r]++;
+          var M = R.meses[k] = R.meses[k] || { ok: 0, mal: 0, pend: 0 }; M[r]++;
+          var tk = String(e[2] || '').trim() || 'Sin dato de toro', B = R.toros[tk] = R.toros[tk] || { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; B[r]++;
+          if (i === 0 && r !== 'pend') B[r === 'ok' ? 's1ok' : 's1mal']++;
+          var ik = String(e[3] || '').trim() || 'Sin dato de inseminador', I = R.ins[ik] = R.ins[ik] || { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; I[r]++;
+          if (i === 0 && r !== 'pend') I[r === 'ok' ? 's1ok' : 's1mal']++;
+          if (i === 0 && r !== 'pend') R[r === 'ok' ? 's1ok' : 's1mal']++;
+        });
+        var cz = conc && conc >= d0 && conc <= d1;
+        if (cz) R.pren++;
+        else if (x.salida) R.baja++;
+        else if (conc) R.espera++; // preñada antes de la zafra (no debería pasar)
+        else { var ult = svz[svz.length - 1][0], fallo = neg.some(function (d) { return d > ult && A.diffDays(d, ult) >= 25; }); if (fallo) R.vac++; else R.espera++; }
+      });
+      R.edad.sort(function (a, b) { return a - b; });
+      R.edadMed = R.edad.length ? R.edad[Math.floor(R.edad.length / 2)] : null;
+      return R;
+    }
+    // por semen (toro): los de 5 servicios o más, el resto junto en "Otros"
+    function torosVaqHTML(Z, zt, campo, titulo, col) {
+      campo = campo || 'toros'; titulo = titulo || 'Por semen'; col = col || 'Toro';
+      var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
+      var G = Z[campo], L = Object.keys(G).map(function (k) { var b = G[k]; return { k: k, b: b, n: b.ok + b.mal + b.pend }; }).sort(function (a, b) { return b.n - a.n; });
+      if (!L.length) return '';
+      var big = L.filter(function (t) { return t.n >= 5; }), chic = L.filter(function (t) { return t.n < 5; });
+      if (chic.length) { var o = { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; chic.forEach(function (t) { Object.keys(o).forEach(function (q) { o[q] += t.b[q]; }); }); big.push({ k: 'Otros (' + chic.length + ')', b: o, n: o.ok + o.mal + o.pend, otros: true }); }
+      return '<h3 class="vh3">' + titulo + ' · zafra ' + zt + '</h3><table class="tbl rtbl vtbl"><thead><tr><th>' + col + '</th><th>Serv.</th><th>1er serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
+        big.map(function (t) { var b = t.b; return '<tr><td>' + (t.otros ? '<i>' + esc(t.k) + '</i>' : '<b>' + esc(t.k) + '</b>') + '</td><td>' + t.n + '</td><td>' + p(b.s1ok, b.s1ok + b.s1mal) + '<small>' + b.s1ok + '/' + (b.s1ok + b.s1mal) + '</small></td><td>' + p(b.ok, b.ok + b.mal) + '<small>' + b.ok + '/' + (b.ok + b.mal) + '</small></td><td>' + p(b.ok + b.pend, t.n) + '</td></tr>'; }).join('') +
+        '</tbody></table>' + (campo === 'ins' ? '<p class="cap">Con pocos servicios (menos de 20) la diferencia entre toros o inseminadores puede ser casualidad.</p>' : '');
+    }
+    function vaqHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var ref = DB.fecha || today(), y = +ref.slice(0, 4); if (ref.slice(5) < '05-01') y--;
+      var Z = vaqZafra(y, ref), Za = vaqZafra(y - 1, ref);
+      if (!Z.nVaq && !Za.nVaq) return '';
+      var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
+      var zt = function (a) { return a + '-' + String(a + 1).slice(2); };
+      // vaquillonas en el rodeo de 15 meses o más que todavía no tienen servicio
+      var sinS = DB.animales.filter(function (a) { if (a.cat !== 'vaquillona') return false; var h = DB.hist[a.rp]; if (!h || !h.fn || A.diffDays(ref, h.fn) < 15 * 30.44) return false; return !h.ev.some(function (e) { return e[1] === 'S'; }); }).length;
+      var fila = function (t, f, b) { return '<tr><td>' + t + '</td><td><b>' + f(Z) + '</b></td><td>' + (Za.nVaq ? f(Za) : '–') + '</td></tr>'; };
+      var meses = Object.keys(Z.meses).sort().map(function (k) {
+        var m = Z.meses[k], dn = m.ok + m.mal + m.pend;
+        return '<tr><td>' + A.MESES[+k.slice(5, 7) - 1] + ' <small>' + k.slice(2, 4) + '</small></td><td>' + dn + '</td><td>' + p(m.ok, m.ok + m.mal) + '<small>' + m.ok + '/' + (m.ok + m.mal) + '</small></td><td>' + p(m.ok + m.pend, dn) + '</td></tr>';
+      }).join('');
+      return '<section class="card rep"><h2>Reproducción de vaquillonas</h2>' +
+        '<p class="cap">Servicios antes del primer parto, por zafra (del 1 de mayo al 30 de abril).</p>' +
+        (Z.nVaq ? '<div class="kpis"><div><b>' + p(Z.s1ok, Z.s1ok + Z.s1mal) + '</b><span>Concepción 1er servicio</span></div><div><b>' + p(Z.ok, Z.ok + Z.mal) + '</b><span>Concepción</span></div><div class="tp"><b>' + p(Z.pren, Z.nVaq - Z.baja) + '</b><span>Preñadas</span></div></div>' : '<p class="hint">Todavía no hay vaquillonas servidas en la zafra ' + zt(y) + '.</p>') +
+        '<table class="tbl rtbl vtbl"><thead><tr><th></th><th>Zafra ' + zt(y) + '</th><th>Zafra ' + zt(y - 1) + '</th></tr></thead><tbody>' +
+        fila('Vaquillonas servidas', function (R) { return nf(R.nVaq); }) +
+        fila('Preñadas', function (R) { return nf(R.pren) + ' <small>' + p(R.pren, R.nVaq - R.baja) + '</small>'; }) +
+        fila('Vacías al tacto', function (R) { return nf(R.vac); }) +
+        fila('Servidas sin resultado', function (R) { return nf(R.espera); }) +
+        fila('Concepción 1er servicio', function (R) { return p(R.s1ok, R.s1ok + R.s1mal) + ' <small>' + R.s1ok + '/' + (R.s1ok + R.s1mal) + '</small>'; }) +
+        fila('Concepción (todos)', function (R) { return p(R.ok, R.ok + R.mal) + ' <small>' + R.ok + '/' + (R.ok + R.mal) + '</small>'; }) +
+        fila('Servicios por preñez', function (R) { return R.ok ? nf((R.ok + R.mal) / R.ok, 1) : '–'; }) +
+        fila('Edad al 1er servicio', function (R) { return R.edadMed != null ? nf(R.edadMed, 1) + ' <small>meses</small>' : '–'; }) +
+        '</tbody></table>' +
+        (sinS ? '<p class="cap"><b>' + sinS + (sinS === 1 ? ' vaquillona' : ' vaquillonas') + '</b> de 15 meses o más en el rodeo todavía sin servicio.</p>' : '') +
+        torosVaqHTML(Z, zt(y)) + torosVaqHTML(Z, zt(y), 'ins', 'Por inseminador', 'Inseminador') +
+        (meses ? '<h3 class="vh3">Por mes · zafra ' + zt(y) + '</h3><table class="tbl rtbl"><thead><tr><th>Mes</th><th>Servicios</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' + meses + '</tbody></table>' : '') +
+        '<p class="cap"><b>Concepción:</b> servicios que preñaron / servicios con resultado conocido (por tacto, parto o nuevo servicio). <b>Conc. máx.:</b> contando como preñadas las servidas que no repitieron ni dieron vacía al tacto (solo servicios con 24 días o más). <b>Preñadas:</b> vaquillonas que quedaron preñadas en la zafra / servidas que siguen en el rodeo o se preñaron antes de salir. <b>Edad al 1er servicio:</b> mediana. Las vaquillonas vendidas o muertas sin preñez no cuentan para el % de preñadas.</p>' +
+        '</section>';
     }
     // alertas por toro e inseminador en la temporada: aviso solo cuando uno repite claramente más que el resto (sin tabla)
     function torosHTML(svs) {
@@ -1363,9 +1489,16 @@
           var mx = (g.ok + g.pend) / n * 100, rmx = (tot.ok - g.ok + tot.pend - g.pend) / rn * 100;
           if (mx < rmx - 10) out.push('<p class="ralerta">⚠ ' + quien + ' <b>' + esc(k) + '</b> repite más que el resto: ' + Math.round(mx) + '% de concepción máxima contra ' + Math.round(rmx) + '% del resto (' + n + ' servicios en la temporada).</p>');
         });
-        return out.join('');
+        return out;
       };
-      return grupo('toro', 'El toro') + grupo('ins', 'El inseminador');
+      // una sola línea; los avisos se ven al tocarla
+      var T = grupo('toro', 'El toro'), I = grupo('ins', 'El inseminador'), n = T.length + I.length;
+      if (!n) return '';
+      var qu = T.length && I.length ? 'toro o inseminador' : T.length ? (T.length === 1 ? 'toro' : 'toros') : (I.length === 1 ? 'inseminador' : 'inseminadores');
+      var txt = n === 1 ? '1 ' + qu + ' repite más que el resto' : n + ' ' + qu + (T.length && I.length ? '' : '') + ' repiten más que el resto';
+      if (T.length && I.length) txt = n + ' avisos de toro o inseminador';
+      return '<button class="ralbtn" data-a="toroal" aria-expanded="' + !!state.toroAb + '"><span>⚠ ' + txt + '</span><span class="chev">' + (state.toroAb ? 'ocultar' : 'ver') + '</span></button>' +
+        (state.toroAb ? T.concat(I).join('') : '');
     }
     // Rodeo: vacas en ordeñe y secas, promedio diario de los 12 meses que terminan en el mes elegido
     var VOVSC = { k: null, r: null };
@@ -1562,7 +1695,8 @@
         '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
         (state.cat === 'ternera' ? '' : '<section class="card"><h2>Proyección de partos</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
         (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
-        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '');
+        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '') +
+        (state.cat === 'vaquillona' ? vaqHTML() : '');
     }
 
     /* ----- ficha ----- */
@@ -2626,6 +2760,7 @@
       var row = e.target.closest('[data-rp]');
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
+      if ((el = e.target.closest('[data-cal]'))) { var nc = +el.dataset.cal; state.cicloAl = state.cicloAl === nc ? null : nc; render(); return; }
       if ((el = e.target.closest('[data-sg]'))) { el.parentNode.classList.toggle('abierto'); return; }
       if ((el = e.target.closest('[data-ps]'))) { state.pobSort = el.dataset.ps; render(); return; }
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
@@ -2657,6 +2792,8 @@
       else if (a === 'cambiar') { closeSheet(); state.destino = null; $('#file').click(); }
       else if (a === 'tambos') tambosSheet();
       else if (a === 'inicio') irInicio();
+      else if (a === 'toroal') { state.toroAb = !state.toroAb; render(); }
+      else if (a === 'ini21def') ini21Default();
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'actprod') enviarActivacionRol('prod');
       else if (a === 'actop') enviarActivacionRol('op');
