@@ -367,15 +367,19 @@
       var fn = h.fn && h.fn > '1980' ? h.fn : null;
       // recría: hasta el primer parto
       var p1 = pa.length && pa[0][1] === 1 ? pa[0] : null, tieneP = pa.length > 0;
-      if (!tieneP || p1) {
-        var svq = S.filter(function (e) { return !p1 || e[0] < p1[0]; });
-        if (fn && svq.length && svq[0][0] >= desdeOk && svq[0][0] >= d24) { var e1 = mes(diffDays(svq[0][0], fn)); if (e1 > 8 && e1 < 40) Z.e1s.push(e1); }
+      // recría: un solo grupo, las vaquillonas que parieron en los últimos 2 años. Para cada una: edad al primer servicio,
+      // a la preñez (el servicio que cuadra con el parto), servicios por preñez y edad al parto. Al ser las mismas vaquillonas
+      // en todos los pasos, la cadena siempre cierra: primer servicio ≤ preñez < parto.
+      if (p1 && fn && p1[0] >= d24) {
+        var svq = S.filter(function (e) { return e[0] < p1[0]; });
         var cq = svq.length && svq[0][0] >= desdeOk ? concDe(svq, h, svq[0][0], p1) : null;
-        if (cq && cq >= d24 && !(x.baja && !p1 && x.baja < cq)) {
-          Z.spcV.push(Math.min(svq.filter(function (e) { return e[0] <= cq; }).length, 6));
-          if (fn) { var ep = mes(diffDays(cq, fn)); if (ep > 8 && ep < 40) Z.ePren.push(ep); }
+        if (cq) {
+          var e1 = mes(diffDays(svq[0][0], fn)), ep = mes(diffDays(cq, fn)), ea = mes(diffDays(p1[0], fn));
+          if (e1 > 8 && e1 < 40 && ep >= e1 && ea > 17 && ea < 50) {
+            Z.e1s.push(e1); Z.ePren.push(ep); Z.e1p.push(ea);
+            Z.spcV.push(Math.min(svq.filter(function (e) { return e[0] <= cq; }).length, 6));
+          }
         }
-        if (p1 && fn && p1[0] >= d24) { var ea = mes(diffDays(p1[0], fn)); if (ea > 17 && ea < 50) Z.e1p.push(ea); }
       }
       // lactancias: parto a servicio, parto a preñez, servicios por preñez
       pa.forEach(function (p, i) {
@@ -390,13 +394,16 @@
         // mismas reglas que el índice: primer celo o servicio, concepción estimada con el parto siguiente, vacías de 150 días o más penalizan
         var evs = ev.filter(function (e) { return e[0] > p[0] && e[0] < hasta; }), sv = evs.filter(function (e) { return e[1] === 'S'; });
         var abierta = diffDays(x.baja && x.baja < ref ? x.baja : ref, p[0]);
-        if (evs.length) { var pc = diffDays(evs[0][0], p[0]); if (pc > 0) G.pc.push(Math.min(pc, 150)); }
         var c = concDe(sv, h, p[0], np), estim = false;
         if (!c && np) { c = addDays(np[0], -GEST); estim = true; }
         var da = null, spc = null;
         if (c) { da = diffDays(c, p[0]); spc = estim ? null : sv.filter(function (e) { return e[0] <= c; }).length || null; }
         else if (abierta >= 150) { da = abierta; spc = sv.length + 1; }
-        if (c || abierta >= 150) { G.n++; if (c) G.pren++; }
+        if (c || abierta >= 150) {
+          G.n++; if (c) G.pren++;
+          // parto al primer celo o servicio, en las mismas vacas que los días abiertos (así nunca da más que los días abiertos)
+          var pc = evs.length ? diffDays(evs[0][0], p[0]) : 150; if (pc > 0) G.pc.push(Math.min(pc, 150));
+        }
         if (da != null && da > 0) G.da.push(Math.min(da, 300));
         if (spc) G.spc.push(Math.min(spc, 6));
       });
@@ -555,7 +562,7 @@
     var $ = function (s) { return document.querySelector(s); };
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
     var today = function () { return A.ymd(new Date()); };
-    var nf = function (n, d) { return n == null ? '' : Number(n).toLocaleString('es-UY', { maximumFractionDigits: d || 0 }); };
+    var nf = function (n, d, dmin) { return n == null ? '' : Number(n).toLocaleString('es-UY', { maximumFractionDigits: d || 0, minimumFractionDigits: dmin || 0 }); };
     var pct = function (n, t) { return t ? nf(n / t * 100, 1) + '%' : ''; };
 
     var LABEL = { prenada: 'Preñada', servida: 'Servida', vacia: 'Vacía', ciclando: 'Ciclando', apta: 'Apta', sin: 'Sin tacto', otro: 'Otros' };
@@ -1611,7 +1618,7 @@
     var LVC = { k: null, r: null };
     function vidaFoto(r) { var o = {}, rd = function (x) { return x == null ? null : Math.round(x * 10) / 10; };
       ['e1s', 'ePren', 'spcV', 'e1p', 'iep', 'salEdad', 'salLac', 'seca', 'gP', 'gM'].forEach(function (k) { o[k] = rd(r[k]); });
-      o.l1da = rd(r.l1.da); o.lada = rd(r.la.da); o.l1pc = rd(r.l1.pc); o.lapc = rd(r.la.pc); o.l1spc = rd(r.l1.spc); o.laspc = rd(r.la.spc); return o; }
+      o.l1da = rd(r.l1.da); o.lada = rd(r.la.da); o.l1pc = rd(r.l1.pc); o.lapc = rd(r.la.pc); o.l1spc = rd(r.l1.spc); o.laspc = rd(r.la.spc); o.v = 2; return o; }
     function vidaHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + DB.animales.length;
@@ -1623,9 +1630,11 @@
         var t = tamboAct(), y = +ref.slice(0, 4) - (ref.slice(5) < '07-01' ? 1 : 0), fj = y + '-07-01', sk = DB.sel ? DB.sel.join(',') : '', ant = null;
         if (r && t) {
           t.vida = t.vida || {}; var V = t.vida[sk] || (t.vida[sk] = {});
-          if (!V[fj] && fj > (DB.desdeHist || '0000')) { try { var f = A.lineaVida(L, esPren, fj); if (f.nE1p || f.l1.n || f.la.n) { V[fj] = vidaFoto(f); saveTambos(); } } catch (e) {} }
+          if ((!V[fj] || V[fj].v !== 2) && fj > (DB.desdeHist || '0000')) { try { var f = A.lineaVida(L, esPren, fj); if (f.nE1p || f.l1.n || f.la.n) { V[fj] = vidaFoto(f); saveTambos(); } } catch (e) {} }
           // se compara con la última foto que tenga al menos 6 meses de diferencia con este respaldo
-          Object.keys(V).sort().forEach(function (d) { if (A.diffDays(ref, d) >= 180) ant = { f: d, v: V[d] }; });
+          // fotos guardadas con el cálculo anterior de la recría: se rehacen con el actual
+          Object.keys(V).forEach(function (d) { if (V[d].v !== 2 && d > (DB.desdeHist || '0000')) { try { V[d] = vidaFoto(A.lineaVida(L, esPren, d)); saveTambos(); } catch (e) {} } });
+          Object.keys(V).sort().forEach(function (d) { if (A.diffDays(ref, d) >= 180 && V[d].v === 2) ant = { f: d, v: V[d] }; });
         }
         LVC = { k: k, r: r, ant: ant };
       }
@@ -1649,13 +1658,13 @@
       var lac = function (G, cls, tit, kk) {
         if (!G.nPc && !G.n) return '';
         return paso(cls, cls === 'l1' ? '1ª' : '2ª+', tit, (G.da != null ? n1(G.da, 0) + ' días' : '–') + '<em> abiertos</em>' + vs(kk + 'da', 0, ' d'),
-          [G.pc != null ? '<b>' + n1(G.pc, 0) + '</b> días al 1er celo o servicio' : null, G.spc != null ? '<b>' + n1(G.spc) + '</b> servicios por preñez' : null, G.pren150 != null ? Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : null].filter(Boolean).join(' · '));
+          [G.pc != null ? '<b>' + n1(G.pc, 0) + '</b> días al 1er celo o servicio' : null, G.spc != null ? '<b>' + nf(G.spc, 1, 1) + '</b> servicios por preñez' : null, G.pren150 != null ? Math.round(G.pren150 * 100) + '% preñadas (de ' + G.n + ')' : null].filter(Boolean).join(' · '));
       };
       var lista = '<ol class="lvlist">' +
         paso('n', '●', 'Nace', 'Empieza la recría', '') +
-        (r.e1s != null ? paso('s', '1', 'Primer servicio', n1(r.e1s) + ' meses<em> de edad</em>' + vs('e1s', 1, ' m'), 'De ' + r.nE1s + ' vaquillonas') : '') +
-        (r.spcV != null || r.ePren != null ? paso('p', '✓', 'Se preña', (r.ePren != null ? n1(r.ePren) + ' meses' : '–') + '<em> de edad</em>' + vs('ePren', 1, ' m'), r.spcV != null ? '<b>' + n1(r.spcV) + '</b> servicios por preñez (de ' + r.nSpcV + ')' : '') : '') +
-        (r.e1p != null ? paso('r', '★', 'Primer parto', n1(r.e1p) + ' meses<em> de edad</em>' + vs('e1p', 1, ' m'), 'De ' + r.nE1p + ' partos de vaquillona') : '') +
+        (r.e1s != null ? paso('s', '1', 'Primer servicio', n1(r.e1s) + ' meses<em> de edad</em>' + vs('e1s', 1, ' m'), 'De ' + r.nE1s + ' vaquillonas que parieron en los últimos 2 años') : '') +
+        (r.spcV != null || r.ePren != null ? paso('p', '✓', 'Se preña', (r.ePren != null ? n1(r.ePren) + ' meses' : '–') + '<em> de edad</em>' + vs('ePren', 1, ' m'), r.spcV != null ? '<b>' + nf(r.spcV, 1, 1) + '</b> servicios por preñez' : '') : '') +
+        (r.e1p != null ? paso('r', '★', 'Primer parto', n1(r.e1p) + ' meses<em> de edad</em>' + vs('e1p', 1, ' m'), (r.ePren != null ? n1(r.e1p - r.ePren) + ' meses después de preñarse' : '')) : '') +
         lac(r.l1, 'l1', 'Primera lactancia', 'l1') +
         (r.iep != null ? paso('r', '↻', 'Intervalo entre partos', n1(r.iep, 0) + ' días' + vs('iep', 0, ' d'), n1(r.iep / 30.44) + ' meses (de ' + r.nIep + ')') : '') +
         lac(r.la, 'la', 'Vacas adultas (2ª lactancia o más)', 'la') +
@@ -1666,7 +1675,7 @@
       if (extra) lista += '<div class="lvx">' + extra + '</div>';
       return '<section class="card lvcard"><h2>La vaca ' + esc(nom || 'del tambo') + '</h2><p class="cap" style="margin:0 0 6px">La vida promedio de una vaca en este tambo.</p>' +
         '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
-        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según ' + SRC() + '. Mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio de la preñez hasta el parto.' + (ant ? ' En gris, la foto fija del 1/7/' + ant.f.slice(0, 4) + ' (los mismos 24 meses hasta esa fecha), para ver la evolución.' : ' Cada 1 de julio se guarda una foto fija de estos números para comparar con los años siguientes.') + '</p></section>';
+        '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según ' + SRC() + '. Recría: las vaquillonas que parieron en los últimos 2 años, con su edad al primer servicio, a la preñez (el servicio que coincide con el parto) y al parto. Lactancias, mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio de la preñez hasta el parto.' + (ant ? ' En gris, la foto fija del 1/7/' + ant.f.slice(0, 4) + ' (los mismos 24 meses hasta esa fecha), para ver la evolución.' : ' Cada 1 de julio se guarda una foto fija de estos números para comparar con los años siguientes.') + '</p></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
