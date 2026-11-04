@@ -296,6 +296,14 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .vtbl td:first-child{text-align:left;white-space:normal}
 .vtbl th:first-child{text-align:left}
 .vh3{font-size:16px;margin:16px 0 0}
+.vmes{cursor:pointer}
+.vmes[aria-expanded="true"] td{font-weight:700}
+.vdet{display:grid;gap:4px;margin:2px 0 6px}
+.vdrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:center;width:100%;text-align:left;background:var(--bg);border:0;border-radius:10px;padding:7px 10px;font:inherit;font-size:13.5px;color:var(--ink);cursor:pointer}
+.vdrow>span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vdrow .vr{text-align:right;font-weight:700;color:var(--ink)}
+.vdrow .vr small{display:block;font-size:11.5px;font-weight:500;color:var(--muted)}
+.vdrow .vr.ok{color:var(--prenada)}.vdrow .vr.mal{color:var(--vacia)}
 .pscroll .ptbl{font-size:14.5px;min-width:100%}.pscroll .ptbl th,.pscroll .ptbl td{padding:7px 5px;vertical-align:top;min-width:68px}
 .ptbl td small{display:block;font-size:11.5px;color:var(--muted);font-weight:500}
 .ptbl td.pnom{font-weight:700;text-align:left;min-width:110px}.ptbl th:first-child{text-align:left}
@@ -584,6 +592,6 @@ details.lac summary .l{flex:1}
 <script src="fosapp.js?v=p101"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p111"></script>
+<script src="app.js?v=p112"></script>
 </body>
 </html>
