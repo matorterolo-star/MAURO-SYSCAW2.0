@@ -1387,8 +1387,9 @@
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
     function vaqZafra(y, ref) {
       var d0 = y + '-05-01', d1 = (y + 1) + '-04-30';
-      var R = { serv: 0, ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0, nVaq: 0, pren: 0, vac: 0, espera: 0, baja: 0, edad: [], meses: {}, toros: {}, ins: {} };
-      var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null }; }).concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha || null }; }));
+      var R = { serv: 0, ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0, nVaq: 0, pren: 0, vac: 0, espera: 0, baja: 0, edad: [], meses: {}, toros: {}, ins: {}, det: {} };
+      var an = DB.animales.map(function (a) { return { rp: a.rp, h: DB.hist[a.rp], salida: null }; }).concat((DB.bajas || []).map(function (b) { return { rp: b.key, h: DB.hist[b.key], salida: b.bFecha || null }; }));
+      var f5 = function (d) { return A.fmt(d).slice(0, 5); };
       an.forEach(function (x) {
         var h = x.h; if (!h || !h.ev) return;
         var p1 = h.pa && h.pa.length ? h.pa[0][0] : '9999';
@@ -1396,25 +1397,29 @@
         var svz = sv.filter(function (e) { return e[0] >= d0 && e[0] <= d1 && e[0] <= ref; });
         if (!svz.length) return;
         // concepción: por el parto (fecha de concepción o servicio compatible con la gestación) o por el último tacto positivo
-        var conc = null;
+        var conc = null, src = '';
         if (p1 !== '9999') {
+          src = 'parto ' + A.fmt(p1);
           conc = h.pa[0][4] || null;
           if (!conc) { var est = A.addDays(p1, -A.GEST), best = null; sv.forEach(function (e) { var d = Math.abs(A.diffDays(e[0], est)); if (d <= 20 && (!best || d < best[1])) best = [e[0], d]; }); conc = best ? best[0] : null; }
         } else {
+          // un tacto positivo solo confirma servicios de al menos 28 días antes (antes no se puede diagnosticar)
           var pos = (h.ta || []).filter(function (t) { return t[0] > sv[0][0] && esPren(t[1]); });
-          if (pos.length) { var T = pos[pos.length - 1][0], antes = sv.filter(function (e) { return e[0] <= T; }); conc = antes.length ? antes[antes.length - 1][0] : null; }
+          if (pos.length) { var T = pos[pos.length - 1][0], antes = sv.filter(function (e) { return A.diffDays(T, e[0]) >= 28; }); conc = antes.length ? antes[antes.length - 1][0] : null; var tc = pos[pos.length - 1][1], tn = DB.codes && DB.codes[tc] ? DB.codes[tc][0] || tc : tc; src = 'tacto «' + esc(tn) + '» ' + f5(T); }
         }
         var neg = (h.ta || []).filter(function (t) { return t[0] > sv[0][0] && t[0] < p1 && !esPren(t[1]); }).map(function (t) { return t[0]; });
         R.nVaq++;
         if (h.fn && h.fn > '1980') R.edad.push(A.diffDays(svz[0][0], h.fn) / 30.44);
         svz.forEach(function (e, i) {
-          var r = null, k = e[0].slice(0, 7);
-          if (conc) r = e[0] === conc ? 'ok' : e[0] < conc ? 'mal' : null;
-          else {
-            var j = sv.indexOf(e), luego = (sv[j + 1] && sv[j + 1][0] <= ref) || neg.some(function (d) { return d > e[0] && A.diffDays(d, e[0]) >= 25; });
-            r = luego ? 'mal' : A.diffDays(ref, e[0]) < 24 ? null : 'pend';
+          var r = null, k = e[0].slice(0, 7), por = '';
+          var j = sv.indexOf(e), sig = sv[j + 1] && sv[j + 1][0] <= ref ? sv[j + 1][0] : null, ng = neg.filter(function (d) { return d > e[0] && A.diffDays(d, e[0]) >= 25; })[0];
+          if (conc && e[0] <= conc) { r = e[0] === conc ? 'ok' : 'mal'; por = r === 'ok' ? src : sig ? 'repitió ' + f5(sig) : src; }
+          else if (!conc) {
+            r = sig || ng ? 'mal' : A.diffDays(ref, e[0]) < 24 ? null : 'pend';
+            por = sig ? 'repitió ' + f5(sig) : ng ? 'tacto vacía ' + f5(ng) : 'sin diagnóstico';
           }
           if (!r) return;
+          (R.det[k] = R.det[k] || []).push({ rp: x.rp, f: e[0], toro: e[2] || '', r: r, por: por });
           R.serv++; R[r]++;
           var M = R.meses[k] = R.meses[k] || { ok: 0, mal: 0, pend: 0 }; M[r]++;
           var tk = String(e[2] || '').trim() || 'Sin dato de toro', B = R.toros[tk] = R.toros[tk] || { ok: 0, mal: 0, pend: 0, s1ok: 0, s1mal: 0 }; B[r]++;
@@ -1452,12 +1457,17 @@
       if (!Z.nVaq && !Za.nVaq) return '';
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
       var zt = function (a) { return a + '-' + String(a + 1).slice(2); };
+      var f5x = function (d) { return A.fmt(d).slice(0, 5); };
       // vaquillonas en el rodeo de 15 meses o más que todavía no tienen servicio
       var sinS = DB.animales.filter(function (a) { if (a.cat !== 'vaquillona') return false; var h = DB.hist[a.rp]; if (!h || !h.fn || A.diffDays(ref, h.fn) < 15 * 30.44) return false; return !h.ev.some(function (e) { return e[1] === 'S'; }); }).length;
       var fila = function (t, f, b) { return '<tr><td>' + t + '</td><td><b>' + f(Z) + '</b></td><td>' + (Za.nVaq ? f(Za) : '–') + '</td></tr>'; };
+      var RL = { ok: 'Preñó', mal: 'No preñó', pend: 'Sin resultado' };
       var meses = Object.keys(Z.meses).sort().map(function (k) {
-        var m = Z.meses[k], dn = m.ok + m.mal + m.pend;
-        return '<tr><td>' + A.MESES[+k.slice(5, 7) - 1] + ' <small>' + k.slice(2, 4) + '</small></td><td>' + dn + '</td><td>' + p(m.ok, m.ok + m.mal) + '<small>' + m.ok + '/' + (m.ok + m.mal) + '</small></td><td>' + p(m.ok + m.pend, dn) + '</td></tr>';
+        var m = Z.meses[k], dn = m.ok + m.mal + m.pend, ab = state.vaqMes === k;
+        var det = ab ? '<tr class="ralrow"><td colspan="4"><div class="vdet">' + (Z.det[k] || []).sort(function (a, b) { return a.f < b.f ? -1 : 1; }).map(function (d) {
+          return '<button class="vdrow" data-rp="' + esc(d.rp) + '"><b>' + esc(d.rp) + '</b><span>' + f5x(d.f) + (d.toro ? ' · ' + esc(d.toro) : '') + '</span><span class="vr ' + d.r + '">' + RL[d.r] + '<small>' + d.por + '</small></span></button>';
+        }).join('') + '</div></td></tr>' : '';
+        return '<tr class="vmes" data-vmes="' + k + '" aria-expanded="' + ab + '"><td>' + A.MESES[+k.slice(5, 7) - 1] + ' <small>' + k.slice(2, 4) + '</small></td><td>' + dn + '</td><td>' + p(m.ok, m.ok + m.mal) + '<small>' + m.ok + '/' + (m.ok + m.mal) + '</small></td><td>' + p(m.ok + m.pend, dn) + '</td></tr>' + det;
       }).join('');
       return '<section class="card rep"><h2>Reproducción de vaquillonas</h2>' +
         '<p class="cap">Servicios antes del primer parto, por zafra (del 1 de mayo al 30 de abril).</p>' +
@@ -1474,7 +1484,7 @@
         '</tbody></table>' +
         (sinS ? '<p class="cap"><b>' + sinS + (sinS === 1 ? ' vaquillona' : ' vaquillonas') + '</b> de 15 meses o más en el rodeo todavía sin servicio.</p>' : '') +
         torosVaqHTML(Z, zt(y)) + torosVaqHTML(Z, zt(y), 'ins', 'Por inseminador', 'Inseminador') +
-        (meses ? '<h3 class="vh3">Por mes · zafra ' + zt(y) + '</h3><table class="tbl rtbl"><thead><tr><th>Mes</th><th>Servicios</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' + meses + '</tbody></table>' : '') +
+        (meses ? '<h3 class="vh3">Por mes · zafra ' + zt(y) + '</h3><p class="cap">Tocá un mes para ver cada vaquillona y de dónde sale su resultado.</p><table class="tbl rtbl"><thead><tr><th>Mes</th><th>Servicios</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' + meses + '</tbody></table>' : '') +
         '<p class="cap"><b>Concepción:</b> servicios que preñaron / servicios con resultado conocido (por tacto, parto o nuevo servicio). <b>Conc. máx.:</b> contando como preñadas las servidas que no repitieron ni dieron vacía al tacto (solo servicios con 24 días o más). <b>Preñadas:</b> vaquillonas que quedaron preñadas en la zafra / servidas que siguen en el rodeo o se preñaron antes de salir. <b>Edad al 1er servicio:</b> mediana. Las vaquillonas vendidas o muertas sin preñez no cuentan para el % de preñadas.</p>' +
         '</section>';
     }
@@ -2760,6 +2770,7 @@
       var row = e.target.closest('[data-rp]');
       if (row) { openFicha(row.getAttribute('data-rp')); return; }
       var el;
+      if ((el = e.target.closest('[data-vmes]'))) { state.vaqMes = state.vaqMes === el.dataset.vmes ? null : el.dataset.vmes; render(); return; }
       if ((el = e.target.closest('[data-cal]'))) { var nc = +el.dataset.cal; state.cicloAl = state.cicloAl === nc ? null : nc; render(); return; }
       if ((el = e.target.closest('[data-sg]'))) { el.parentNode.classList.toggle('abierto'); return; }
       if ((el = e.target.closest('[data-ps]'))) { state.pobSort = el.dataset.ps; render(); return; }
