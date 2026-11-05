@@ -1410,57 +1410,62 @@
       PANC = { k: k, r: R };
       return R;
     }
-    var VER = { rep: 'Ver Reproducción cada 21 días', ptvac: 'Ver las vacas por preñar', tactar: 'Ver las vacas para tactar', leche: 'Ver Leche' };
-    var SEM = { v: ['ok', 'Bien'], a: ['at', 'Atención'], r: ['mal', 'Revisar'], g: ['nd', 'Sin comparar'] };
+    var SEM = { v: 'ok', a: 'at', r: 'mal', g: 'nd' };
+    // Panel en tablero 2×2: un número grande por indicador, semáforo y una línea de comparación; arriba, el resumen de lo que hay que revisar
     function panelHTML() {
       var R = panelDatos(), n0 = function (x) { return x == null ? '–' : nf(Math.round(x)); }, p0 = function (x) { return x == null ? '–' : Math.round(x) + '%'; };
-      var tile = function (sem, act, tit, cuerpo, pie, aviso) {
-        var S = SEM[sem];
-        return '<button class="ptile ' + S[0] + '" data-pan="' + act + '"><span class="pthead"><span class="ptt">' + tit + '</span><span class="psem"><i></i>' + S[1] + '</span></span>' +
-          cuerpo + (pie ? '<small class="ppie">' + pie + '</small>' : '') + (aviso ? '<strong class="paviso">⚠ ' + aviso + '</strong>' : '') + '<em class="pver">' + (VER[act] || 'Ver') + ' ›</em></button>';
+      var MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+      var avisos = [];
+      var tile = function (sem, act, tit, v, l, d, dsem) {
+        var c = SEM[sem];
+        return '<button class="ptile ' + c + '" data-pan="' + act + '" aria-label="' + tit + '"><span class="pth">' + tit + '</span><i class="pdot" aria-hidden="true"></i>' +
+          '<b class="pv">' + v + '</b><span class="pl">' + l + '</span>' + (d ? '<span class="pd ' + SEM[dsem || sem] + '">' + d + '</span>' : '') + '</button>';
       };
-      var big = function (v, l) { return '<span class="pbig"><b>' + v + '</b><span>' + l + '</span></span>'; };
+      var flecha = function (x) { return x >= 0 ? '▲ +' : '▼ '; };
       // 1) reproducción cada 21 días
       var enT = R.ini <= R.ref && R.ref <= R.fin, t1;
-      if (R.ini > R.ref || (!R.cs && !R.cc)) t1 = tile('g', 'rep', 'Reproducción cada 21 días', '<p class="pnada">Todavía no hay ciclos con datos en esta temporada.</p>', 'Inicio de servicios: ' + A.fmt(R.ini));
+      if (R.ini > R.ref || (!R.cs && !R.cc)) t1 = tile('g', 'rep', 'Reproducción 21 días', '–', 'Sin ciclos con datos todavía', 'Inicio: ' + A.fmt(R.ini).slice(0, 5));
       else {
         var sv = R.cs ? R.cs.v : null, cv = R.cc ? R.cc.v : null;
         var mal = (sv != null && sv < 50) || (cv != null && cv < 40), at = (sv != null && sv < 60) || (cv != null && cv < 45);
-        var sem = !enT ? 'g' : mal ? 'r' : at ? 'a' : 'v';
-        t1 = tile(sem, 'rep', 'Reproducción cada 21 días',
-          '<span class="pbigs">' + big(p0(sv), 'Tasa de servicio' + (R.cs ? '<br>ciclo ' + R.cs.n : '')) + big(p0(cv), (R.cc && !R.cc.tact ? 'Concepción máx.' : 'Concepción') + (R.cc ? '<br>ciclo ' + R.cc.n : '')) + '</span>',
-          enT ? 'Último ciclo terminado y último con resultados.' : 'Temporada terminada el ' + A.fmt(R.fin) + '.',
-          enT && mal ? 'Revisá Reproducción cada 21 días' : '');
+        var sem = !enT ? 'g' : mal ? 'r' : at ? 'a' : 'v', cn = R.cc && !R.cc.tact ? 'Concep. máx.' : 'Concepción';
+        if (enT && mal) avisos.push(['mal', 'Revisá Reproducción cada 21 días: ' + [sv != null && sv < 50 ? 'servicio ' + p0(sv) + ' en el ciclo ' + R.cs.n : '', cv != null && cv < 40 ? cn.toLowerCase() + ' ' + p0(cv) + ' en el ciclo ' + R.cc.n : ''].filter(Boolean).join(' y ')]);
+        t1 = tile(sem, 'rep', 'Reproducción 21 días', p0(sv), 'Tasa de servicio' + (R.cs ? ' · ciclo ' + R.cs.n : ''),
+          cv != null ? cn + ' ' + p0(cv) + (R.cc.n !== (R.cs && R.cs.n) ? ' · ciclo ' + R.cc.n : '') : (enT ? '' : 'Temporada terminada'));
       }
-      // 2) vacas preñadas y por preñar
-      var t2, P = R.pr;
-      if (P.P + P.PP === 0) t2 = tile('g', 'ptvac', 'Vacas preñadas y por preñar', '<p class="pnada">Sin vacas para contar.</p>', '');
+      // 2) leche por vaca
+      var t2;
+      if (!R.le) t2 = tile('g', 'leche', 'Leche por vaca', '–', 'Sin controles lecheros', '');
       else {
-        var d2 = R.prA != null && P.pct != null ? P.pct - R.prA : null;
-        t2 = tile(d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v', 'ptvac', 'Vacas preñadas y por preñar',
-          '<span class="pbigs">' + big(n0(P.P), 'Preñadas') + big(n0(P.PP), 'Por preñar') + big(p0(P.pct), 'Preñadas de las que se pueden preñar') + '</span>',
-          'Vacas en ordeñe y secas.' + (P.E || P.DS ? ' Además, ' + [P.E ? P.E + ' en espera voluntaria (menos de ' + pevActual() + ' días de paridas)' : '', P.DS ? P.DS + ' vacías con descarte programado' : ''].filter(Boolean).join(' y ') + '.' : '') + (R.prA != null ? ' Hace un año: <b>' + p0(R.prA) + '</b> preñadas.' : ''));
+        var d4 = R.le.prev ? (R.le.v / R.le.prev - 1) * 100 : null, s4 = d4 == null ? 'g' : d4 <= -10 ? 'r' : d4 <= -5 ? 'a' : 'v';
+        if (s4 === 'r') avisos.push(['mal', 'Leche por vaca ' + nf(Math.abs(d4), 0) + '% abajo del año anterior']);
+        t2 = tile(s4, 'leche', 'Leche por vaca', nf(R.le.v, 1) + '<small> L</small>', MESL[A.MESES.indexOf(R.le.mes)].replace(/^./, function (c) { return c.toUpperCase(); }) + ' ' + R.le.anio,
+          d4 == null ? '' : flecha(d4) + nf(d4, 0) + '% vs ' + R.le.mes + ' ' + (R.le.anio - 1));
       }
-      // 3) días desde el último diagnóstico de gestación: amarillo desde 21 días, rojo con más de 30
-      var t3;
-      if (!R.ultTacto) t3 = tile('g', 'tactar', 'Último diagnóstico', '<p class="pnada">No hay tactos cargados.</p>', '');
+      // 3) vacas preñadas
+      var t3, P = R.pr;
+      if (P.P + P.PP === 0) t3 = tile('g', 'ptvac', 'Vacas preñadas', '–', 'Sin vacas para contar', '');
       else {
-        var dt = A.diffDays(today(), R.ultTacto);
-        t3 = tile(dt > 30 ? 'r' : dt >= 21 ? 'a' : 'v', 'tactar', 'Último diagnóstico',
-          '<span class="pbigs">' + big(n0(dt), dt === 1 ? 'día desde el último tacto' : 'días desde el último tacto') + (R.nTactar != null ? big(n0(R.nTactar), 'Para tactar (vacas y vaquillonas)') : '') + '</span>',
-          'Último tacto cargado: ' + A.fmt(R.ultTacto) + '.', dt >= 21 ? 'Coordiná la visita para el diagnóstico' : '');
+        var d2 = R.prA != null && P.pct != null ? P.pct - R.prA : null, s2 = d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v';
+        if (s2 === 'r') avisos.push(['mal', 'Vacas preñadas: ' + nf(Math.abs(Math.round(d2))) + ' puntos menos que hace un año']);
+        t3 = tile(s2, 'ptvac', 'Vacas preñadas', p0(P.pct), n0(P.P) + ' preñadas · ' + n0(P.PP) + ' por preñar',
+          d2 == null ? '' : flecha(d2) + nf(Math.round(d2)) + ' pts vs hace un año');
       }
-      // 4) leche por vaca
+      // 4) último diagnóstico: amarillo desde 21 días, rojo con más de 30
       var t4;
-      if (!R.le) t4 = tile('g', 'leche', 'Leche por vaca', '<p class="pnada">Sin controles lecheros en el respaldo.</p>', '');
+      if (!R.ultTacto) t4 = tile('g', 'tactar', 'Último tacto', '–', 'Sin tactos cargados', '');
       else {
-        var d4 = R.le.prev ? (R.le.v / R.le.prev - 1) * 100 : null;
-        t4 = tile(d4 == null ? 'g' : d4 <= -10 ? 'r' : d4 <= -5 ? 'a' : 'v', 'leche', 'Leche por vaca',
-          big(nf(R.le.v, 1) + '<small> L</small>', 'por vaca en ordeñe · ' + R.le.mes + ' ' + R.le.anio),
-          R.le.prev ? 'Mismo mes del año anterior: <b>' + nf(R.le.prev, 1) + ' L</b> (' + (d4 >= 0 ? '+' : '') + nf(d4, 0) + '%).' : '');
+        var dt = A.diffDays(today(), R.ultTacto), s3 = dt > 30 ? 'r' : dt >= 21 ? 'a' : 'v';
+        if (dt >= 21) avisos.push([s3 === 'r' ? 'mal' : 'at', 'Pasaron ' + dt + ' días desde el último tacto: coordiná la visita para el diagnóstico']);
+        t4 = tile(s3, 'tactar', 'Último tacto', dt + '<small> ' + (dt === 1 ? 'día' : 'días') + '</small>', 'Desde el ' + A.fmt(R.ultTacto).slice(0, 5),
+          R.nTactar != null ? n0(R.nTactar) + ' para tactar' : '');
       }
-      return '<h1 class="ptitle">Panel</h1><div class="panel">' + t1 + t4 + t2 + t3 + '</div>' +
-        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Semáforo: reproducción en rojo con tasa de servicio menor a 50% o concepción menor a 40% (amarillo: menos de 60% y 45%); % de preñadas y leche, contra hace un año (5 y 10 puntos menos; 5% y 10% menos); último diagnóstico: amarillo desde 21 días, rojo con más de 30.</p>';
+      var hayMal = avisos.some(function (x) { return x[0] === 'mal'; });
+      var res = avisos.length
+        ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
+        : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
+      return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' +
+        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra hace un año (amarillo 5 puntos menos, rojo 10). Último tacto: amarillo desde 21 días, rojo con más de 30.</p>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
