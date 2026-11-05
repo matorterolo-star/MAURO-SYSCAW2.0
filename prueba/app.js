@@ -2135,6 +2135,15 @@
       });
     }
 
+    // las explicaciones largas (cómo se calcula cada cosa) quedan plegadas detrás de un botón
+    function plegarNotas(main) {
+      Array.prototype.forEach.call(main.querySelectorAll('p.cap'), function (p) {
+        if (p.closest('details.nota') || p.textContent.length < 160) return;
+        var d = document.createElement('details'); d.className = 'nota';
+        d.innerHTML = '<summary>Cómo se calcula</summary>';
+        p.parentNode.insertBefore(d, p); d.appendChild(p);
+      });
+    }
     var LOGO_LIBRETA = '<svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true"><rect x="11" y="6" width="28" height="36" rx="3" fill="#F4D823"/><rect x="11" y="6" width="6" height="36" rx="2" fill="#C9A227"/><path d="M8 12h6M8 19h6M8 26h6M8 33h6" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/><rect x="21" y="14" width="13" height="3" rx="1.5" fill="#12274A"/><rect x="21" y="21" width="10" height="3" rx="1.5" fill="#12274A" opacity=".6"/><rect x="21" y="28" width="12" height="3" rx="1.5" fill="#12274A" opacity=".6"/></svg>';
     /* ----- pestaña Leche: último control lechero ----- */
     function solidos(c) { return c[2] >= 2 && c[2] <= 7 && c[3] >= 2 && c[3] <= 5.5 ? c[1] * (c[2] + c[3]) / 100 : null; }
@@ -2883,7 +2892,7 @@
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); plegarNotas(main); return; }
         state.rp = null;
       }
       var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
@@ -2892,6 +2901,7 @@
       else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); }
       else if (state.tab === 'panel' && panelOK()) main.innerHTML = err + panelHTML();
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
+      plegarNotas(main);
     }
 
     /* ----- eventos ----- */
