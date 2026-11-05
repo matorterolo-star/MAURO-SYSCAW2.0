@@ -1090,7 +1090,7 @@
       if (g == null) { try { localStorage.removeItem('libreta:vta:' + TAMBOS.activo); } catch (e) {} } else setP('vta', g);
       $('#vtaN').innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'vaca' : 'vacas') + ' para venta con este criterio';
     }
-    function matchFiltro(a, f) { if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
+    function matchFiltro(a, f) { if (f === 'ptvac') { var PD = panelOK() ? panelDatos() : null; return !!(PD && PD.pt && PD.pt.vac[a.rp]); } if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
@@ -1123,6 +1123,7 @@
         if (f === 'venta') return ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5);
         if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return ('00000' + (f === 'itop' ? V.puesto : 99999 - V.puesto)).slice(-5); }
         if (f === 'descarte') return paraVenta(a) ? '0' + ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5) : '1';
+        if (f === 'ptvac') return a.pFecha || '9999'; // parto más antiguo = más días de parida
         if (f === 'vacia' || f === 'ciclando' || f === 'apta' || f === 'otro') return a.tFecha || '9999';
         return '';
       };
@@ -1139,6 +1140,7 @@
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
       var nVta = esOperario() ? 0 : L.filter(paraVenta).length;
       if (nVta) fl.push(['venta', 'Para venta', nVta]);
+      if (panelOK() && (state.cat === 'todas' || state.cat === 'vaca' || state.cat === 'seca')) { var PDv = panelDatos(); if (PDv.pt && PDv.pt.nVac) fl.push(['ptvac', 'Sin preñez en la temporada', L.filter(function (a) { return PDv.pt.vac[a.rp]; }).length]); }
       if (IDX() && !esOperario()) {
         var nTop = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'top'; }).length, nPeor = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'peor'; }).length;
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
@@ -1171,7 +1173,7 @@
         if (bj.length > 15) html += '<p class="hint">Hay ' + (bj.length - 15) + ' bajas más con ese número. Escribí la caravana completa.</p>';
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
-        var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
+        var tit = f === 'ptvac' ? 'sin preñez en la temporada (más días de paridas primero)' : f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
         html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       }
@@ -1352,7 +1354,7 @@
     // % preñez de la temporada: vacas paridas antes del inicio, vacías al inicio, que cumplen la espera voluntaria hasta el corte
     // y no dadas de baja antes del inicio; preñadas = concepción entre el inicio y el corte (mismo criterio que el informe anual)
     function prenTemporada(L, ini, corte, pev) {
-      var apt = 0, pre = 0;
+      var apt = 0, pre = 0, vac = {};
       L.forEach(function (x) {
         var h = x.h; if (!h.pa || !h.pa.length) return;
         h.pa.forEach(function (p, i) {
@@ -1363,9 +1365,10 @@
           if (c.conc && c.conc < ini) return;
           if (A.diffDays(corte, p[0]) < pev) return;
           apt++; if (c.conc && c.conc >= ini && c.conc <= corte) pre++;
+          else if (!x.a.bFecha && x.a.estado !== 'prenada' && !np) vac[x.a.rp] = true;
         });
       });
-      return apt ? { v: pre / apt * 100, pre: pre, apt: apt } : null;
+      return apt ? { v: pre / apt * 100, pre: pre, apt: apt, vac: vac, nVac: Object.keys(vac).length } : null;
     }
     function panelDatos() {
       var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
@@ -1401,13 +1404,14 @@
       PANC = { k: k, r: R };
       return R;
     }
+    var VER = { rep: 'Ver Reproducción cada 21 días', ptvac: 'Ver las vacas sin preñez', vovs: 'Ver Vacas en ordeñe y secas', leche: 'Ver Leche' };
     var SEM = { v: ['ok', 'Bien'], a: ['at', 'Atención'], r: ['mal', 'Revisar'], g: ['nd', 'Sin comparar'] };
     function panelHTML() {
       var R = panelDatos(), n0 = function (x) { return x == null ? '–' : nf(Math.round(x)); }, p0 = function (x) { return x == null ? '–' : Math.round(x) + '%'; };
       var tile = function (sem, act, tit, cuerpo, pie, aviso) {
         var S = SEM[sem];
         return '<button class="ptile ' + S[0] + '" data-pan="' + act + '"><span class="pthead"><span class="ptt">' + tit + '</span><span class="psem"><i></i>' + S[1] + '</span></span>' +
-          cuerpo + (pie ? '<small class="ppie">' + pie + '</small>' : '') + (aviso ? '<strong class="paviso">⚠ ' + aviso + '</strong>' : '') + '<em class="pver">Ver ›</em></button>';
+          cuerpo + (pie ? '<small class="ppie">' + pie + '</small>' : '') + (aviso ? '<strong class="paviso">⚠ ' + aviso + '</strong>' : '') + '<em class="pver">' + (VER[act] || 'Ver') + ' ›</em></button>';
       };
       var big = function (v, l) { return '<span class="pbig"><b>' + v + '</b><span>' + l + '</span></span>'; };
       // 1) reproducción cada 21 días
@@ -1427,9 +1431,9 @@
       if (!R.pt) t2 = tile('g', 'rep', 'Preñez de la temporada', '<p class="pnada">Todavía no hay preñeces de esta temporada para medir.</p>', '');
       else {
         var d2 = R.ptA ? R.pt.v - R.ptA.v : null;
-        t2 = tile(d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v', 'rep', 'Preñez de la temporada',
+        t2 = tile(d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v', 'ptvac', 'Preñez de la temporada',
           big(p0(R.pt.v), R.pt.pre + ' de ' + R.pt.apt + ' vacas preñadas'),
-          (R.ptA ? 'Temporada anterior a esta altura: <b>' + p0(R.ptA.v) + '</b>. ' : '') + 'Servicios hasta el ' + A.fmt(R.corte) + ' (los más nuevos todavía no se tactaron).');
+          (R.ptA ? 'Temporada anterior a esta altura: <b>' + p0(R.ptA.v) + '</b>. ' : '') + 'Servicios hasta el ' + A.fmt(R.corte) + ' (los más nuevos todavía no se tactaron).' + (R.pt.nVac ? ' Tocá para ver las ' + R.pt.nVac + ' vacas que siguen sin preñez.' : ''));
       }
       // 3) vacas en ordeñe y secas
       var t3;
@@ -2900,6 +2904,7 @@
       if ((el = e.target.closest('[data-pan]'))) {
         var pa = el.dataset.pan;
         if (pa === 'leche') { setTab('leche'); return; }
+        if (pa === 'ptvac') { state.cat = 'todas'; state.filtro = 'ptvac'; state.q = ''; state.n = 60; setTab('buscar'); return; }
         var tit = pa === 'rep' ? 'Reproducción cada 21 días' : 'Vacas en ordeñe y secas';
         FICHA_AB[tit] = true; state.cat = 'todas'; setTab('rodeo');
         var rs = Array.prototype.filter.call(document.querySelectorAll('section.card h2'), function (h) { return h.textContent.indexOf(tit) === 0; })[0];
