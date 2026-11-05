@@ -1421,7 +1421,7 @@
         var mal = (sv != null && sv < 50) || (cv != null && cv < 40), at = (sv != null && sv < 60) || (cv != null && cv < 45);
         var sem = !enT ? 'g' : mal ? 'r' : at ? 'a' : 'v';
         t1 = tile(sem, 'rep', 'Reproducción cada 21 días',
-          '<span class="pbigs">' + big(p0(sv), 'Tasa de servicio' + (R.cs ? ' · ciclo ' + R.cs.n : '')) + big(p0(cv), (R.cc && !R.cc.tact ? 'Concepción máx.' : 'Concepción') + (R.cc ? ' · ciclo ' + R.cc.n : '')) + '</span>',
+          '<span class="pbigs">' + big(p0(sv), 'Tasa de servicio' + (R.cs ? '<br>ciclo ' + R.cs.n : '')) + big(p0(cv), (R.cc && !R.cc.tact ? 'Concepción máx.' : 'Concepción') + (R.cc ? '<br>ciclo ' + R.cc.n : '')) + '</span>',
           enT ? 'Último ciclo terminado y último con resultados.' : 'Temporada terminada el ' + A.fmt(R.fin) + '.',
           enT && mal ? 'Revisá Reproducción cada 21 días' : '');
       }
