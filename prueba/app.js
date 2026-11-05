@@ -772,10 +772,25 @@
         document.head.appendChild(s);
       });
     }
-    function cargarRespaldo(buf, f, fosapp) {
-      busy(true, (fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
+    // lector de SIGEA (Macoel): se baja recién la primera vez que el veterinario abre una base .GDB
+    function cargarSigea() {
+      if (root.Sigea) return Promise.resolve(root.Sigea);
+      return new Promise(function (ok, mal) {
+        var s = document.createElement('script'); s.src = 'sigea.js?v=1';
+        s.onload = function () { root.Sigea ? ok(root.Sigea) : mal(new Error('no se pudo cargar el lector de SIGEA')); };
+        s.onerror = function () { mal(new Error('no se pudo descargar el lector de SIGEA (hace falta internet la primera vez)')); };
+        document.head.appendChild(s);
+      });
+    }
+    // base de Firebird (SIGEA de Macoel): página de encabezado con la firma 12345 y ODS 10 u 11
+    function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
+    // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
+    function externo(o) { return o === 'fosapp' || o === 'sigea'; }
+    function cargarRespaldo(buf, f, tipo) {
+      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea';
+      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        (fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+        (tipo === 'pre' ? buf : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
           : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
@@ -785,7 +800,7 @@
         }).then(function (q) {
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
-          if ((!d.tambo || d.origen === 'fosapp') && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
+          if ((!d.tambo || externo(d.origen)) && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
           var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
@@ -909,6 +924,11 @@
       if (!f) return;
       var fr = new FileReader();
       fr.onload = function () {
+        if (esFirebird(fr.result)) {
+          // base de SIGEA (Macoel): solo en el modo veterinario; fuera de él se responde como cualquier archivo que la app no lee
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          cargarRespaldo(fr.result, f, 'sigea'); return;
+        }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: solo en el modo veterinario
           // fuera del modo veterinario no se reconoce: se responde como cualquier archivo que la app no lee
@@ -944,14 +964,14 @@
       $('#sheetTitle').textContent = titulo || 'Ajustes';
       $('#inNombre').value = state.draft.nombre;
       // con respaldo de SysCaw el nombre es el del respaldo y no se edita
-      var fijo = DB.fuente === 'syscaw' && DB.origen !== 'fosapp'; // con FOSAPP el nombre lo pone el veterinario
+      var fijo = DB.fuente === 'syscaw' && !externo(DB.origen); // con FOSAPP el nombre lo pone el veterinario
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
-      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && DB.origen !== 'fosapp');
+      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
-      $('#sheet .sheet-card').classList.toggle('fos', esVet() && DB.origen === 'fosapp'); // FOSAPP: el veterinario le pone el nombre al tambo
+      $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.toggle('abierto', i === 0); });
       $('#btnCod').hidden = esVet();
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
@@ -992,7 +1012,7 @@
       if (!state.draft) return;
       var crudo = $('#inNombre').value;
       if (/#act=/.test(crudo)) leerActivacion(crudo);
-      PERFIL = { nombre: DB.fuente === 'syscaw' && DB.origen !== 'fosapp' ? PERFIL.nombre : (limpiarNombre(crudo) || PERFIL.nombre), logo: state.draft.logo || '' };
+      PERFIL = { nombre: DB.fuente === 'syscaw' && !externo(DB.origen) ? PERFIL.nombre : (limpiarNombre(crudo) || PERFIL.nombre), logo: state.draft.logo || '' };
       savePerfil(); closeSheet(); render(); toast('Guardado');
     }
 
@@ -1344,7 +1364,8 @@
       try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
       state.ini21 = null; render();
     }
-    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : 'SysCaw'; }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : 'SysCaw'; }
+    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : 'respaldo SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     /* ----- Panel: primera pantalla del productor, 4 indicadores con semáforo ----- */
@@ -2081,7 +2102,7 @@
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en ' + SRC() + '.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
-        '<p class="src">' + (DB.origen === 'fosapp' ? 'Base FOSAPP' : 'Respaldo SysCaw') + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
+        '<p class="src">' + SRCbase().replace(/^./, function (c) { return c.toUpperCase(); }) + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }
     function fichaHTML(a) {
       if (a.bTipo) return fichaBajaHTML(a);
@@ -2122,7 +2143,7 @@
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         idxFichaHTML(a) +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
-        (h ? '<p class="src">Historial ' + (DB.origen === 'fosapp' ? 'de la base FOSAPP' : 'del respaldo SysCaw') + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
+        (h ? '<p class="src">Historial ' + (externo(DB.origen) ? 'de la ' : 'del ') + SRCbase() + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
@@ -2219,7 +2240,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -2314,6 +2335,25 @@
         return true;
       });
     }
+    /* tambo precargado por link (solo veterinario): los datos están cifrados en el sitio y la clave viaja solo en el link
+       (#cargar=<archivo>.<clave>), que el navegador nunca manda al servidor */
+    function leerPrecarga() {
+      var m = /^#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/.exec(location.hash || ''); if (!m) return;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+      if (!esVet()) { toast('Este link es solo para el modo veterinario.'); return; }
+      state.inicio = false;
+      if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el tambo precargado.'); return; }
+      var b64u = function (t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var bin = atob(t), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+      var datos = fetch('datos/' + m[1] + '.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('No encontré el tambo precargado (quizás ya se quitó).'); return r.arrayBuffer(); })
+        .then(function (buf) {
+          return crypto.subtle.importKey('raw', b64u(m[2]), 'AES-GCM', false, ['decrypt']).then(function (k) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(buf, 0, 12) }, k, new Uint8Array(buf, 12)); });
+        })
+        .then(function (plano) { return new Response(new Blob([plano]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); })
+        .then(function (t) { var d = JSON.parse(t); d.unidades = d.unidades || []; d.sel = null; d.unidadesSel = []; return d; });
+      datos.catch(function () {});
+      state.destino = 'nuevo';
+      listo.then(function () { cargarRespaldo(datos, { name: 'tambo-precargado' }, 'pre'); });
+    }
     function pedirCodigo() { var t = prompt('Escribí el código de activación que te mandó el Dr. Mauro Torterolo'); if (t) activarCodigo(t); }
     function leerActivacion(texto) {
       var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
@@ -2360,7 +2400,7 @@
     // operario: solo Buscar y la ficha. El tipo de acceso va dentro de la firma.
     function esOperario() { return !esVet() && ACT.length > 0 && !ACT.some(function (x) { return x.r !== 'op'; }); }
     function enviarActivacion() {
-      if (DB.origen === 'fosapp') { toast('Los tambos de FOSAPP son solo para el modo veterinario: no se activan para productores.'); return; }
+      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario: no se activan para productores.'); return; }
       if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
       closeSheet();
       $('#sheetXTitle').textContent = '¿Para quién es la activación?';
@@ -2369,7 +2409,7 @@
       $('#sheetX').hidden = false;
     }
     function enviarActivacionRol(rol) {
-      if (DB.origen === 'fosapp') { toast('Los tambos de FOSAPP son solo para el modo veterinario: no se activan para productores.'); return; }
+      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario: no se activan para productores.'); return; }
       $('#sheetX').hidden = true;
       var base = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '');
       codigoPara(DB.idProd[0], rol).then(function (cod) {
@@ -2591,7 +2631,7 @@
     var POB = null;
     // resumen de un tambo: usa las mismas cuentas que la app, poniendo ese tambo como activo un momento
     function pobResumen(t, o) {
-      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && o.origen === 'fosapp' ? 'fosapp' : 'syscaw' };
+      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && externo(o.origen) ? o.origen : 'syscaw' };
       if (!o || o.fuente !== 'syscaw' || !o.hist) { r.sin = true; return r; }
       try {
         TAMBOS.activo = t.id; DB = o; DB.sel = null; aplicarUnidad(); state.ini21 = null; state.pev = null;
@@ -2701,7 +2741,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, ns = F.length - nf2; return [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : ''].filter(Boolean).join(' y '); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = F.filter(function (f) { return f.origen === 'sigea'; }).length, ns = F.length - nf2 - nm; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
@@ -2887,7 +2927,7 @@
       nav.hidden = op;
       $('#ubtn').hidden = !DB.unidades;
       if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
-      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? (DB.origen === 'fosapp' ? 'base FOSAPP del ' : 'respaldo SysCaw del ') + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? SRCbase() + ' del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
       if (state.tab === 'panel' && !panelOK()) state.tab = 'buscar';
       nav.innerHTML = '<div class="navin">' + NAVS.filter(function (n) { return n[0] !== 'panel' || panelOK(); }).map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
@@ -3035,6 +3075,7 @@
       if (cambio) { saveTambos(); savePerfil(); render(); }
     });
     leerActivacion();
+    leerPrecarga();
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
