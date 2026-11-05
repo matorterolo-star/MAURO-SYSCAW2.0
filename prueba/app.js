@@ -730,7 +730,8 @@
         '<p class="hint ihint">La fecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
         '<div class="iacc"><button class="btn primary big" data-a="tnuevo">Agregar tambo</button>' +
         (L.length > 1 ? '<button class="btn" data-a="poblacion">Población de tambos</button>' : '') +
-        '<button class="btn" data-a="ajustes">Ajustes</button></div>';
+        '<button class="btn" data-a="ajustes">Ajustes</button></div>' +
+        '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Tenés un link de tambo? Pegalo acá</button>';
     }
     function byRp(rp) {
       for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i];
@@ -2337,9 +2338,10 @@
     }
     /* tambo precargado por link (solo veterinario): los datos están cifrados en el sitio y la clave viaja solo en el link
        (#cargar=<archivo>.<clave>), que el navegador nunca manda al servidor */
-    function leerPrecarga() {
-      var m = /^#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/.exec(location.hash || ''); if (!m) return;
-      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+    function leerPrecarga(texto) {
+      var m = texto != null ? /#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)/.exec(texto) : /^#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/.exec(location.hash || '');
+      if (!m) { if (texto != null) toast('No encontré un link de tambo en lo que pegaste.'); return; }
+      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       if (!esVet()) { toast('Este link es solo para el modo veterinario.'); return; }
       state.inicio = false;
       if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el tambo precargado.'); return; }
@@ -2374,8 +2376,8 @@
         '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Te mandaron un link? Pegalo acá</button>';
     }
     function pegarActivacion() {
-      var pedir = function (pre) { var t = prompt('Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) leerActivacion(t); };
-      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
+      var pedir = function (pre) { var t = prompt(esVet() ? 'Pegá acá el link del tambo' : 'Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) { if (/#cargar=/.test(t)) leerPrecarga(t); else leerActivacion(t); } };
+      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#cargar=/.test(t || '')) leerPrecarga(t); else if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
       else pedir('');
     }
     /* copia de la clave de veterinario: para pasar el modo veterinario a otro teléfono (las activaciones de los productores dependen de esta clave) */
