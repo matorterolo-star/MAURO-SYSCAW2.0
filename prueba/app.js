@@ -1090,7 +1090,7 @@
       if (g == null) { try { localStorage.removeItem('libreta:vta:' + TAMBOS.activo); } catch (e) {} } else setP('vta', g);
       $('#vtaN').innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'vaca' : 'vacas') + ' para venta con este criterio';
     }
-    function matchFiltro(a, f) { if (f === 'ptvac') { var PD = panelOK() ? panelDatos() : null; return !!(PD && PD.pt && PD.pt.vac[a.rp]); } if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
+    function matchFiltro(a, f) { if (f === 'ptvac') { var PD = panelOK() ? panelDatos() : null; return !!(PD && PD.pr && PD.pr.vac[a.rp]); } if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
@@ -1140,7 +1140,7 @@
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
       var nVta = esOperario() ? 0 : L.filter(paraVenta).length;
       if (nVta) fl.push(['venta', 'Para venta', nVta]);
-      if (panelOK() && (state.cat === 'todas' || state.cat === 'vaca' || state.cat === 'seca')) { var PDv = panelDatos(); if (PDv.pt && PDv.pt.nVac) fl.push(['ptvac', 'Por preñar', L.filter(function (a) { return PDv.pt.vac[a.rp]; }).length]); }
+      if (panelOK() && (state.cat === 'todas' || state.cat === 'vaca' || state.cat === 'seca')) { var PDv = panelDatos(); if (PDv.pr && PDv.pr.PP) fl.push(['ptvac', 'Por preñar', L.filter(function (a) { return PDv.pr.vac[a.rp]; }).length]); }
       if (IDX() && !esOperario()) {
         var nTop = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'top'; }).length, nPeor = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'peor'; }).length;
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
@@ -1173,7 +1173,7 @@
         if (bj.length > 15) html += '<p class="hint">Hay ' + (bj.length - 15) + ' bajas más con ese número. Escribí la caravana completa.</p>';
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
-        var tit = f === 'ptvac' ? 'por preñar en la temporada (más días de paridas primero)' : f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
+        var tit = f === 'ptvac' ? 'por preñar (más días de paridas primero)' : f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
         html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       }
@@ -1351,24 +1351,33 @@
     function panelOK() { return DB.fuente === 'syscaw' && !!DB.hist && !esOperario(); }
     var PANC = { k: null, r: null };
     function finTemporada(ini) { var y = +ini.slice(0, 4), m = +ini.slice(5, 7) + 9; if (m > 12) { y++; m -= 12; } return A.addDays(y + '-' + pad2(m) + '-01', +ini.slice(8, 10) - 2); }
-    // % preñez de la temporada: vacas paridas antes del inicio, vacías al inicio, que cumplen la espera voluntaria hasta el corte
-    // y no dadas de baja antes del inicio; preñadas = concepción entre el inicio y el corte (mismo criterio que el informe anual)
-    function prenTemporada(L, ini, corte, pev) {
-      var apt = 0, pre = 0, vac = {}, hoyP = 0;
-      L.forEach(function (x) {
-        var h = x.h; if (!h.pa || !h.pa.length) return;
-        h.pa.forEach(function (p, i) {
-          var np = h.pa[i + 1];
-          if (!(p[0] < ini && (!np || np[0] > ini)) || !enSel(unidadEn(x, ini))) return;
-          if (x.a.bFecha && x.a.bFecha < ini) return;
-          var c = concLac(h, i);
-          if (c.conc && c.conc < ini) return;
-          if (A.diffDays(corte, p[0]) < pev) return;
-          apt++; if (c.conc && c.conc >= ini && c.conc <= corte) pre++;
-          if (!x.a.bFecha && !np) { if (x.a.estado === 'prenada' || (c.conc && c.conc >= ini)) hoyP++; else vac[x.a.rp] = true; }
-        });
+    // vacas preñadas y por preñar: foto del rodeo adulto (vacas en ordeñe y secas), igual que la libreta.
+    // Por preñar: no preñadas, sin descarte programado y con la espera voluntaria cumplida.
+    function rodeoPren(pev, ref) {
+      var R = { P: 0, PP: 0, E: 0, DS: 0, vac: {} };
+      DB.animales.forEach(function (a) {
+        if (a.cat !== 'vaca' && a.cat !== 'seca') return;
+        if (a.estado === 'prenada') { R.P++; return; }
+        if (a.rech) { R.DS++; return; }
+        if (a.pFecha && A.diffDays(ref, a.pFecha) < pev) { R.E++; return; }
+        R.PP++; R.vac[a.rp] = true;
       });
-      return apt ? { v: pre / apt * 100, pre: pre, apt: apt, vac: vac, nVac: Object.keys(vac).length, hoyP: hoyP } : null;
+      R.pct = R.P + R.PP ? R.P / (R.P + R.PP) * 100 : null;
+      return R;
+    }
+    // la misma foto hace un año, con el historial: preñada si el último tacto después del parto dio preñada y no hubo servicio después
+    function rodeoPrenHist(L, D, pev) {
+      var P = 0, PP = 0;
+      L.forEach(function (x) {
+        var h = x.h; if (x.a.bFecha && x.a.bFecha <= D) return;
+        var pa = (h.pa || []).filter(function (q) { return q[0] <= D; }); if (!pa.length || !enSel(unidadEn(x, D))) return;
+        var p = pa[pa.length - 1][0], ta = (h.ta || []).filter(function (t) { return t[0] > p && t[0] <= D; }), lt = ta[ta.length - 1];
+        if (lt && esPren(lt[1]) && !h.ev.some(function (e) { return e[1] === 'S' && e[0] > lt[0] && e[0] <= D; })) { P++; return; }
+        if (x.a.dFecha && x.a.dFecha <= D) return;
+        if (A.diffDays(D, p) < pev) return;
+        PP++;
+      });
+      return P + PP ? P / (P + PP) * 100 : null;
     }
     function panelDatos() {
       var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
@@ -1386,13 +1395,11 @@
           if (tact ? dr >= 10 : dn >= 10) R.cc = { n: c.n, ini: c.ini, tact: tact, v: (tact ? c.sOk / dr : (c.sOk + c.sPend) / dn) * 100, ok: tact ? c.sOk : c.sOk + c.sPend, de: tact ? dr : dn };
         });
       }
-      // 2) preñez de la temporada, contra la temporada anterior a la misma altura (corte: 35 días antes del respaldo, para que estén tactadas)
-      var L = infLista(), corte = A.addDays(ref, -A.DX_MIN);
-      if (ini <= corte) {
-        R.pt = prenTemporada(L, ini, corte < R.fin ? corte : R.fin, pev); R.corte = corte < R.fin ? corte : R.fin;
-        var iniA = (+ini.slice(0, 4) - 1) + ini.slice(4), corteA = (+R.corte.slice(0, 4) - 1) + R.corte.slice(4);
-        if (iniA >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) R.ptA = prenTemporada(L, iniA, corteA, pev);
-      }
+      // 2) vacas preñadas y por preñar hoy, y el % preñadas de hace un año
+      var L = infLista();
+      R.pr = rodeoPren(pev, ref);
+      var refA = (+ref.slice(0, 4) - 1) + ref.slice(4);
+      if (refA >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) R.prA = rodeoPrenHist(L, refA, pev);
       // 3) último diagnóstico de gestación (tacto) cargado, y vacas y vaquillonas pendientes de tacto
       var ut = null; DB.animales.forEach(function (a) { var h = DB.hist[a.rp]; if (h && h.ta) h.ta.forEach(function (t) { if (t[0] <= ref && (!ut || t[0] > ut)) ut = t[0]; }); });
       R.ultTacto = ut;
@@ -1426,13 +1433,13 @@
           enT && mal ? 'Revisá Reproducción cada 21 días' : '');
       }
       // 2) vacas preñadas y por preñar
-      var t2;
-      if (!R.pt) t2 = tile('g', 'ptvac', 'Vacas preñadas y por preñar', '<p class="pnada">Todavía no hay preñeces de esta temporada para medir.</p>', '');
+      var t2, P = R.pr;
+      if (P.P + P.PP === 0) t2 = tile('g', 'ptvac', 'Vacas preñadas y por preñar', '<p class="pnada">Sin vacas para contar.</p>', '');
       else {
-        var d2 = R.ptA ? R.pt.v - R.ptA.v : null;
+        var d2 = R.prA != null && P.pct != null ? P.pct - R.prA : null;
         t2 = tile(d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v', 'ptvac', 'Vacas preñadas y por preñar',
-          '<span class="pbigs">' + big(n0(R.pt.hoyP), 'Preñadas') + big(n0(R.pt.nVac), 'Por preñar') + big(p0(R.pt.v), 'Preñez de la temporada') + '</span>',
-          'Vacas de la temporada que siguen en el tambo. Preñez con servicios hasta el ' + A.fmt(R.corte) + (R.ptA ? '; temporada anterior a esta altura: <b>' + p0(R.ptA.v) + '</b>.' : '.'));
+          '<span class="pbigs">' + big(n0(P.P), 'Preñadas') + big(n0(P.PP), 'Por preñar') + big(p0(P.pct), 'Preñadas de las que se pueden preñar') + '</span>',
+          'Vacas en ordeñe y secas.' + (P.E || P.DS ? ' Además, ' + [P.E ? P.E + ' en espera voluntaria (menos de ' + pevActual() + ' días de paridas)' : '', P.DS ? P.DS + ' vacías con descarte programado' : ''].filter(Boolean).join(' y ') + '.' : '') + (R.prA != null ? ' Hace un año: <b>' + p0(R.prA) + '</b> preñadas.' : ''));
       }
       // 3) días desde el último diagnóstico de gestación: amarillo desde 21 días, rojo con más de 30
       var t3;
@@ -1453,7 +1460,7 @@
           R.le.prev ? 'Mismo mes del año anterior: <b>' + nf(R.le.prev, 1) + ' L</b> (' + (d4 >= 0 ? '+' : '') + nf(d4, 0) + '%).' : '');
       }
       return '<h1 class="ptitle">Panel</h1><div class="panel">' + t1 + t4 + t2 + t3 + '</div>' +
-        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Semáforo: reproducción en rojo con tasa de servicio menor a 50% o concepción menor a 40% (amarillo: menos de 60% y 45%); preñez y leche, contra el año anterior (5 y 10 puntos menos; 5% y 10% menos); último diagnóstico: amarillo desde 21 días, rojo con más de 30.</p>';
+        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Semáforo: reproducción en rojo con tasa de servicio menor a 50% o concepción menor a 40% (amarillo: menos de 60% y 45%); % de preñadas y leche, contra hace un año (5 y 10 puntos menos; 5% y 10% menos); último diagnóstico: amarillo desde 21 días, rojo con más de 30.</p>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
