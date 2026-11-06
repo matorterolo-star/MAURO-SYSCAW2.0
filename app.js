@@ -561,7 +561,7 @@
     // varios tambos guardados en el teléfono: la lista va en localStorage y cada libreta en IndexedDB ('db:<id>')
     var KEYT = 'libreta:tambos';
     var TAMBOS = { activo: null, lista: [] };
-    var state = { tab: 'buscar', q: '', filtro: 'todas', n: 60, rp: null, ventana: 183, abiertas: {}, error: '', persisted: true, draft: null, cat: 'vaca' };
+    var state = { tab: 'panel', q: '', filtro: 'todas', n: 60, rp: null, ventana: 183, abiertas: {}, error: '', persisted: true, draft: null, cat: 'vaca' };
     var $ = function (s) { return document.querySelector(s); };
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
     var today = function () { return A.ymd(new Date()); };
@@ -612,7 +612,7 @@
       saveTambos();
       PERFIL = { nombre: t.nombre || '', logo: t.logo || '' };
       DB = { animales: [], cargada: null, archivo: '' };
-      state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'buscar';
+      state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'panel';
       state.ini21 = null; state.fsec = null; state.pev = null; state.abiertas = {};
       state.cat = 'todas';
       try { if (location.hash) location.hash = ''; } catch (e) {}
@@ -730,7 +730,8 @@
         '<p class="hint ihint">La fecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
         '<div class="iacc"><button class="btn primary big" data-a="tnuevo">Agregar tambo</button>' +
         (L.length > 1 ? '<button class="btn" data-a="poblacion">Población de tambos</button>' : '') +
-        '<button class="btn" data-a="ajustes">Ajustes</button></div>';
+        '<button class="btn" data-a="ajustes">Ajustes</button></div>' +
+        '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Tenés un link de tambo? Pegalo acá</button>';
     }
     function byRp(rp) {
       for (var i = 0; i < DB.animales.length; i++) if (DB.animales[i].rp === rp) return DB.animales[i];
@@ -772,10 +773,25 @@
         document.head.appendChild(s);
       });
     }
-    function cargarRespaldo(buf, f, fosapp) {
-      busy(true, (fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
+    // lector de SIGEA (Macoel): se baja recién la primera vez que el veterinario abre una base .GDB
+    function cargarSigea() {
+      if (root.Sigea) return Promise.resolve(root.Sigea);
+      return new Promise(function (ok, mal) {
+        var s = document.createElement('script'); s.src = 'sigea.js?v=1';
+        s.onload = function () { root.Sigea ? ok(root.Sigea) : mal(new Error('no se pudo cargar el lector de SIGEA')); };
+        s.onerror = function () { mal(new Error('no se pudo descargar el lector de SIGEA (hace falta internet la primera vez)')); };
+        document.head.appendChild(s);
+      });
+    }
+    // base de Firebird (SIGEA de Macoel): página de encabezado con la firma 12345 y ODS 10 u 11
+    function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
+    // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
+    function externo(o) { return o === 'fosapp' || o === 'sigea'; }
+    function cargarRespaldo(buf, f, tipo) {
+      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea';
+      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        (fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+        (tipo === 'pre' ? buf : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
           : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
@@ -785,7 +801,7 @@
         }).then(function (q) {
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
-          if ((!d.tambo || d.origen === 'fosapp') && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
+          if ((!d.tambo || externo(d.origen)) && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
           var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
@@ -794,7 +810,7 @@
           DB = r.n.db;
           aplicarUnidad();
           busy(false);
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'panel'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
           // el nombre queda fijo: el que trae el respaldo
@@ -909,6 +925,11 @@
       if (!f) return;
       var fr = new FileReader();
       fr.onload = function () {
+        if (esFirebird(fr.result)) {
+          // base de SIGEA (Macoel): solo en el modo veterinario; fuera de él se responde como cualquier archivo que la app no lee
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          cargarRespaldo(fr.result, f, 'sigea'); return;
+        }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: solo en el modo veterinario
           // fuera del modo veterinario no se reconoce: se responde como cualquier archivo que la app no lee
@@ -925,7 +946,7 @@
           if (!mismo) prepararDestino(nombreDesdeArchivo(f.name));
           state.destino = null;
           DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: prev.hist, codes: prev.codes, fecha: prev.fecha };
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'buscar'; state.cat = 'todas';
+          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'panel'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
           toast(res.animales.length + ' animales cargados');
@@ -944,14 +965,14 @@
       $('#sheetTitle').textContent = titulo || 'Ajustes';
       $('#inNombre').value = state.draft.nombre;
       // con respaldo de SysCaw el nombre es el del respaldo y no se edita
-      var fijo = DB.fuente === 'syscaw' && DB.origen !== 'fosapp'; // con FOSAPP el nombre lo pone el veterinario
+      var fijo = DB.fuente === 'syscaw' && !externo(DB.origen); // con FOSAPP el nombre lo pone el veterinario
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
-      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && DB.origen !== 'fosapp');
+      $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
-      $('#sheet .sheet-card').classList.toggle('fos', esVet() && DB.origen === 'fosapp'); // FOSAPP: el veterinario le pone el nombre al tambo
+      $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.toggle('abierto', i === 0); });
       $('#btnCod').hidden = esVet();
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
@@ -992,7 +1013,7 @@
       if (!state.draft) return;
       var crudo = $('#inNombre').value;
       if (/#act=/.test(crudo)) leerActivacion(crudo);
-      PERFIL = { nombre: DB.fuente === 'syscaw' && DB.origen !== 'fosapp' ? PERFIL.nombre : (limpiarNombre(crudo) || PERFIL.nombre), logo: state.draft.logo || '' };
+      PERFIL = { nombre: DB.fuente === 'syscaw' && !externo(DB.origen) ? PERFIL.nombre : (limpiarNombre(crudo) || PERFIL.nombre), logo: state.draft.logo || '' };
       savePerfil(); closeSheet(); render(); toast('Guardado');
     }
 
@@ -1090,7 +1111,7 @@
       if (g == null) { try { localStorage.removeItem('libreta:vta:' + TAMBOS.activo); } catch (e) {} } else setP('vta', g);
       $('#vtaN').innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'vaca' : 'vacas') + ' para venta con este criterio';
     }
-    function matchFiltro(a, f) { if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
+    function matchFiltro(a, f) { if (f === 'ptvac') { var PD = panelOK() ? panelDatos() : null; return !!(PD && PD.pr && PD.pr.vac[a.rp]); } if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return !!V && V.tier === (f === 'itop' ? 'top' : 'peor'); } return f === 'todas' || (f === 'descarte' ? !!a.rech : f === 'venta' ? paraVenta(a) : f === 'pcelo' ? !!a.celo : a.estado === f); }
     function numRp(a, b) { return a.rp.localeCompare(b.rp, 'es', { numeric: true }); }
     /* ----- categorías (vacas, vaquillonas, terneras) ----- */
     var CATL = { vaca: 'Vaca', seca: 'Vaca seca', vaquillona: 'Vaquillona', ternera: 'Ternera' };
@@ -1123,6 +1144,7 @@
         if (f === 'venta') return ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5);
         if (f === 'itop' || f === 'ipeor') { var V = idxDe(a); return ('00000' + (f === 'itop' ? V.puesto : 99999 - V.puesto)).slice(-5); }
         if (f === 'descarte') return paraVenta(a) ? '0' + ('00000' + Math.round((a.pr[0] || 0) * 10)).slice(-5) : '1';
+        if (f === 'ptvac') return a.pFecha || '9999'; // parto más antiguo = más días de parida
         if (f === 'vacia' || f === 'ciclando' || f === 'apta' || f === 'otro') return a.tFecha || '9999';
         return '';
       };
@@ -1139,6 +1161,7 @@
       if (nDesc) fl.push(['descarte', 'Descarte', nDesc]);
       var nVta = esOperario() ? 0 : L.filter(paraVenta).length;
       if (nVta) fl.push(['venta', 'Para venta', nVta]);
+      if (panelOK() && (state.cat === 'todas' || state.cat === 'vaca' || state.cat === 'seca')) { var PDv = panelDatos(); if (PDv.pr && PDv.pr.PP) fl.push(['ptvac', 'Por preñar', L.filter(function (a) { return PDv.pr.vac[a.rp]; }).length]); }
       if (IDX() && !esOperario()) {
         var nTop = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'top'; }).length, nPeor = L.filter(function (a) { var V = idxDe(a); return V && V.tier === 'peor'; }).length;
         if (nTop) fl.push(['itop', 'Top 10%', nTop]);
@@ -1171,7 +1194,7 @@
         if (bj.length > 15) html += '<p class="hint">Hay ' + (bj.length - 15) + ' bajas más con ese número. Escribí la caravana completa.</p>';
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
-        var tit = f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
+        var tit = f === 'ptvac' ? 'por preñar (más días de paridas primero)' : f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
         html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       }
@@ -1342,9 +1365,130 @@
       try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
       state.ini21 = null; render();
     }
-    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : 'SysCaw'; }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : 'SysCaw'; }
+    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : 'respaldo SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
+    /* ----- Panel: primera pantalla del productor, 4 indicadores con semáforo ----- */
+    function panelOK() { return DB.fuente === 'syscaw' && !!DB.hist && !esOperario(); }
+    var PANC = { k: null, r: null };
+    function finTemporada(ini) { var y = +ini.slice(0, 4), m = +ini.slice(5, 7) + 9; if (m > 12) { y++; m -= 12; } return A.addDays(y + '-' + pad2(m) + '-01', +ini.slice(8, 10) - 2); }
+    // vacas preñadas y por preñar: foto del rodeo adulto (vacas en ordeñe y secas), igual que la libreta.
+    // Por preñar: no preñadas, sin descarte programado y con la espera voluntaria cumplida.
+    function rodeoPren(pev, ref) {
+      var R = { P: 0, PP: 0, E: 0, DS: 0, vac: {} };
+      DB.animales.forEach(function (a) {
+        if (a.cat !== 'vaca' && a.cat !== 'seca') return;
+        if (a.estado === 'prenada') { R.P++; return; }
+        if (a.rech) { R.DS++; return; }
+        if (a.pFecha && A.diffDays(ref, a.pFecha) < pev) { R.E++; return; }
+        R.PP++; R.vac[a.rp] = true;
+      });
+      R.pct = R.P + R.PP ? R.P / (R.P + R.PP) * 100 : null;
+      return R;
+    }
+    // la misma foto hace un año, con el historial: preñada si el último tacto después del parto dio preñada y no hubo servicio después
+    function rodeoPrenHist(L, D, pev) {
+      var P = 0, PP = 0;
+      L.forEach(function (x) {
+        var h = x.h; if (x.a.bFecha && x.a.bFecha <= D) return;
+        var pa = (h.pa || []).filter(function (q) { return q[0] <= D; }); if (!pa.length || !enSel(unidadEn(x, D))) return;
+        var p = pa[pa.length - 1][0], ta = (h.ta || []).filter(function (t) { return t[0] > p && t[0] <= D; }), lt = ta[ta.length - 1];
+        if (lt && esPren(lt[1]) && !h.ev.some(function (e) { return e[1] === 'S' && e[0] > lt[0] && e[0] <= D; })) { P++; return; }
+        if (x.a.dFecha && x.a.dFecha <= D) return;
+        if (A.diffDays(D, p) < pev) return;
+        PP++;
+      });
+      return P + PP ? P / (P + PP) * 100 : null;
+    }
+    function panelDatos() {
+      var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
+      var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + DB.animales.length + '|' + ini + '|' + pev + '|' + ref + '|' + today();
+      if (PANC.k === k) return PANC.r;
+      var R = { ref: ref, ini: ini, fin: finTemporada(ini) };
+      // 1) reproducción cada 21 días: último ciclo terminado (servicio) y último ciclo con resultados (concepción)
+      if (ini <= ref) {
+        var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
+          .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
+        var C = []; try { C = A.ciclos21(an, esPren, ini, pev, ref); } catch (e) { C = []; }
+        C.forEach(function (c) { if (c.fin < ref && c.aptas >= 10) R.cs = { n: c.n, ini: c.ini, v: c.serv / c.aptas * 100, serv: c.serv, aptas: c.aptas }; });
+        C.forEach(function (c) {
+          var dn = c.sOk + c.sMal + c.sPend, dr = c.sOk + c.sMal, tact = c.cerrado && c.sPend <= dn * 0.1;
+          if (tact ? dr >= 10 : dn >= 10) R.cc = { n: c.n, ini: c.ini, tact: tact, v: (tact ? c.sOk / dr : (c.sOk + c.sPend) / dn) * 100, ok: tact ? c.sOk : c.sOk + c.sPend, de: tact ? dr : dn };
+        });
+      }
+      // 2) vacas preñadas y por preñar hoy, y el % preñadas de hace un año
+      var L = infLista();
+      R.pr = rodeoPren(pev, ref);
+      var refA = (+ref.slice(0, 4) - 1) + ref.slice(4);
+      if (refA >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) R.prA = rodeoPrenHist(L, refA, pev);
+      // 3) último diagnóstico de gestación (tacto) cargado, y vacas y vaquillonas pendientes de tacto
+      var ut = null; DB.animales.forEach(function (a) { var h = DB.hist[a.rp]; if (h && h.ta) h.ta.forEach(function (t) { if (t[0] <= ref && (!ut || t[0] > ut)) ut = t[0]; }); });
+      R.ultTacto = ut;
+      try { R.nTactar = A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), 30).tactar.length; } catch (e) { R.nTactar = null; }
+      // 4) leche: litros por vaca del último mes con control, contra el mismo mes del año anterior
+      var E = evolucion('lv'), u = E && E.meses[E.meses.length - 1];
+      if (u && u.cur != null) R.le = { v: u.cur, prev: u.prev, mes: u.label, anio: u.anio };
+      PANC = { k: k, r: R };
+      return R;
+    }
+    var SEM = { v: 'ok', a: 'at', r: 'mal', g: 'nd' };
+    // Panel en tablero 2×2: un número grande por indicador, semáforo y una línea de comparación; arriba, el resumen de lo que hay que revisar
+    function panelHTML() {
+      var R = panelDatos(), n0 = function (x) { return x == null ? '–' : nf(Math.round(x)); }, p0 = function (x) { return x == null ? '–' : Math.round(x) + '%'; };
+      var MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+      var avisos = [];
+      var tile = function (sem, act, tit, v, l, d, dsem) {
+        var c = SEM[sem];
+        return '<button class="ptile ' + c + '" data-pan="' + act + '" aria-label="' + tit + '"><span class="pth">' + tit + '</span><i class="pdot" aria-hidden="true"></i>' +
+          '<b class="pv">' + v + '</b><span class="pl">' + l + '</span>' + (d ? '<span class="pd ' + SEM[dsem || sem] + '">' + d + '</span>' : '') + '</button>';
+      };
+      var flecha = function (x) { return x >= 0 ? '▲ +' : '▼ '; };
+      // 1) reproducción cada 21 días
+      var enT = R.ini <= R.ref && R.ref <= R.fin, t1;
+      if (R.ini > R.ref || (!R.cs && !R.cc)) t1 = tile('g', 'rep', 'Reproducción 21 días', '–', 'Sin ciclos con datos todavía', 'Inicio: ' + A.fmt(R.ini).slice(0, 5));
+      else {
+        var sv = R.cs ? R.cs.v : null, cv = R.cc ? R.cc.v : null;
+        var mal = (sv != null && sv < 50) || (cv != null && cv < 40), at = (sv != null && sv < 60) || (cv != null && cv < 45);
+        var sem = !enT ? 'g' : mal ? 'r' : at ? 'a' : 'v', cn = R.cc && !R.cc.tact ? 'Concep. máx.' : 'Concepción';
+        if (enT && mal) avisos.push(['mal', 'Revisá Reproducción cada 21 días: ' + [sv != null && sv < 50 ? 'servicio ' + p0(sv) + ' en el ciclo ' + R.cs.n : '', cv != null && cv < 40 ? cn.toLowerCase() + ' ' + p0(cv) + ' en el ciclo ' + R.cc.n : ''].filter(Boolean).join(' y ')]);
+        t1 = tile(sem, 'rep', 'Reproducción 21 días', p0(sv), 'Tasa de servicio' + (R.cs ? ' · ciclo ' + R.cs.n : ''),
+          cv != null ? cn + ' ' + p0(cv) + (R.cc.n !== (R.cs && R.cs.n) ? ' · ciclo ' + R.cc.n : '') : (enT ? '' : 'Temporada terminada'));
+      }
+      // 2) leche por vaca
+      var t2;
+      if (!R.le) t2 = tile('g', 'leche', 'Leche por vaca', '–', 'Sin controles lecheros', '');
+      else {
+        var d4 = R.le.prev ? (R.le.v / R.le.prev - 1) * 100 : null, s4 = d4 == null ? 'g' : d4 <= -10 ? 'r' : d4 <= -5 ? 'a' : 'v';
+        if (s4 === 'r') avisos.push(['mal', 'Leche por vaca ' + nf(Math.abs(d4), 0) + '% abajo del año anterior']);
+        t2 = tile(s4, 'leche', 'Leche por vaca', nf(R.le.v, 1) + '<small> L</small>', MESL[A.MESES.indexOf(R.le.mes)].replace(/^./, function (c) { return c.toUpperCase(); }) + ' ' + R.le.anio,
+          d4 == null ? '' : flecha(d4) + nf(d4, 0) + '% vs ' + R.le.mes + ' ' + (R.le.anio - 1));
+      }
+      // 3) vacas preñadas
+      var t3, P = R.pr;
+      if (P.P + P.PP === 0) t3 = tile('g', 'ptvac', 'Vacas preñadas', '–', 'Sin vacas para contar', '');
+      else {
+        var d2 = R.prA != null && P.pct != null ? P.pct - R.prA : null, s2 = d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v';
+        if (s2 === 'r') avisos.push(['mal', 'Vacas preñadas: ' + nf(Math.abs(Math.round(d2))) + ' puntos menos que hace un año']);
+        t3 = tile(s2, 'ptvac', 'Vacas preñadas', p0(P.pct), n0(P.P) + ' preñadas · ' + n0(P.PP) + ' por preñar',
+          d2 == null ? '' : flecha(d2) + nf(Math.round(d2)) + ' pts vs hace un año');
+      }
+      // 4) último diagnóstico: amarillo desde 21 días, rojo con más de 30
+      var t4;
+      if (!R.ultTacto) t4 = tile('g', 'tactar', 'Último tacto', '–', 'Sin tactos cargados', '');
+      else {
+        var dt = A.diffDays(today(), R.ultTacto), s3 = dt > 30 ? 'r' : dt >= 21 ? 'a' : 'v';
+        if (dt >= 21) avisos.push([s3 === 'r' ? 'mal' : 'at', 'Pasaron ' + dt + ' días desde el último tacto: coordiná la visita para el diagnóstico']);
+        t4 = tile(s3, 'tactar', 'Último tacto', dt + '<small> ' + (dt === 1 ? 'día' : 'días') + '</small>', 'Desde el ' + A.fmt(R.ultTacto).slice(0, 5),
+          R.nTactar != null ? n0(R.nTactar) + ' para tactar' : '');
+      }
+      var hayMal = avisos.some(function (x) { return x[0] === 'mal'; });
+      var res = avisos.length
+        ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
+        : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
+      return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' +
+        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra hace un año (amarillo 5 puntos menos, rojo 10). Último tacto: amarillo desde 21 días, rojo con más de 30.</p>';
+    }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
@@ -1959,7 +2103,7 @@
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en ' + SRC() + '.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
-        '<p class="src">' + (DB.origen === 'fosapp' ? 'Base FOSAPP' : 'Respaldo SysCaw') + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
+        '<p class="src">' + SRCbase().replace(/^./, function (c) { return c.toUpperCase(); }) + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
     }
     function fichaHTML(a) {
       if (a.bTipo) return fichaBajaHTML(a);
@@ -2000,7 +2144,7 @@
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
         idxFichaHTML(a) +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
-        (h ? '<p class="src">Historial ' + (DB.origen === 'fosapp' ? 'de la base FOSAPP' : 'del respaldo SysCaw') + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
+        (h ? '<p class="src">Historial ' + (externo(DB.origen) ? 'de la ' : 'del ') + SRCbase() + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
     }
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
@@ -2018,6 +2162,15 @@
       });
     }
 
+    // las explicaciones largas (cómo se calcula cada cosa) quedan plegadas detrás de un botón
+    function plegarNotas(main) {
+      Array.prototype.forEach.call(main.querySelectorAll('p.cap'), function (p) {
+        if (p.closest('details.nota') || p.textContent.length < 160) return;
+        var d = document.createElement('details'); d.className = 'nota';
+        d.innerHTML = '<summary>Cómo se calcula</summary>';
+        p.parentNode.insertBefore(d, p); d.appendChild(p);
+      });
+    }
     var LOGO_LIBRETA = '<svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true"><rect x="11" y="6" width="28" height="36" rx="3" fill="#F4D823"/><rect x="11" y="6" width="6" height="36" rx="2" fill="#C9A227"/><path d="M8 12h6M8 19h6M8 26h6M8 33h6" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/><rect x="21" y="14" width="13" height="3" rx="1.5" fill="#12274A"/><rect x="21" y="21" width="10" height="3" rx="1.5" fill="#12274A" opacity=".6"/><rect x="21" y="28" width="12" height="3" rx="1.5" fill="#12274A" opacity=".6"/></svg>';
     /* ----- pestaña Leche: último control lechero ----- */
     function solidos(c) { return c[2] >= 2 && c[2] <= 7 && c[3] >= 2 && c[3] <= 5.5 ? c[1] * (c[2] + c[3]) / 100 : null; }
@@ -2088,7 +2241,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -2183,6 +2336,26 @@
         return true;
       });
     }
+    /* tambo precargado por link (solo veterinario): los datos están cifrados en el sitio y la clave viaja solo en el link
+       (#cargar=<archivo>.<clave>), que el navegador nunca manda al servidor */
+    function leerPrecarga(texto) {
+      var m = texto != null ? /#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)/.exec(texto) : /^#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/.exec(location.hash || '');
+      if (!m) { if (texto != null) toast('No encontré un link de tambo en lo que pegaste.'); return; }
+      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (!esVet()) { toast('Este link es solo para el modo veterinario.'); return; }
+      state.inicio = false;
+      if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el tambo precargado.'); return; }
+      var b64u = function (t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var bin = atob(t), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+      var datos = fetch('datos/' + m[1] + '.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('No encontré el tambo precargado (quizás ya se quitó).'); return r.arrayBuffer(); })
+        .then(function (buf) {
+          return crypto.subtle.importKey('raw', b64u(m[2]), 'AES-GCM', false, ['decrypt']).then(function (k) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(buf, 0, 12) }, k, new Uint8Array(buf, 12)); });
+        })
+        .then(function (plano) { return new Response(new Blob([plano]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); })
+        .then(function (t) { var d = JSON.parse(t); d.unidades = d.unidades || []; d.sel = null; d.unidadesSel = []; return d; });
+      datos.catch(function () {});
+      state.destino = 'nuevo';
+      listo.then(function () { cargarRespaldo(datos, { name: 'tambo-precargado' }, 'pre'); });
+    }
     function pedirCodigo() { var t = prompt('Escribí el código de activación que te mandó el Dr. Mauro Torterolo'); if (t) activarCodigo(t); }
     function leerActivacion(texto) {
       var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
@@ -2203,8 +2376,8 @@
         '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Te mandaron un link? Pegalo acá</button>';
     }
     function pegarActivacion() {
-      var pedir = function (pre) { var t = prompt('Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) leerActivacion(t); };
-      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
+      var pedir = function (pre) { var t = prompt(esVet() ? 'Pegá acá el link del tambo' : 'Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) { if (/#cargar=/.test(t)) leerPrecarga(t); else leerActivacion(t); } };
+      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#cargar=/.test(t || '')) leerPrecarga(t); else if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
       else pedir('');
     }
     /* copia de la clave de veterinario: para pasar el modo veterinario a otro teléfono (las activaciones de los productores dependen de esta clave) */
@@ -2229,7 +2402,7 @@
     // operario: solo Buscar y la ficha. El tipo de acceso va dentro de la firma.
     function esOperario() { return !esVet() && ACT.length > 0 && !ACT.some(function (x) { return x.r !== 'op'; }); }
     function enviarActivacion() {
-      if (DB.origen === 'fosapp') { toast('Los tambos de FOSAPP son solo para el modo veterinario: no se activan para productores.'); return; }
+      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario: no se activan para productores.'); return; }
       if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para generar la activación.'); return; }
       closeSheet();
       $('#sheetXTitle').textContent = '¿Para quién es la activación?';
@@ -2238,7 +2411,7 @@
       $('#sheetX').hidden = false;
     }
     function enviarActivacionRol(rol) {
-      if (DB.origen === 'fosapp') { toast('Los tambos de FOSAPP son solo para el modo veterinario: no se activan para productores.'); return; }
+      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario: no se activan para productores.'); return; }
       $('#sheetX').hidden = true;
       var base = location.href.split('#')[0].split('?')[0].replace(/prueba\/(index\.html)?$/, '').replace(/index\.html$/, '');
       codigoPara(DB.idProd[0], rol).then(function (cod) {
@@ -2460,7 +2633,7 @@
     var POB = null;
     // resumen de un tambo: usa las mismas cuentas que la app, poniendo ese tambo como activo un momento
     function pobResumen(t, o) {
-      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && o.origen === 'fosapp' ? 'fosapp' : 'syscaw' };
+      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && externo(o.origen) ? o.origen : 'syscaw' };
       if (!o || o.fuente !== 'syscaw' || !o.hist) { r.sin = true; return r; }
       try {
         TAMBOS.activo = t.id; DB = o; DB.sel = null; aplicarUnidad(); state.ini21 = null; state.pev = null;
@@ -2570,7 +2743,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, ns = F.length - nf2; return [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : ''].filter(Boolean).join(' y '); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = F.filter(function (f) { return f.origen === 'sigea'; }).length, ns = F.length - nf2 - nm; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
@@ -2712,6 +2885,7 @@
 
     /* ----- render ----- */
     var NAVS = [
+      ['panel', 'Panel', '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2.1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2.1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2.1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2.1"/>'],
       ['buscar', 'Buscar', '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
       ['tareas', 'Tareas', '<path d="M5 6.5l2 2 3.5-4M5 14.5l2 2 3.5-4M14 7h6M14 15h6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
       ['leche', 'Leche', '<path d="M12 3.5s-6 6.6-6 10.8a6 6 0 0 0 12 0c0-4.2-6-10.8-6-10.8z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>'],
@@ -2755,8 +2929,9 @@
       nav.hidden = op;
       $('#ubtn').hidden = !DB.unidades;
       if (DB.unidades) $('#ubtnTxt').textContent = nombreSel(DB.sel) + ' · cambiar';
-      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? (DB.origen === 'fosapp' ? 'base FOSAPP del ' : 'respaldo SysCaw del ') + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
-      nav.innerHTML = '<div class="navin">' + NAVS.map(function (n) {
+      $('#meta').textContent = DB.animales.length + ' animales · ' + (DB.fuente === 'syscaw' ? SRCbase() + ' del ' + A.fmt(DB.fecha) : 'libreta del ' + A.fmt(DB.cargada)) + (state.persisted ? '' : ' (no se guarda en este navegador)') + (esOperario() ? ' · operario' : '');
+      if (state.tab === 'panel' && !panelOK()) state.tab = 'buscar';
+      nav.innerHTML = '<div class="navin">' + NAVS.filter(function (n) { return n[0] !== 'panel' || panelOK(); }).map(function (n) {
         return '<button class="nb" data-t="' + n[0] + '" aria-current="' + (!state.rp && state.tab === n[0] ? 'page' : 'false') + '"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' + n[2] + '</svg><span>' + n[1] + '</span></button>';
       }).join('') + '</div>';
       document.body.classList.toggle('ancho', !!(state.pobl && esVet()));
@@ -2764,14 +2939,16 @@
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); plegarNotas(main); return; }
         state.rp = null;
       }
       var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
       else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); }
       else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); }
+      else if (state.tab === 'panel' && panelOK()) main.innerHTML = err + panelHTML();
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
+      plegarNotas(main);
     }
 
     /* ----- eventos ----- */
@@ -2787,6 +2964,17 @@
       if ((el = e.target.closest('[data-sg]'))) { el.parentNode.classList.toggle('abierto'); return; }
       if ((el = e.target.closest('[data-ps]'))) { state.pobSort = el.dataset.ps; render(); return; }
       if ((el = e.target.closest('[data-t]'))) { setTab(el.dataset.t); return; }
+      if ((el = e.target.closest('[data-pan]'))) {
+        var pa = el.dataset.pan;
+        if (pa === 'leche') { setTab('leche'); return; }
+        if (pa === 'tactar') { state.desp = state.desp || {}; state.desp.tactar = true; state.desp.tactarvq = true; setTab('tareas'); return; }
+        if (pa === 'ptvac') { state.cat = 'todas'; state.filtro = 'ptvac'; state.q = ''; state.n = 60; setTab('buscar'); return; }
+        var tit = pa === 'rep' ? 'Reproducción cada 21 días' : 'Vacas en ordeñe y secas';
+        FICHA_AB[tit] = true; state.cat = 'todas'; setTab('rodeo');
+        var rs = Array.prototype.filter.call(document.querySelectorAll('section.card h2'), function (h) { return h.textContent.indexOf(tit) === 0; })[0];
+        if (rs) rs.closest('section').scrollIntoView({ block: 'start' });
+        return;
+      }
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
@@ -2889,6 +3077,7 @@
       if (cambio) { saveTambos(); savePerfil(); render(); }
     });
     leerActivacion();
+    leerPrecarga();
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
