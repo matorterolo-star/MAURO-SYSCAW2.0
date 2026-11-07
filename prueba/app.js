@@ -2966,6 +2966,8 @@
         var obj = { tipo: 'libreta-base', v: 1, fecha: today(), tambos: TAMBOS.lista, dbs: {}, ps: {} };
         TAMBOS.lista.forEach(function (t, i) { if (dbs[i]) obj.dbs[t.id] = dbs[i]; });
         try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (/^libreta:[a-z0-9]+:t[a-z0-9]+$/i.test(k)) obj.ps[k] = localStorage.getItem(k); } } catch (e) {}
+        // marcas de la población (tambos con toro en el rodeo)
+        obj.toro = pobToro();
         var blob = new Blob([JSON.stringify(obj)], { type: 'application/json' }), nombre = 'base-tambos-' + today();
         var fin = function (b, ext) {
           var file = null; try { file = new File([b], nombre + ext, { type: ext === '.gz' ? 'application/gzip' : 'application/json' }); } catch (e) {}
@@ -2990,6 +2992,8 @@
         var o = JSON.parse(txt);
         if (!o || o.tipo !== 'libreta-base' || !Array.isArray(o.tambos)) throw new Error('Ese archivo no es una copia de la base de tambos.');
         var nuevos = 0, act = 0, igual = 0, tareas = [];
+        // las marcas de "toro en el rodeo" se suman a las que ya hay en este equipo
+        if (o.toro) Object.keys(o.toro).forEach(function (k) { pobToroSet(k, true); });
         o.tambos.forEach(function (t) {
           var db = o.dbs && o.dbs[t.id]; if (!db) return;
           var ex = null; TAMBOS.lista.forEach(function (x) { if (x.id === t.id) ex = x; }); if (!ex) ex = tamboPorNombre(t.nombre);
