@@ -2829,7 +2829,7 @@
       var T = pobToro(), n = F.filter(function (f) { return T[pobKey(f)]; }).length;
       return '<details class="nota"' + (state.pobToroAb ? ' open' : '') + '><summary>Tambos con toro en el rodeo' + (n ? ' (' + n + ')' : '') + '</summary>' +
         '<p class="cap">Marcá los que tienen toro suelto: no entran en tasa de servicio, concepción, tasa de preñez (esta temporada y la anterior), servicios por preñez ni intervalo parto–1er servicio, porque los servicios del toro no se anotan. Sí entran en intervalo parto–preñez, % preñez general, leche y rodeo.</p>' +
-        F.slice().sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); }).map(function (f) { var k = pobKey(f); return '<label class="uopt"><input type="checkbox" class="pobToro" data-k="' + esc(k) + '"' + (T[k] ? ' checked' : '') + '><b>' + esc(f.nombre) + '</b></label>'; }).join('') + '</details>';
+        F.slice().sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); }).map(function (f) { var k = pobKey(f); return '<label class="uopt"><input type="checkbox" class="pobToro" data-toro="' + esc(k) + '"' + (T[k] ? ' checked' : '') + '><b>' + esc(f.nombre) + '</b></label>'; }).join('') + '</details>';
     }
     // ranking: modo 'anon' (sin nombres), 'nombres' (todos) o el id de un tambo (solo se ve ese nombre)
     function pobRankHTML(F) {
@@ -3258,7 +3258,7 @@
     document.addEventListener('change', function (e) {
       if ((e.target.id === 'vomes' || e.target.id === 'pomes') && e.target.value) { state.vomes = e.target.value; render(); return; }
       if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
-      if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.k, e.target.checked); state.pobToroAb = true; render(); return; }
+      if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.toro, e.target.checked); state.pobToroAb = true; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
