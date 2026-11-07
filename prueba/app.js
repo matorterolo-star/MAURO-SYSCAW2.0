@@ -2734,6 +2734,9 @@
         var finTemp = function (d) { var y = +d.slice(0, 4), m = +d.slice(5, 7) + 9; if (m > 12) { y++; m -= 12; } return A.addDays(y + '-' + (m < 10 ? '0' : '') + m + '-01', +d.slice(8, 10) - 2); };
         var finAct = finTemp(ini), C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, finAct < ref ? finAct : ref) : [];
         r.ini = ini; r.ref = ref; r.T = suma(C);
+        // primeros 3 ciclos de la temporada (concentran los partos de otoño): la tasa de servicio no necesita tacto,
+        // alcanza con que el ciclo 3 haya terminado
+        if (C.length >= 3 && C[2].fin <= ref) { r.T3 = { aptas: 0, serv: 0 }; C.slice(0, 3).forEach(function (c) { r.T3.aptas += c.aptas; r.T3.serv += c.serv; }); }
         var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4), finAnt = finTemp(iniAnt);
         if (finAnt >= ini) finAnt = A.addDays(ini, -1);
         r.iniAnt = iniAnt; r.finAnt = finAnt;
@@ -2793,6 +2796,7 @@
     // mín: lo que hace falta para que la fila entre (evita porcentajes con pocos datos)
     var POB_IND = [
       { k: 'serv', sinToro: true, g: 'Reproducción', t: 'Tasa de servicio', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.aptas >= 30 ? f.T.serv / f.T.aptas * 100 : null; }, nota: 'Aptas servidas / aptas, ciclos de 21 días cerrados de la temporada actual.' },
+      { k: 'serv3', sinToro: true, g: 'Reproducción', t: 'Tasa de servicio, primeros 3 ciclos', u: '%', alto: true, d: 0, val: function (f) { return f.T3 && f.T3.aptas >= 30 ? f.T3.serv / f.T3.aptas * 100 : null; }, nota: 'Aptas servidas / aptas en los 3 primeros ciclos de 21 días de la temporada, los que concentran los partos de otoño.' },
       { k: 'conc', sinToro: true, g: 'Reproducción', t: 'Tasa de concepción', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.sOk + f.T.sMal >= 20 ? f.T.sOk / (f.T.sOk + f.T.sMal) * 100 : null; }, nota: 'Servicios que preñaron / servicios con resultado, ciclos cerrados.' },
       { k: 'pren', sinToro: true, g: 'Reproducción', t: 'Tasa de preñez (21 días)', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.aptas >= 30 ? f.T.pren / f.T.aptas * 100 : null; }, nota: 'Aptas que se preñan en el ciclo / aptas, ciclos cerrados.' },
       { k: 'prenA', sinToro: true, g: 'Reproducción', t: 'Tasa de preñez temporada anterior', u: '%', alto: true, d: 0, val: function (f) { return f.TA && f.TA.aptas >= 30 ? f.TA.pren / f.TA.aptas * 100 : null; }, nota: 'La misma cuenta en la temporada del año pasado.' },
@@ -2828,7 +2832,7 @@
     function pobToroHTML(F) {
       var T = pobToro(), n = F.filter(function (f) { return T[pobKey(f)]; }).length;
       return '<details class="nota"' + (state.pobToroAb ? ' open' : '') + '><summary>Tambos con toro en el rodeo' + (n ? ' (' + n + ')' : '') + '</summary>' +
-        '<p class="cap">Marcá los que tienen toro suelto: no entran en tasa de servicio, concepción, tasa de preñez (esta temporada y la anterior), servicios por preñez ni intervalo parto–1er servicio, porque los servicios del toro no se anotan. Sí entran en intervalo parto–preñez, % preñez general, leche y rodeo.</p>' +
+        '<p class="cap">Marcá los que tienen toro suelto: no entran en tasa de servicio (de la temporada y de los primeros 3 ciclos), concepción, tasa de preñez (esta temporada y la anterior), servicios por preñez ni intervalo parto–1er servicio, porque los servicios del toro no se anotan. Sí entran en intervalo parto–preñez, % preñez general, leche y rodeo.</p>' +
         F.slice().sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); }).map(function (f) { var k = pobKey(f); return '<label class="uopt"><input type="checkbox" class="pobToro" data-toro="' + esc(k) + '"' + (T[k] ? ' checked' : '') + '><b>' + esc(f.nombre) + '</b></label>'; }).join('') + '</details>';
     }
     // ranking: modo 'anon' (sin nombres), 'nombres' (todos) o el id de un tambo (solo se ve ese nombre)
