@@ -2703,11 +2703,13 @@
     /* ----- Población (solo veterinario): todos los tambos guardados en este equipo ----- */
     var POB = null;
     // resumen de un tambo: usa las mismas cuentas que la app, poniendo ese tambo como activo un momento
-    function pobResumen(t, o) {
-      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && externo(o.origen) ? o.origen : 'syscaw' };
+    // u: una unidad del tambo (cada unidad con vacas es una fila aparte: mismo dueño, manejos distintos)
+    function pobResumen(t, o, u) {
+      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: (t.nombre || 'Sin nombre') + (u ? ' · ' + u.corto : ''), unidad: u ? u.id : null, origen: o && externo(o.origen) ? o.origen : 'syscaw' };
       if (!o || o.fuente !== 'syscaw' || !o.hist) { r.sin = true; return r; }
+      var selAntes = o.sel;
       try {
-        TAMBOS.activo = t.id; DB = o; DB.sel = null; aplicarUnidad(); state.ini21 = null; state.pev = null;
+        TAMBOS.activo = t.id; DB = o; DB.sel = u ? [u.id] : null; aplicarUnidad(); state.ini21 = null; state.pev = null;
         var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
         var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
           .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
@@ -2732,8 +2734,23 @@
           r.lv12 = l12.reduce(function (s, x) { return s + x; }, 0) / l12.length;
         }
       } catch (e) { r.error = String(e && e.message || e); }
-      finally { DB = g.DB; TAMBOS.activo = g.act; state.ini21 = g.ini21; state.pev = g.pev; }
+      finally { o.sel = selAntes; DB = g.DB; TAMBOS.activo = g.act; state.ini21 = g.ini21; state.pev = g.pev; }
       return r;
+    }
+    // unidades del tambo con al menos 20 vacas (en ordeñe y secas): cada una va como fila propia en la población.
+    // Las unidades sin vacas (recría, campo) no tienen fila; un tambo de una sola unidad sigue siendo una fila.
+    function pobUnidades(t, o) {
+      if (!o || !o.unidades || o.unidades.length < 2 || !o.todos) return null;
+      var n = {}; o.todos.forEach(function (a) { if (a.cat === 'vaca' || a.cat === 'seca') n[a.u] = (n[a.u] || 0) + 1; });
+      var us = o.unidades.filter(function (u) { return (n[u.id] || 0) >= 20; });
+      if (us.length < 2) return null;
+      var base = (t.nombre || '').toLowerCase();
+      return us.map(function (u) {
+        var nm = String(u.nombre || ('Unidad ' + u.id)), c = nm;
+        // "El Teson (MFajardo) T1" en el tambo "El Teson (MFajardo)" → "T1"
+        if (base && nm.toLowerCase().indexOf(base) === 0 && nm.length > base.length) c = nm.slice(base.length).replace(/^[\s\-·,:]+/, '');
+        return { id: u.id, corto: c || nm };
+      });
     }
     function pobCalc() {
       POB = { cargando: true }; render();
@@ -2743,7 +2760,11 @@
           POB = { filas: F, hecho: Date.now() }; render(); return;
         }
         var t = L[i++]; POB.prog = i + ' de ' + L.length + ': ' + (t.nombre || ''); render();
-        leerDB(t.id).then(function (o) { F.push(pobResumen(t, o)); setTimeout(paso, 30); }, function () { setTimeout(paso, 30); });
+        leerDB(t.id).then(function (o) {
+          var us = pobUnidades(t, o);
+          if (us) us.forEach(function (u) { F.push(pobResumen(t, o, u)); }); else F.push(pobResumen(t, o));
+          setTimeout(paso, 30);
+        }, function () { setTimeout(paso, 30); });
       };
       setTimeout(paso, 30);
     }
@@ -2768,7 +2789,7 @@
       var nom = function (f) { return '<td class="pnom">' + esc(f.nombre) + '<small' + (viejo(f) ? ' class="pbajo"' : '') + '>respaldo ' + A.fmt(f.ref) + '</small></td>'; };
       var rep = '<section class="card"><h2>Reproducción: temporada actual</h2>' +
         '<div class="kpis"><div><b>' + v(pTS) + '%</b><span>Tasa de servicio</span></div><div><b>' + v(pTC) + '%</b><span>Concepción</span></div><div class="tp"><b>' + v(pTP) + '%</b><span>Tasa de preñez</span></div></div>' +
-        '<p class="cap">Promedio de la población: ' + F.length + ' tambos, ' + nf(vac) + ' vacas, ciclos de 21 días cerrados. Tocá un título para ordenar.</p>' +
+        '<p class="cap">Promedio de la población: ' + F.length + ' ' + (F.some(function (f) { return f.unidad != null; }) ? 'tambos o unidades' : 'tambos') + ', ' + nf(vac) + ' vacas, ciclos de 21 días cerrados. Tocá un título para ordenar.</p>' +
         '<div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th>' + th('vacas', 'Vacas') + th('ts', 'Servicio') + th('tc', 'Concep.') + th('tp', 'Preñez') + '<th>Preñez temp. anterior</th></tr></thead><tbody>' +
         R.map(function (f) {
           var ts = f.T.aptas ? f.T.serv / f.T.aptas * 100 : null, tc = f.T.sOk + f.T.sMal ? f.T.sOk / (f.T.sOk + f.T.sMal) * 100 : null, tpp = f.T.aptas ? f.T.pren / f.T.aptas * 100 : null;
@@ -2814,7 +2835,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = F.filter(function (f) { return f.origen === 'sigea'; }).length, nd = F.filter(function (f) { return f.origen === 'dhm'; }).length, ns = F.length - nf2 - nm - nd; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + (function () { var ids = {}; F.forEach(function (f) { ids[f.id] = 1; }); var nt = Object.keys(ids).length, nu = F.filter(function (f) { return f.unidad != null; }).length; return nt + ' tambos en este equipo' + (nu ? ' (' + F.length + ' filas: ' + (function () { var g = {}; F.forEach(function (f) { if (f.unidad != null) g[f.id] = (g[f.id] || 0) + 1; }); return Object.keys(g).length; })() + ' con varias unidades van una fila por unidad)' : '') + ': '; })() + (function () { var ids2 = {}, Fu = F.filter(function (f) { if (ids2[f.id]) return false; ids2[f.id] = 1; return true; }); var nf2 = Fu.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = Fu.filter(function (f) { return f.origen === 'sigea'; }).length, nd = Fu.filter(function (f) { return f.origen === 'dhm'; }).length, ns = Fu.length - nf2 - nm - nd; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
