@@ -286,12 +286,12 @@
         // servicios del ciclo y su resultado
         L.sv.forEach(function (e, i) {
           if (e[0] < cy.ini || e[0] > cy.fin) return;
-          if (L.conc) { if (e[0] === L.conc) { cy.sOk++; C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'ok' }); } else if (e[0] < L.conc) { cy.sMal++; C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'mal' }); } return; }
+          if (L.conc) { if (e[0] === L.conc) { cy.sOk++; C.svs.push({ c: cy.n, f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'ok' }); } else if (e[0] < L.conc) { cy.sMal++; C.svs.push({ c: cy.n, f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'mal' }); } return; }
           var luego = L.sv[i + 1] || L.neg.some(function (d) { return d > e[0] && diffDays(d, e[0]) >= 25; });
           // no retorno: solo cuenta si pasaron al menos 24 días desde el servicio (si no, todavía no pudo repetir)
           if (diffDays(ref, e[0]) < 24) return;
           if (luego) cy.sMal++; else cy.sPend++;
-          C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: luego ? 'mal' : 'pend' });
+          C.svs.push({ c: cy.n, f: e[0], toro: e[2] || '', ins: e[3] || '', r: luego ? 'mal' : 'pend' });
         });
         // servida en un ciclo anterior y todavía sin resultado (sin tacto vacía ni nuevo servicio): no es apta
         // hasta que se la vuelva a servir; si después el tacto da vacía, cuenta para atrás
@@ -783,15 +783,33 @@
         document.head.appendChild(s);
       });
     }
+    // lector de DHM (base de Access .mdb): se baja recién la primera vez que el veterinario abre una base de DHM
+    function cargarDhm() {
+      if (root.Dhm && root.MDBReader) return Promise.resolve(root.Dhm);
+      var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
+      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=2'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
+    }
+    // base de Access (DHM): "Standard Jet DB" o "Standard ACE DB" en el encabezado
+    function esAccess(buf) { if (!buf || buf.byteLength < 32) return false; var u = new Uint8Array(buf, 4, 15), t = ''; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return t === 'Standard Jet DB' || t === 'Standard ACE DB'; }
+    // ¿el .rar trae una base de Access (DHM.rar) en vez de un respaldo de SysCaw?
+    function rarConMdb(buf) {
+      return root.Unrar.createExtractorFromData({ data: buf.slice(0), wasmBinary: b64(root.UNRAR_WASM_B64) }).then(function (ex) {
+        var hay = false; for (var h of ex.getFileList().fileHeaders) if (/\.(mdb|accdb)$/i.test(h.name)) hay = true; return hay;
+      }).catch(function () { return false; });
+    }
     // base de Firebird (SIGEA de Macoel): página de encabezado con la firma 12345 y ODS 10 u 11
     function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
     // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
-    function externo(o) { return o === 'fosapp' || o === 'sigea'; }
+    function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm'; }
     function cargarRespaldo(buf, f, tipo) {
-      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea';
-      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
+      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar';
+      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        (tipo === 'pre' ? buf : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+        (tipo === 'pre' ? buf : dhm ? cargarDhm().then(function (H) {
+          return (tipo === 'dhmrar' ? H.mdbDeRar(buf, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64) }) : Promise.resolve(buf)).then(function (mdb) {
+            return H.fromFile(mdb, f.name, { elegir: function (us) { return elegirUnidad(us, null, true); } });
+          }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; });
+        }) : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
           : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
@@ -936,7 +954,16 @@
           if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
           cargarRespaldo(fr.result, f, true); return;
         }
-        if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
+        if (esAccess(fr.result)) {
+          // base de DHM (Access): solo en el modo veterinario
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          cargarRespaldo(fr.result, f, 'dhm'); return;
+        }
+        if (esRar(fr.result) || /\.rar$/i.test(f.name)) {
+          // en el modo veterinario, un .rar puede traer la base de DHM (DHM.rar)
+          if (esVet()) { rarConMdb(fr.result).then(function (m) { cargarRespaldo(fr.result, f, m ? 'dhmrar' : undefined); }); return; }
+          cargarRespaldo(fr.result, f); return;
+        }
         if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
         try {
           var res = A.parseLibreta(root.XLSX, fr.result);
@@ -1365,8 +1392,8 @@
       try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
       state.ini21 = null; render();
     }
-    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : 'SysCaw'; }
-    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : 'respaldo SysCaw'; }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : DB.origen === 'dhm' ? 'DHM' : 'SysCaw'; }
+    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : DB.origen === 'dhm' ? 'base DHM' : 'respaldo SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     /* ----- Panel: primera pantalla del productor, 4 indicadores con semáforo ----- */
@@ -1515,11 +1542,13 @@
         var tact = c.cerrado && c.sPend <= dn * 0.1;
         var val = tact ? cr : mx, mal = hab != null && val != null && val < hab - 10;
         if (mal) hayRojo = true;
-        var ab = mal && state.cicloAl === c.n;
-        var marca = function (cls) { return '<td class="' + cls + (mal ? ' alerta' : '') + '"' + (mal ? ' data-cal="' + c.n + '" role="button" tabindex="0" aria-expanded="' + ab + '"' : '') + '>'; };
-        var cmax = (tact ? '<td class="cmax">' : marca('cmax')) + (dn ? (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '<small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
-        var creal = (tact ? marca('creal') : '<td class="creal">') + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '<small>' + c.sOk + '/' + dr + '</small></td>';
-        var aviso = ab ? '<tr class="ralrow"><td colspan="6"><p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p></td></tr>' : '';
+        var ab = !!dn && state.cicloAl === c.n;
+        // al tocar la concepción (o la máxima) de un ciclo se abre debajo el detalle por toro e inseminador
+        var marca = function (cls, al) { return '<td class="' + cls + (al ? ' alerta' : '') + (dn ? ' tq' : '') + '"' + (dn ? ' data-cal="' + c.n + '" role="button" tabindex="0" aria-expanded="' + ab + '"' : '') + '>'; };
+        var cmax = marca('cmax', mal && !tact) + (dn ? '<span>' + (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '</span><small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
+        var creal = marca('creal', mal && tact) + '<span>' + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '</span><small>' + c.sOk + '/' + dr + '</small></td>';
+        var aviso = !ab ? '' : '<tr class="ralrow"><td colspan="6">' + (!mal ? '' : '<p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>') +
+          tiHTML(C.svs.filter(function (s) { return s.c === c.n; }), 'Ciclo ' + c.n + ' · ' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5), 0) + '</td></tr>';
         return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
           '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
           (c.cerrado ? creal + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
@@ -1533,9 +1562,11 @@
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
           torosHTML(C.svs) +
-          (hayRojo ? '<p class="cap ralhint">Tocá un ⚠ en rojo para ver el aviso de ese ciclo.</p>' : '') +
+          '<p class="cap ralhint">Tocá la concepción de un ciclo para verla por toro e inseminador' + (hayRojo ? ' (en los ⚠ en rojo, también el aviso)' : '') + '.</p>' +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>' +
+          '<button class="despbtn" data-a="repti" aria-expanded="' + !!state.repTI + '"><span>Concepción en el período por toro e inseminador</span><span class="chev">' + (state.repTI ? 'ocultar' : 'ver') + '</span></button>' +
+          (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5) : '')
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
@@ -1643,6 +1674,33 @@
         '</section>';
     }
     // alertas por toro e inseminador en la temporada: aviso solo cuando uno repite claramente más que el resto (sin tabla)
+    /* concepción por toro y por inseminador de una lista de servicios (un ciclo o todo el período);
+       con minimo > 0, los de menos servicios van juntos en "Otros" */
+    function tiHTML(svs, sub, minimo) {
+      var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
+      if (!svs.length) return '<p class="cap">Sin servicios en este ' + (minimo ? 'período' : 'ciclo') + '.</p>';
+      var tabla = function (campo, col, sinDato) {
+        var G = {};
+        svs.forEach(function (s) { var k = String(s[campo] || '').trim() || sinDato; var g = G[k] = G[k] || { ok: 0, mal: 0, pend: 0 }; g[s.r]++; });
+        var L = Object.keys(G).map(function (k) { var g = G[k]; return { k: k, g: g, n: g.ok + g.mal + g.pend, sd: k === sinDato }; })
+          .sort(function (a, b) { return a.sd !== b.sd ? (a.sd ? 1 : -1) : b.n - a.n || (a.k < b.k ? -1 : 1); });
+        if (minimo) {
+          var chic = L.filter(function (t) { return t.n < minimo && !t.sd; });
+          if (chic.length > 1) {
+            var o = { ok: 0, mal: 0, pend: 0 }; chic.forEach(function (t) { o.ok += t.g.ok; o.mal += t.g.mal; o.pend += t.g.pend; });
+            L = L.filter(function (t) { return chic.indexOf(t) < 0; }); L.push({ k: 'Otros (' + chic.length + ')', g: o, n: o.ok + o.mal + o.pend, otros: true });
+          }
+        }
+        var fila = function (t, tot) { var g = t.g; return '<tr' + (tot ? ' class="ttot"' : '') + '><td>' + (t.otros || t.sd ? '<i>' + esc(t.k) + '</i>' : '<b>' + esc(t.k) + '</b>') + '</td><td>' + t.n + '</td><td>' + p(g.ok, g.ok + g.mal) + '<small>' + g.ok + '/' + (g.ok + g.mal) + '</small></td><td>' + p(g.ok + g.pend, t.n) + '<small>' + (g.ok + g.pend) + '/' + t.n + '</small></td></tr>'; };
+        var T = { ok: 0, mal: 0, pend: 0 }; svs.forEach(function (s) { T[s.r]++; });
+        return '<table class="tbl rtbl vtbl titbl"><thead><tr><th>' + col + '</th><th>Serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
+          L.map(function (t) { return fila(t); }).join('') + (L.length > 1 ? fila({ k: 'Total', g: T, n: svs.length }, true) : '') + '</tbody></table>';
+      };
+      return '<div class="tibox"><p class="cap tisub">' + esc(sub) + '</p>' +
+        '<h3 class="vh3">Por toro</h3>' + tabla('toro', 'Toro', 'Sin dato de toro') +
+        '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') +
+        '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
+    }
     function torosHTML(svs) {
       var grupo = function (campo, quien) {
         var G = {}, tot = { ok: 0, pend: 0, mal: 0 }, out = [];
@@ -2197,13 +2255,26 @@
       DB.animales.forEach(function (a) { if ((a.cat === 'vaca' || !a.cat) && a.dLac != null && typeof (a.pr || [])[0] === 'number' && a.pr[0] > 0) V.push({ a: a, del: a.dLac, n: a.pN || 2, lt: a.pr[0], g: null, p: null, cs: null, sol: null, prev: null }); });
       return { fecha: null, ant: null, V: V };
     }
+    /* rondas de control: en un tambo con varias unidades, cada unidad puede controlar en un día distinto (T1 el 15, T2 el 16).
+       Los controles de unidades distintas separados por hasta 7 días forman una sola ronda: se suman vacas, litros y días en leche,
+       y la ronda lleva la fecha de su último control. Devuelve { fecha: { v, l, d, nd } } como si fuera un control por fecha. */
+    function rondasCtrl(C) {
+      var L = C.slice().sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; }), R = [], cur = null;
+      L.forEach(function (c) {
+        if (!(c[2] > 0)) return;
+        var u = c[1] == null ? 0 : c[1];
+        if (!cur || A.diffDays(c[0], cur.ini) > 7 || cur.us[u]) { cur = { ini: c[0], f: c[0], us: {}, v: 0, l: 0, d: 0, nd: 0 }; R.push(cur); }
+        cur.us[u] = 1; cur.f = c[0]; cur.v += c[2]; cur.l += c[3] || 0; if (c[4]) { cur.d += c[4] * c[2]; cur.nd += c[2]; }
+      });
+      var out = {}; R.forEach(function (r) { var x = out[r.f]; if (x) { x.v += r.v; x.l += r.l; x.d += r.d; x.nd += r.nd; } else out[r.f] = { v: r.v, l: r.l, d: r.d, nd: r.nd }; });
+      return out;
+    }
     function prom(l, f) { var s = 0, n = 0; l.forEach(function (x) { var v = f(x); if (v != null && !isNaN(v)) { s += v; n++; } }); return n ? s / n : null; }
     // evolución mensual del control lechero: últimos 12 meses vs año anterior vs promedio histórico del mismo mes
     function evolucion(med) {
       var C = (DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; });
       if (C.length < 3) return null;
-      var porFecha = {};
-      C.forEach(function (c) { var x = porFecha[c[0]] || (porFecha[c[0]] = { v: 0, l: 0, d: 0, nd: 0 }); x.v += c[2]; x.l += c[3]; if (c[4]) { x.d += c[4] * c[2]; x.nd += c[2]; } });
+      var porFecha = rondasCtrl(C);
       var mes = {};
       Object.keys(porFecha).forEach(function (f) {
         var x = porFecha[f], k = f.slice(0, 7), m = mes[k] || (mes[k] = { s: 0, n: 0 });
@@ -2241,7 +2312,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -2493,6 +2564,11 @@
       var ini = inicio21(), ref = DB.fecha || today(), fin = null;
       L.forEach(function (x) { x.h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] >= ini && e[0] <= ref && (!fin || e[0] > fin) && enSel(unidadEn(x, e[0]))) fin = e[0]; }); });
       var ips = [], ipp = [], nServ = 0, nPren = 0, apt = 0, pre = 0;
+      // servicios por preñez: como la concepción de los ciclos cerrados, solo servicios hechos al menos 28 días antes del
+      // último tacto (si no, las que repiten se conocen antes que las preñadas y la cuenta se infla)
+      var ultT = null; L.forEach(function (x) { x.h.ta.forEach(function (t) { if (t[0] <= ref && (!ultT || t[0] > ultT) && enSel(unidadEn(x, t[0]))) ultT = t[0]; }); });
+      var finS = ultT ? A.addDays(ultT, -28) : null; if (finS && fin && finS > fin) finS = fin;
+      var nServS = 0, nPrenS = 0;
       if (fin) L.forEach(function (x) {
         var h = x.h;
         h.pa.forEach(function (p, i) {
@@ -2500,6 +2576,17 @@
           var c = concLac(h, i);
           var s1 = c.sv[0];
           if (s1 && s1[0] >= ini && s1[0] <= fin) ips.push(A.diffDays(s1[0], p[0]));
+          // servicios por preñez: solo servicios con resultado conocido (igual que la concepción): el que preñó, o uno que
+          // repitió (hubo otro servicio después o tacto vacía 25 días o más después). No cuentan los servicios todavía sin
+          // resultado (servidas sin tacto) ni los hechos después de la concepción
+          var vac = h.ta.filter(function (t) { return t[0] > p[0] && !esPren(t[1]); }).map(function (t) { return t[0]; });
+          c.sv.forEach(function (e, j) {
+            if (e[0] < ini || !finS || e[0] > finS) return;
+            if (c.conc) { if (e[0] <= c.conc) nServS++; return; }
+            var luego = c.sv[j + 1] || vac.some(function (d) { return d > e[0] && A.diffDays(d, e[0]) >= 25; });
+            if (luego) nServS++;
+          });
+          if (c.conc && finS && c.conc >= ini && c.conc <= finS) nPrenS++;
           c.sv.forEach(function (e) { if (e[0] >= ini && e[0] <= fin) nServ++; });
           if (c.conc && c.conc >= ini && c.conc <= fin) { nPren++; ipp.push(A.diffDays(c.conc, p[0])); }
           // % preñez general: vacas paridas antes del inicio, vacías al inicio, que cumplieron la espera voluntaria en la temporada
@@ -2512,7 +2599,7 @@
       var CY = fin ? A.ciclos21(an, esPren, ini, pevActual(), ref) : [], Tc = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 };
       CY.forEach(function (c) { if (c.cerrado) ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { Tc[k] += c[k]; }); });
       return { M: M, vo: vo, vs: vs, vm: vm, avo: av(vo), avs: av(vs), avm: av(vm), pv: pv, pq: pq, ab: ab, best: best, ini: ini, fin: fin,
-        ips: av(ips), spp: nPren ? nServ / nPren : null, ipp: av(ipp), pg: apt ? pre / apt * 100 : null, apt: apt, pre: pre,
+        ips: av(ips), spp: nPrenS ? nServS / nPrenS : null, sppN: nServS, sppP: nPrenS, sppHasta: finS, ipp: av(ipp), pg: apt ? pre / apt * 100 : null, apt: apt, pre: pre,
         det: Tc.aptas ? Tc.serv / Tc.aptas * 100 : null, con: Tc.sOk + Tc.sMal ? Tc.sOk / (Tc.sOk + Tc.sMal) * 100 : null, tp: Tc.aptas ? Tc.pren / Tc.aptas * 100 : null };
     }
     function infBarras(M, series, H, opt) {
@@ -2632,11 +2719,13 @@
     /* ----- Población (solo veterinario): todos los tambos guardados en este equipo ----- */
     var POB = null;
     // resumen de un tambo: usa las mismas cuentas que la app, poniendo ese tambo como activo un momento
-    function pobResumen(t, o) {
-      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: t.nombre || 'Sin nombre', origen: o && externo(o.origen) ? o.origen : 'syscaw' };
+    // u: una unidad del tambo (cada unidad con vacas es una fila aparte: mismo dueño, manejos distintos)
+    function pobResumen(t, o, u) {
+      var g = { DB: DB, act: TAMBOS.activo, ini21: state.ini21, pev: state.pev }, r = { id: t.id, nombre: (t.nombre || 'Sin nombre') + (u ? ' · ' + u.corto : ''), unidad: u ? u.id : null, origen: o && externo(o.origen) ? o.origen : 'syscaw' };
       if (!o || o.fuente !== 'syscaw' || !o.hist) { r.sin = true; return r; }
+      var selAntes = o.sel;
       try {
-        TAMBOS.activo = t.id; DB = o; DB.sel = null; aplicarUnidad(); state.ini21 = null; state.pev = null;
+        TAMBOS.activo = t.id; DB = o; DB.sel = u ? [u.id] : null; aplicarUnidad(); state.ini21 = null; state.pev = null;
         var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today();
         var an = DB.animales.map(function (a) { return { h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
           .concat((DB.bajas || []).map(function (b) { return { h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
@@ -2645,6 +2734,9 @@
         var finTemp = function (d) { var y = +d.slice(0, 4), m = +d.slice(5, 7) + 9; if (m > 12) { y++; m -= 12; } return A.addDays(y + '-' + (m < 10 ? '0' : '') + m + '-01', +d.slice(8, 10) - 2); };
         var finAct = finTemp(ini), C = ini <= ref ? A.ciclos21(an, esPren, ini, pev, finAct < ref ? finAct : ref) : [];
         r.ini = ini; r.ref = ref; r.T = suma(C);
+        // primeros 3 ciclos de la temporada (concentran los partos de otoño): la tasa de servicio no necesita tacto,
+        // alcanza con que el ciclo 3 haya terminado
+        if (C.length >= 3 && C[2].fin <= ref) { r.T3 = { aptas: 0, serv: 0 }; C.slice(0, 3).forEach(function (c) { r.T3.aptas += c.aptas; r.T3.serv += c.serv; }); }
         var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4), finAnt = finTemp(iniAnt);
         if (finAnt >= ini) finAnt = A.addDays(ini, -1);
         r.iniAnt = iniAnt; r.finAnt = finAnt;
@@ -2653,16 +2745,31 @@
         var D = infDatos('12'); r.ips = D.ips; r.ipp = D.ipp; r.spp = D.spp; r.pg = D.pg; r.vo = D.avo; r.vs = D.avs;
         r.mk = D.M.map(function (m) { return m.key; }); r.pv = D.pv; r.pq = D.pq; r.best = D.best;
         // leche: último control y promedio de los últimos 12 meses (litros por vaca en ordeñe)
-        var porF = {}; (DB.ctrls || []).forEach(function (c) { var x = porF[c[0]] || (porF[c[0]] = { v: 0, l: 0, d: 0 }); x.v += c[2] || 0; x.l += c[3] || 0; x.d += (c[4] || 0) * (c[2] || 0); });
+        var porF = rondasCtrl((DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; }));
         var fs = Object.keys(porF).filter(function (f) { return porF[f].v > 0; }).sort();
         if (fs.length) {
-          var u = porF[fs[fs.length - 1]]; r.lFecha = fs[fs.length - 1]; r.lv = u.l / u.v; r.del = u.d ? u.d / u.v : null;
+          var u = porF[fs[fs.length - 1]]; r.lFecha = fs[fs.length - 1]; r.lv = u.l / u.v; r.del = u.nd ? u.d / u.nd : null;
           var d12 = A.addDays(r.lFecha, -365), l12 = fs.filter(function (f) { return f > d12; }).map(function (f) { return porF[f].l / porF[f].v; });
           r.lv12 = l12.reduce(function (s, x) { return s + x; }, 0) / l12.length;
         }
       } catch (e) { r.error = String(e && e.message || e); }
-      finally { DB = g.DB; TAMBOS.activo = g.act; state.ini21 = g.ini21; state.pev = g.pev; }
+      finally { o.sel = selAntes; DB = g.DB; TAMBOS.activo = g.act; state.ini21 = g.ini21; state.pev = g.pev; }
       return r;
+    }
+    // unidades del tambo con al menos 20 vacas (en ordeñe y secas): cada una va como fila propia en la población.
+    // Las unidades sin vacas (recría, campo) no tienen fila; un tambo de una sola unidad sigue siendo una fila.
+    function pobUnidades(t, o) {
+      if (!o || !o.unidades || o.unidades.length < 2 || !o.todos) return null;
+      var n = {}; o.todos.forEach(function (a) { if (a.cat === 'vaca' || a.cat === 'seca') n[a.u] = (n[a.u] || 0) + 1; });
+      var us = o.unidades.filter(function (u) { return (n[u.id] || 0) >= 20; });
+      if (us.length < 2) return null;
+      var base = (t.nombre || '').toLowerCase();
+      return us.map(function (u) {
+        var nm = String(u.nombre || ('Unidad ' + u.id)), c = nm;
+        // "El Teson (MFajardo) T1" en el tambo "El Teson (MFajardo)" → "T1"
+        if (base && nm.toLowerCase().indexOf(base) === 0 && nm.length > base.length) c = nm.slice(base.length).replace(/^[\s\-·,:]+/, '');
+        return { id: u.id, corto: c || nm };
+      });
     }
     function pobCalc() {
       POB = { cargando: true }; render();
@@ -2672,7 +2779,11 @@
           POB = { filas: F, hecho: Date.now() }; render(); return;
         }
         var t = L[i++]; POB.prog = i + ' de ' + L.length + ': ' + (t.nombre || ''); render();
-        leerDB(t.id).then(function (o) { F.push(pobResumen(t, o)); setTimeout(paso, 30); }, function () { setTimeout(paso, 30); });
+        leerDB(t.id).then(function (o) {
+          var us = pobUnidades(t, o);
+          if (us) us.forEach(function (u) { F.push(pobResumen(t, o, u)); }); else F.push(pobResumen(t, o));
+          setTimeout(paso, 30);
+        }, function () { setTimeout(paso, 30); });
       };
       setTimeout(paso, 30);
     }
@@ -2680,10 +2791,115 @@
       if (!esVet()) return;
       closeSheet(); state.pobIni = !!state.inicio; state.inicio = false; state.pobl = true; state.informe = false; pobCalc(); window.scrollTo(0, 0);
     }
+    /* ===== indicadores de la población: ranking por indicador e informe general con rangos ===== */
+    // cada indicador: valor de una fila (tambo o unidad), si más alto es mejor, unidad y decimales.
+    // mín: lo que hace falta para que la fila entre (evita porcentajes con pocos datos)
+    var POB_IND = [
+      { k: 'serv', sinToro: true, g: 'Reproducción', t: 'Tasa de servicio', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.aptas >= 30 ? f.T.serv / f.T.aptas * 100 : null; }, nota: 'Aptas servidas / aptas, ciclos de 21 días cerrados de la temporada actual.' },
+      { k: 'serv3', sinToro: true, g: 'Reproducción', t: 'Tasa de servicio, primeros 3 ciclos', u: '%', alto: true, d: 0, val: function (f) { return f.T3 && f.T3.aptas >= 30 ? f.T3.serv / f.T3.aptas * 100 : null; }, nota: 'Aptas servidas / aptas en los 3 primeros ciclos de 21 días de la temporada, los que concentran los partos de otoño.' },
+      { k: 'conc', sinToro: true, g: 'Reproducción', t: 'Tasa de concepción', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.sOk + f.T.sMal >= 20 ? f.T.sOk / (f.T.sOk + f.T.sMal) * 100 : null; }, nota: 'Servicios que preñaron / servicios con resultado, ciclos cerrados.' },
+      { k: 'pren', sinToro: true, g: 'Reproducción', t: 'Tasa de preñez (21 días)', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.aptas >= 30 ? f.T.pren / f.T.aptas * 100 : null; }, nota: 'Aptas que se preñan en el ciclo / aptas, ciclos cerrados.' },
+      { k: 'prenA', sinToro: true, g: 'Reproducción', t: 'Tasa de preñez temporada anterior', u: '%', alto: true, d: 0, val: function (f) { return f.TA && f.TA.aptas >= 30 ? f.TA.pren / f.TA.aptas * 100 : null; }, nota: 'La misma cuenta en la temporada del año pasado.' },
+      { k: 'pg', g: 'Reproducción', t: '% preñez general', u: '%', alto: true, d: 0, val: function (f) { return f.pg; }, nota: 'Vacas preñadas en la temporada / vacas aptas al inicio (como el informe anual).' },
+      { k: 'ips', sinToro: true, g: 'Reproducción', t: 'Intervalo parto – 1er servicio', u: 'días', alto: false, d: 0, val: function (f) { return f.ips; }, nota: 'Días promedio, temporada actual.' },
+      { k: 'ipp', g: 'Reproducción', t: 'Intervalo parto – preñez', u: 'días', alto: false, d: 0, val: function (f) { return f.ipp; }, nota: 'Días promedio, temporada actual.' },
+      { k: 'spp', sinToro: true, g: 'Reproducción', t: 'Servicios por preñez', u: '', alto: false, d: 1, val: function (f) { return f.spp; }, nota: 'Servicios de la temporada / preñeces de la temporada. Sube si falta tactar.' },
+      { k: 'lv', g: 'Leche', t: 'Litros por vaca, último control', u: 'L', alto: true, d: 1, val: function (f) { return f.lv; }, nota: 'Litros por vaca en ordeñe en el último control (ronda de todas las unidades).' },
+      { k: 'lv12', g: 'Leche', t: 'Litros por vaca, últimos 12 meses', u: 'L', alto: true, d: 1, val: function (f) { return f.lv12; }, nota: 'Promedio de los controles de los últimos 12 meses.' },
+      { k: 'po', g: 'Rodeo', t: '% de vacas en ordeñe', u: '%', alto: true, d: 0, val: function (f) { return f.vo != null && f.vo + f.vs ? f.vo / (f.vo + f.vs) * 100 : null; }, nota: 'Vacas en ordeñe / (en ordeñe + secas), promedio de los últimos 12 meses.' },
+      { k: 'vacas', g: 'Rodeo', t: 'Vacas (en ordeñe y secas)', u: '', alto: true, d: 0, neutro: true, val: function (f) { return f.vacas || null; }, nota: 'Tamaño del rodeo de vacas a la fecha del respaldo.' }
+    ];
+    // tambos o unidades con toro suelto en el rodeo (los marca el veterinario): sus servicios no están todos anotados,
+    // así que no entran en los indicadores que dependen de los servicios (sinToro)
+    function pobKey(f) { return f.id + (f.unidad != null ? '|' + f.unidad : ''); }
+    function pobToro() { try { return JSON.parse(localStorage.getItem('libreta:pobtoro') || '{}') || {}; } catch (e) { return {}; } }
+    function pobToroSet(k, on) { var T = pobToro(); if (on) T[k] = 1; else delete T[k]; try { localStorage.setItem('libreta:pobtoro', JSON.stringify(T)); } catch (e) {} }
+    // percentil con interpolación (p entre 0 y 1) de una lista ordenada
+    function pctl(o, p) { if (!o.length) return null; var i = (o.length - 1) * p, a = Math.floor(i), b = Math.ceil(i); return o[a] + (o[b] - o[a]) * (i - a); }
+    function pobStats(F, ind) {
+      var TT = ind.sinToro ? pobToro() : {}, fuera = [];
+      var L = F.map(function (f) { return { f: f, x: ind.val(f) }; }).filter(function (z) { if (z.x == null || isNaN(z.x)) return false; if (TT[pobKey(z.f)]) { fuera.push(z); return false; } return true; });
+      var o = L.map(function (z) { return z.x; }).sort(function (a, b) { return a - b; });
+      var q1 = pctl(o, .25), q3 = pctl(o, .75), iq = q3 - q1;
+      // valor atípico (regla de Tukey): más de 1,5 veces el rango intercuartil por fuera del 25%–75%; se avisa, no se saca
+      if (o.length >= 8 && iq > 0) L.forEach(function (z) { z.atip = z.x < q1 - 1.5 * iq || z.x > q3 + 1.5 * iq; });
+      return { L: L.sort(function (a, b) { return ind.alto ? b.x - a.x : a.x - b.x; }), fuera: fuera, n: o.length, prom: o.length ? o.reduce(function (s, x) { return s + x; }, 0) / o.length : null, min: o[0], max: o[o.length - 1], p25: q1, med: pctl(o, .5), p75: q3 };
+    }
+    // sin la unidad (va en el nombre del indicador), para la tabla compacta del informe general
+    function pobNum(x, ind) { return x == null || isNaN(x) ? '–' : nf(x, ind.d, ind.d); }
+    function pobTit(ind) { return ind.t + (ind.u ? ' (' + ind.u + ')' : ''); }
+    function pobFmt(x, ind) { return x == null || isNaN(x) ? '–' : nf(x, ind.d, ind.d) + (ind.u === '%' ? '%' : ind.u ? ' ' + ind.u : ''); }
+    function pobToroHTML(F) {
+      var T = pobToro(), n = F.filter(function (f) { return T[pobKey(f)]; }).length;
+      return '<details class="nota"' + (state.pobToroAb ? ' open' : '') + '><summary>Tambos con toro en el rodeo' + (n ? ' (' + n + ')' : '') + '</summary>' +
+        '<p class="cap">Marcá los que tienen toro suelto: no entran en tasa de servicio (de la temporada y de los primeros 3 ciclos), concepción, tasa de preñez (esta temporada y la anterior), servicios por preñez ni intervalo parto–1er servicio, porque los servicios del toro no se anotan. Sí entran en intervalo parto–preñez, % preñez general, leche y rodeo.</p>' +
+        F.slice().sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); }).map(function (f) { var k = pobKey(f); return '<label class="uopt"><input type="checkbox" class="pobToro" data-toro="' + esc(k) + '"' + (T[k] ? ' checked' : '') + '><b>' + esc(f.nombre) + '</b></label>'; }).join('') + '</details>';
+    }
+    // ranking: modo 'anon' (sin nombres), 'nombres' (todos) o el id de un tambo (solo se ve ese nombre)
+    function pobRankHTML(F) {
+      var modo = state.pobModo || 'anon', tambos = {}; F.forEach(function (f) { if (!tambos[f.id]) tambos[f.id] = (f.nombre || '').split(' · ')[0]; });
+      var sel = modo !== 'anon' && modo !== 'nombres' ? modo : null;
+      var ctrl = '<section class="card noprint"><h2>Ranking por indicador</h2><label class="secfecha">Mostrar <select id="pobSel"><option value="anon"' + (modo === 'anon' ? ' selected' : '') + '>Sin nombres (anónimo)</option><option value="nombres"' + (modo === 'nombres' ? ' selected' : '') + '>Con todos los nombres</option>' +
+        Object.keys(tambos).sort(function (a, b) { return tambos[a].localeCompare(tambos[b], 'es'); }).map(function (id) { return '<option value="' + esc(id) + '"' + (sel === id ? ' selected' : '') + '>Solo ' + esc(tambos[id]) + '</option>'; }).join('') + '</select></label>' +
+        '<p class="cap">Con "Solo …" se ve únicamente el nombre de ese tambo (y sus unidades); el resto queda como barras sin nombre. El 1° es el mejor en cada indicador.</p>' + pobToroHTML(F) + '</section>';
+      var nom = function (f) { return modo === 'nombres' || (sel && String(f.id) === String(sel)) ? esc(f.nombre) : ''; };
+      var res = '';
+      if (sel) {
+        var mios = F.filter(function (f) { return String(f.id) === String(sel); });
+        res = '<section class="card rkres"><h2>' + esc(tambos[sel]) + ' en la población</h2><div class="tblwrap"><table class="tbl"><thead><tr><th>Indicador</th>' + mios.map(function (f) { return '<th>' + esc(f.nombre.split(' · ')[1] || 'Valor') + '</th>'; }).join('') + '<th>Población</th></tr></thead><tbody>' +
+          POB_IND.filter(function (i) { return !i.neutro; }).map(function (ind) {
+            var S = pobStats(F, ind);
+            return '<tr><td>' + esc(ind.t) + '</td>' + mios.map(function (f) { var k = -1; S.L.forEach(function (z, j) { if (z.f === f) k = j; }); var fu = S.fuera.filter(function (z) { return z.f === f; })[0]; return '<td>' + (k < 0 ? (fu ? pobFmt(fu.x, ind) + '<small>con toro, no entra</small>' : '–') : '<b>' + pobFmt(S.L[k].x, ind) + (S.L[k].atip ? ' ⚠' : '') + '</b><small>' + (k + 1) + '° de ' + S.n + '</small>') + '</td>'; }).join('') + '<td>' + pobFmt(S.prom, ind) + '</td></tr>';
+          }).join('') + '</tbody></table></div><p class="cap">Puesto entre los tambos o unidades con dato en cada indicador (1° = el mejor).</p></section>';
+      }
+      var cards = POB_IND.map(function (ind) {
+        var S = pobStats(F, ind); if (!S.n) return '';
+        var max = S.max > 0 ? S.max : 1, pos = function (x) { return Math.max(0, Math.min(100, x / max * 100)); };
+        return '<section class="card rkcard"><h3>' + esc(ind.t) + '</h3><p class="cap">' + esc(ind.nota) + (ind.neutro ? '' : ' ' + (ind.alto ? 'Más alto es mejor.' : 'Más bajo es mejor.')) + '</p><div class="rk">' +
+          S.L.map(function (z, j) {
+            var mio = sel && String(z.f.id) === String(sel), n = nom(z.f);
+            return '<div class="rkr' + (mio ? ' mio' : '') + '"><span class="rkp">' + (j + 1) + '°</span><span class="rkn">' + n + '</span><span class="rkb"><i style="width:' + pos(z.x).toFixed(1) + '%"></i><em style="left:' + pos(S.prom).toFixed(1) + '%"></em></span><span class="rkv">' + (z.atip ? '<span class="rkat" title="Valor atípico">⚠</span>' : '') + pobFmt(z.x, ind) + '</span></div>';
+          }).join('') + '</div><p class="cap rkpie"><span class="rkleg"></span> Promedio de la población: <b>' + pobFmt(S.prom, ind) + '</b> · ' + S.n + ' tambos o unidades con dato' +
+          (S.fuera.length ? ' · no entran ' + S.fuera.length + ' con toro en el rodeo' + (function () { var vis = S.fuera.filter(function (z) { return nom(z.f); }); return vis.length ? ' (' + vis.map(function (z) { return nom(z.f) + ': ' + pobFmt(z.x, ind); }).join(', ') + ')' : ''; })() : '') +
+          (S.L.some(function (z) { return z.atip; }) ? '<br>⚠ Valor atípico: muy alejado del resto (más de 1,5 veces el rango del 25%–75% por fuera de ese rango). Conviene revisar si es real o un problema de registro.' : '') + '</p></section>';
+      }).join('');
+      return ctrl + '<section class="card rkhead"><h2>Población de tambos · ranking por indicador</h2><p class="cap">' + F.length + ' tambos o unidades · ' + (sel ? 'se muestra solo ' + esc(tambos[sel]) : modo === 'nombres' ? 'con nombres' : 'anónimo') + ' · ' + A.fmt(today()) + '</p></section>' + res + cards + '<p class="ifirma">Dr. Mauro Torterolo</p>';
+    }
+    // informe general: cada indicador con promedio y rangos de la población, sin nombres
+    function pobGenHTML(F) {
+      var grupos = [];
+      POB_IND.forEach(function (ind) { if (grupos.indexOf(ind.g) < 0) grupos.push(ind.g); });
+      var vac = F.reduce(function (s, f) { return s + (f.vacas || 0); }, 0), ids = {}; F.forEach(function (f) { ids[f.id] = 1; });
+      return '<section class="card rkhead"><h2>Indicadores de la población</h2><p class="cap">' + Object.keys(ids).length + ' tambos (' + F.length + ' tambos o unidades) · ' + nf(vac) + ' vacas · ' + A.fmt(today()) + '</p></section>' +
+        grupos.map(function (g) {
+          return '<section class="card genc"><h3>' + esc(g) + '</h3><div class="tblwrap"><table class="tbl gentbl"><thead><tr><th>Indicador</th><th>Prom.</th><th>Med.</th><th>25% mejor</th><th>25% peor</th><th>Rango</th></tr></thead><tbody>' +
+            POB_IND.filter(function (i) { return i.g === g; }).map(function (ind) {
+              var S = pobStats(F, ind); if (!S.n) return '<tr><td>' + esc(pobTit(ind)) + '</td><td colspan="5">Sin datos</td></tr>';
+              var mej = ind.alto ? S.p75 : S.p25, peo = ind.alto ? S.p25 : S.p75;
+              var nat = S.L.filter(function (z) { return z.atip; }).length;
+              return '<tr><td>' + esc(pobTit(ind)) + '<small>' + S.n + ' con dato' + (S.fuera.length ? ' · ' + S.fuera.length + ' con toro no entra' + (S.fuera.length === 1 ? '' : 'n') : '') + (nat ? ' · ⚠ ' + nat + ' atípico' + (nat === 1 ? '' : 's') : '') + '</small></td><td><b>' + pobNum(S.prom, ind) + '</b></td><td>' + pobNum(S.med, ind) + '</td><td>' + (ind.neutro ? '–' : pobNum(mej, ind)) + '</td><td>' + (ind.neutro ? '–' : pobNum(peo, ind)) + '</td><td class="nw">' + pobNum(S.min, ind) + '–' + pobNum(S.max, ind) + '</td></tr>';
+            }).join('') + '</tbody></table></div>' +
+            POB_IND.filter(function (i) { return i.g === g; }).map(function (ind) {
+              var S = pobStats(F, ind); if (!S.n || S.max === S.min) return '';
+              // franja: rango completo, caja del 25% al 75%, raya en la mediana y punto en el promedio
+              var a = S.min, b = S.max, w = function (x) { return ((x - a) / (b - a) * 100).toFixed(1); };
+              return '<div class="genr"><span class="genl">' + esc(ind.t) + '</span><span class="genb"><i class="r"></i><i class="q" style="left:' + w(S.p25) + '%;width:' + (w(S.p75) - w(S.p25)).toFixed(1) + '%"></i><i class="m" style="left:' + w(S.med) + '%"></i><i class="p" style="left:' + w(S.prom) + '%"></i></span><span class="genx">' + pobNum(a, ind) + '–' + pobNum(b, ind) + (ind.u ? ' ' + ind.u : '') + '</span></div>';
+            }).join('') + '</section>';
+        }).join('') +
+        '<p class="cap">Prom.: promedio simple de los tambos o unidades (cada uno pesa igual). Med.: mediana (la mitad está por encima y la mitad por debajo). 25% mejor: el valor a partir del cual está el cuarto de mejores resultados; 25% peor: el límite del cuarto de peores. Debajo de cada indicador, cuántos tambos o unidades tienen dato, cuántos no entran por tener toro en el rodeo (marcados por el veterinario) y cuántos tienen un valor atípico (muy alejado del resto; se cuentan igual, pero conviene revisarlos). En las barras, la franja oscura va del 25% al 75% de los tambos, la raya es la mediana y el punto el promedio. Los tambos con varias unidades cuentan cada unidad con vacas por separado. Tasas de 21 días: solo filas con 30 aptas o más (concepción: 20 servicios con resultado).</p><p class="ifirma">Dr. Mauro Torterolo</p>';
+    }
+    function pdfPob() {
+      var t = document.title; document.title = (state.pobVista === 'gen' ? 'Indicadores de la poblacion ' : 'Ranking de la poblacion ') + today();
+      setTimeout(function () { window.print(); setTimeout(function () { document.title = t; }, 500); }, 50);
+    }
     function pobHTML() {
-      var bar = '<div class="infbar"><button class="btn" data-a="pobcerrar">Volver</button><button class="btn" data-a="pobcalc">Recalcular</button></div>';
+      var vista = state.pobVista || 'tabla';
+      var bar = '<div class="infbar"><button class="btn" data-a="pobcerrar">Volver</button><div class="filters">' + [['tabla', 'Tablas'], ['rank', 'Ranking'], ['gen', 'Indicadores']].map(function (c) { return '<button class="fchip" data-a="pobvista" data-pv="' + c[0] + '" aria-pressed="' + (vista === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+        (vista === 'tabla' ? '<button class="btn" data-a="pobcalc">Recalcular</button>' : '<button class="btn primary" data-a="pobpdf">PDF</button>') + '</div>';
       if (!POB || POB.cargando) return bar + '<section class="card"><h2>Población de tambos</h2><p class="hint">Calculando… ' + esc(POB && POB.prog || '') + '</p></section>';
       var F = POB.filas.filter(function (f) { return !f.sin && !f.error; }), sin = POB.filas.filter(function (f) { return f.sin || f.error; });
+      if (vista === 'rank') return '<div class="pob">' + bar + pobRankHTML(F) + '</div>';
+      if (vista === 'gen') return '<div class="pob">' + bar + pobGenHTML(F) + '</div>';
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; }, v = function (x, d) { return x == null || isNaN(x) ? '–' : nf(x, d || 0); };
       var hoy = today(), viejo = function (f) { return A.diffDays(hoy, f.ref) > 60; };
       var Tt = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 }, TAt = { aptas: 0, pren: 0 }, vac = 0;
@@ -2697,7 +2913,7 @@
       var nom = function (f) { return '<td class="pnom">' + esc(f.nombre) + '<small' + (viejo(f) ? ' class="pbajo"' : '') + '>respaldo ' + A.fmt(f.ref) + '</small></td>'; };
       var rep = '<section class="card"><h2>Reproducción: temporada actual</h2>' +
         '<div class="kpis"><div><b>' + v(pTS) + '%</b><span>Tasa de servicio</span></div><div><b>' + v(pTC) + '%</b><span>Concepción</span></div><div class="tp"><b>' + v(pTP) + '%</b><span>Tasa de preñez</span></div></div>' +
-        '<p class="cap">Promedio de la población: ' + F.length + ' tambos, ' + nf(vac) + ' vacas, ciclos de 21 días cerrados. Tocá un título para ordenar.</p>' +
+        '<p class="cap">Promedio de la población: ' + F.length + ' ' + (F.some(function (f) { return f.unidad != null; }) ? 'tambos o unidades' : 'tambos') + ', ' + nf(vac) + ' vacas, ciclos de 21 días cerrados. Tocá un título para ordenar.</p>' +
         '<div class="pscroll"><table class="tbl ptbl"><thead><tr><th>Tambo</th>' + th('vacas', 'Vacas') + th('ts', 'Servicio') + th('tc', 'Concep.') + th('tp', 'Preñez') + '<th>Preñez temp. anterior</th></tr></thead><tbody>' +
         R.map(function (f) {
           var ts = f.T.aptas ? f.T.serv / f.T.aptas * 100 : null, tc = f.T.sOk + f.T.sMal ? f.T.sOk / (f.T.sOk + f.T.sMal) * 100 : null, tpp = f.T.aptas ? f.T.pren / f.T.aptas * 100 : null;
@@ -2743,7 +2959,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = F.filter(function (f) { return f.origen === 'sigea'; }).length, ns = F.length - nf2 - nm; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + (function () { var ids = {}; F.forEach(function (f) { ids[f.id] = 1; }); var nt = Object.keys(ids).length, nu = F.filter(function (f) { return f.unidad != null; }).length; return nt + ' tambos en este equipo' + (nu ? ' (' + F.length + ' filas: ' + (function () { var g = {}; F.forEach(function (f) { if (f.unidad != null) g[f.id] = (g[f.id] || 0) + 1; }); return Object.keys(g).length; })() + ' con varias unidades van una fila por unidad)' : '') + ': '; })() + (function () { var ids2 = {}, Fu = F.filter(function (f) { if (ids2[f.id]) return false; ids2[f.id] = 1; return true; }); var nf2 = Fu.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = Fu.filter(function (f) { return f.origen === 'sigea'; }).length, nd = Fu.filter(function (f) { return f.origen === 'dhm'; }).length, ns = Fu.length - nf2 - nm - nd; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
@@ -2754,6 +2970,8 @@
         var obj = { tipo: 'libreta-base', v: 1, fecha: today(), tambos: TAMBOS.lista, dbs: {}, ps: {} };
         TAMBOS.lista.forEach(function (t, i) { if (dbs[i]) obj.dbs[t.id] = dbs[i]; });
         try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (/^libreta:[a-z0-9]+:t[a-z0-9]+$/i.test(k)) obj.ps[k] = localStorage.getItem(k); } } catch (e) {}
+        // marcas de la población (tambos con toro en el rodeo)
+        obj.toro = pobToro();
         var blob = new Blob([JSON.stringify(obj)], { type: 'application/json' }), nombre = 'base-tambos-' + today();
         var fin = function (b, ext) {
           var file = null; try { file = new File([b], nombre + ext, { type: ext === '.gz' ? 'application/gzip' : 'application/json' }); } catch (e) {}
@@ -2778,6 +2996,8 @@
         var o = JSON.parse(txt);
         if (!o || o.tipo !== 'libreta-base' || !Array.isArray(o.tambos)) throw new Error('Ese archivo no es una copia de la base de tambos.');
         var nuevos = 0, act = 0, igual = 0, tareas = [];
+        // las marcas de "toro en el rodeo" se suman a las que ya hay en este equipo
+        if (o.toro) Object.keys(o.toro).forEach(function (k) { pobToroSet(k, true); });
         o.tambos.forEach(function (t) {
           var db = o.dbs && o.dbs[t.id]; if (!db) return;
           var ex = null; TAMBOS.lista.forEach(function (x) { if (x.id === t.id) ex = x; }); if (!ex) ex = tamboPorNombre(t.nombre);
@@ -3004,6 +3224,7 @@
       else if (a === 'tambos') tambosSheet();
       else if (a === 'inicio') irInicio();
       else if (a === 'toroal') { state.toroAb = !state.toroAb; render(); }
+      else if (a === 'repti') { state.repTI = !state.repTI; render(); }
       else if (a === 'ini21def') ini21Default();
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'actprod') enviarActivacionRol('prod');
@@ -3022,6 +3243,8 @@
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
+      else if (a === 'pobvista') { state.pobVista = b.dataset.pv; render(); window.scrollTo(0, 0); }
+      else if (a === 'pobpdf') pdfPob();
       else if (a === 'pobcerrar') { state.pobl = false; if (state.pobIni) { state.pobIni = false; state.inicio = true; } render(); window.scrollTo(0, 0); }
       else if (a === 'pobcalc') pobCalc();
       else if (a === 'base') exportarBase();
@@ -3038,6 +3261,8 @@
     });
     document.addEventListener('change', function (e) {
       if ((e.target.id === 'vomes' || e.target.id === 'pomes') && e.target.value) { state.vomes = e.target.value; render(); return; }
+      if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
+      if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.toro, e.target.checked); state.pobToroAb = true; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
