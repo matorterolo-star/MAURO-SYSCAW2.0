@@ -2255,13 +2255,26 @@
       DB.animales.forEach(function (a) { if ((a.cat === 'vaca' || !a.cat) && a.dLac != null && typeof (a.pr || [])[0] === 'number' && a.pr[0] > 0) V.push({ a: a, del: a.dLac, n: a.pN || 2, lt: a.pr[0], g: null, p: null, cs: null, sol: null, prev: null }); });
       return { fecha: null, ant: null, V: V };
     }
+    /* rondas de control: en un tambo con varias unidades, cada unidad puede controlar en un día distinto (T1 el 15, T2 el 16).
+       Los controles de unidades distintas separados por hasta 7 días forman una sola ronda: se suman vacas, litros y días en leche,
+       y la ronda lleva la fecha de su último control. Devuelve { fecha: { v, l, d, nd } } como si fuera un control por fecha. */
+    function rondasCtrl(C) {
+      var L = C.slice().sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; }), R = [], cur = null;
+      L.forEach(function (c) {
+        if (!(c[2] > 0)) return;
+        var u = c[1] == null ? 0 : c[1];
+        if (!cur || A.diffDays(c[0], cur.ini) > 7 || cur.us[u]) { cur = { ini: c[0], f: c[0], us: {}, v: 0, l: 0, d: 0, nd: 0 }; R.push(cur); }
+        cur.us[u] = 1; cur.f = c[0]; cur.v += c[2]; cur.l += c[3] || 0; if (c[4]) { cur.d += c[4] * c[2]; cur.nd += c[2]; }
+      });
+      var out = {}; R.forEach(function (r) { var x = out[r.f]; if (x) { x.v += r.v; x.l += r.l; x.d += r.d; x.nd += r.nd; } else out[r.f] = { v: r.v, l: r.l, d: r.d, nd: r.nd }; });
+      return out;
+    }
     function prom(l, f) { var s = 0, n = 0; l.forEach(function (x) { var v = f(x); if (v != null && !isNaN(v)) { s += v; n++; } }); return n ? s / n : null; }
     // evolución mensual del control lechero: últimos 12 meses vs año anterior vs promedio histórico del mismo mes
     function evolucion(med) {
       var C = (DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; });
       if (C.length < 3) return null;
-      var porFecha = {};
-      C.forEach(function (c) { var x = porFecha[c[0]] || (porFecha[c[0]] = { v: 0, l: 0, d: 0, nd: 0 }); x.v += c[2]; x.l += c[3]; if (c[4]) { x.d += c[4] * c[2]; x.nd += c[2]; } });
+      var porFecha = rondasCtrl(C);
       var mes = {};
       Object.keys(porFecha).forEach(function (f) {
         var x = porFecha[f], k = f.slice(0, 7), m = mes[k] || (mes[k] = { s: 0, n: 0 });
@@ -2711,10 +2724,10 @@
         var D = infDatos('12'); r.ips = D.ips; r.ipp = D.ipp; r.spp = D.spp; r.pg = D.pg; r.vo = D.avo; r.vs = D.avs;
         r.mk = D.M.map(function (m) { return m.key; }); r.pv = D.pv; r.pq = D.pq; r.best = D.best;
         // leche: último control y promedio de los últimos 12 meses (litros por vaca en ordeñe)
-        var porF = {}; (DB.ctrls || []).forEach(function (c) { var x = porF[c[0]] || (porF[c[0]] = { v: 0, l: 0, d: 0 }); x.v += c[2] || 0; x.l += c[3] || 0; x.d += (c[4] || 0) * (c[2] || 0); });
+        var porF = rondasCtrl((DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; }));
         var fs = Object.keys(porF).filter(function (f) { return porF[f].v > 0; }).sort();
         if (fs.length) {
-          var u = porF[fs[fs.length - 1]]; r.lFecha = fs[fs.length - 1]; r.lv = u.l / u.v; r.del = u.d ? u.d / u.v : null;
+          var u = porF[fs[fs.length - 1]]; r.lFecha = fs[fs.length - 1]; r.lv = u.l / u.v; r.del = u.nd ? u.d / u.nd : null;
           var d12 = A.addDays(r.lFecha, -365), l12 = fs.filter(function (f) { return f > d12; }).map(function (f) { return porF[f].l / porF[f].v; });
           r.lv12 = l12.reduce(function (s, x) { return s + x; }, 0) / l12.length;
         }
