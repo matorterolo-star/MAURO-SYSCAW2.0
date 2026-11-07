@@ -789,6 +789,17 @@
       var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
       return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=2'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
     }
+    // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
+    function cargarDelpro() {
+      if (root.Delpro) return Promise.resolve(root.Delpro);
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=1'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+    }
+    // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
+    function esDelpro(buf) {
+      if (!buf || buf.byteLength < 30) return false; var u = new Uint8Array(buf); if (u[0] !== 0x50 || u[1] !== 0x4b) return false;
+      var t = new TextDecoder('latin1').decode(u.subarray(Math.max(0, u.length - 262144)));
+      return t.indexOf('AbstractAnimalEvent.csv') >= 0 && t.indexOf('BasicAnimal.csv') >= 0;
+    }
     // base de Access (DHM): "Standard Jet DB" o "Standard ACE DB" en el encabezado
     function esAccess(buf) { if (!buf || buf.byteLength < 32) return false; var u = new Uint8Array(buf, 4, 15), t = ''; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return t === 'Standard Jet DB' || t === 'Standard ACE DB'; }
     // ¿el .rar trae una base de Access (DHM.rar) en vez de un respaldo de SysCaw?
@@ -800,12 +811,12 @@
     // base de Firebird (SIGEA de Macoel): página de encabezado con la firma 12345 y ODS 10 u 11
     function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
     // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
-    function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm'; }
+    function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm' || o === 'delpro'; }
     function cargarRespaldo(buf, f, tipo) {
-      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar';
-      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
+      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar', delpro = tipo === 'delpro';
+      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : delpro ? 'Leyendo base de DelPro…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        (tipo === 'pre' ? buf : dhm ? cargarDhm().then(function (H) {
+        (tipo === 'pre' ? buf : delpro ? cargarDelpro().then(function (D) { return D.fromFile(buf, f.name); }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; }) : dhm ? cargarDhm().then(function (H) {
           return (tipo === 'dhmrar' ? H.mdbDeRar(buf, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64) }) : Promise.resolve(buf)).then(function (mdb) {
             return H.fromFile(mdb, f.name, { elegir: function (us) { return elegirUnidad(us, null, true); } });
           }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; });
@@ -947,6 +958,11 @@
           // base de SIGEA (Macoel): solo en el modo veterinario; fuera de él se responde como cualquier archivo que la app no lee
           if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
           cargarRespaldo(fr.result, f, 'sigea'); return;
+        }
+        if (esDelpro(fr.result)) {
+          // exportación de DelPro: solo en el modo veterinario
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          cargarRespaldo(fr.result, f, 'delpro'); return;
         }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: solo en el modo veterinario
@@ -1392,8 +1408,8 @@
       try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
       state.ini21 = null; render();
     }
-    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : DB.origen === 'dhm' ? 'DHM' : 'SysCaw'; }
-    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : DB.origen === 'dhm' ? 'base DHM' : 'respaldo SysCaw'; }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : DB.origen === 'dhm' ? 'DHM' : DB.origen === 'delpro' ? 'DelPro' : 'SysCaw'; }
+    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : DB.origen === 'dhm' ? 'base DHM' : DB.origen === 'delpro' ? 'base DelPro' : 'respaldo SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     /* ----- Panel: primera pantalla del productor, 4 indicadores con semáforo ----- */
@@ -2315,7 +2331,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'delpro' ? 'la base de DelPro' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -2325,7 +2341,7 @@
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">' + nombre[med] + ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian. El % compara con el mismo mes del año anterior.</p></section>';
+        '<p class="cap">' + nombre[med] + (DB.origen === 'delpro' ? ' según la producción diaria de cada vaca en DelPro (medidores), resumida por semana; el mes es el promedio de sus semanas.' : ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian.') + ' El % compara con el mismo mes del año anterior.</p></section>';
     }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
@@ -2962,7 +2978,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + (function () { var ids = {}; F.forEach(function (f) { ids[f.id] = 1; }); var nt = Object.keys(ids).length, nu = F.filter(function (f) { return f.unidad != null; }).length; return nt + ' tambos en este equipo' + (nu ? ' (' + F.length + ' filas: ' + (function () { var g = {}; F.forEach(function (f) { if (f.unidad != null) g[f.id] = (g[f.id] || 0) + 1; }); return Object.keys(g).length; })() + ' con varias unidades van una fila por unidad)' : '') + ': '; })() + (function () { var ids2 = {}, Fu = F.filter(function (f) { if (ids2[f.id]) return false; ids2[f.id] = 1; return true; }); var nf2 = Fu.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = Fu.filter(function (f) { return f.origen === 'sigea'; }).length, nd = Fu.filter(function (f) { return f.origen === 'dhm'; }).length, ns = Fu.length - nf2 - nm - nd; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + (function () { var ids = {}; F.forEach(function (f) { ids[f.id] = 1; }); var nt = Object.keys(ids).length, nu = F.filter(function (f) { return f.unidad != null; }).length; return nt + ' tambos en este equipo' + (nu ? ' (' + F.length + ' filas: ' + (function () { var g = {}; F.forEach(function (f) { if (f.unidad != null) g[f.id] = (g[f.id] || 0) + 1; }); return Object.keys(g).length; })() + ' con varias unidades van una fila por unidad)' : '') + ': '; })() + (function () { var ids2 = {}, Fu = F.filter(function (f) { if (ids2[f.id]) return false; ids2[f.id] = 1; return true; }); var nf2 = Fu.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = Fu.filter(function (f) { return f.origen === 'sigea'; }).length, nd = Fu.filter(function (f) { return f.origen === 'dhm'; }).length, ndp = Fu.filter(function (f) { return f.origen === 'delpro'; }).length, ns = Fu.length - nf2 - nm - nd - ndp; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : '', ndp ? ndp + ' con base de DelPro' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
