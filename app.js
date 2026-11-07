@@ -789,6 +789,17 @@
       var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
       return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=2'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
     }
+    // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
+    function cargarDelpro() {
+      if (root.Delpro) return Promise.resolve(root.Delpro);
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=1'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+    }
+    // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
+    function esDelpro(buf) {
+      if (!buf || buf.byteLength < 30) return false; var u = new Uint8Array(buf); if (u[0] !== 0x50 || u[1] !== 0x4b) return false;
+      var t = new TextDecoder('latin1').decode(u.subarray(Math.max(0, u.length - 262144)));
+      return t.indexOf('AbstractAnimalEvent.csv') >= 0 && t.indexOf('BasicAnimal.csv') >= 0;
+    }
     // base de Access (DHM): "Standard Jet DB" o "Standard ACE DB" en el encabezado
     function esAccess(buf) { if (!buf || buf.byteLength < 32) return false; var u = new Uint8Array(buf, 4, 15), t = ''; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return t === 'Standard Jet DB' || t === 'Standard ACE DB'; }
     // ¿el .rar trae una base de Access (DHM.rar) en vez de un respaldo de SysCaw?
@@ -800,12 +811,12 @@
     // base de Firebird (SIGEA de Macoel): página de encabezado con la firma 12345 y ODS 10 u 11
     function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
     // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
-    function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm'; }
+    function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm' || o === 'delpro'; }
     function cargarRespaldo(buf, f, tipo) {
-      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar';
-      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
+      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar', delpro = tipo === 'delpro';
+      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : delpro ? 'Leyendo base de DelPro…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        (tipo === 'pre' ? buf : dhm ? cargarDhm().then(function (H) {
+        (tipo === 'pre' ? buf : delpro ? cargarDelpro().then(function (D) { return D.fromFile(buf, f.name); }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; }) : dhm ? cargarDhm().then(function (H) {
           return (tipo === 'dhmrar' ? H.mdbDeRar(buf, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64) }) : Promise.resolve(buf)).then(function (mdb) {
             return H.fromFile(mdb, f.name, { elegir: function (us) { return elegirUnidad(us, null, true); } });
           }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; });
@@ -947,6 +958,11 @@
           // base de SIGEA (Macoel): solo en el modo veterinario; fuera de él se responde como cualquier archivo que la app no lee
           if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
           cargarRespaldo(fr.result, f, 'sigea'); return;
+        }
+        if (esDelpro(fr.result)) {
+          // exportación de DelPro: solo en el modo veterinario
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          cargarRespaldo(fr.result, f, 'delpro'); return;
         }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: solo en el modo veterinario
@@ -1392,8 +1408,8 @@
       try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
       state.ini21 = null; render();
     }
-    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : DB.origen === 'dhm' ? 'DHM' : 'SysCaw'; }
-    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : DB.origen === 'dhm' ? 'base DHM' : 'respaldo SysCaw'; }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : DB.origen === 'dhm' ? 'DHM' : DB.origen === 'delpro' ? 'DelPro' : 'SysCaw'; }
+    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : DB.origen === 'dhm' ? 'base DHM' : DB.origen === 'delpro' ? 'base DelPro' : 'respaldo SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     /* ----- Panel: primera pantalla del productor, 4 indicadores con semáforo ----- */
@@ -1484,7 +1500,10 @@
       }
       // 2) leche por vaca
       var t2;
-      if (!R.le) t2 = tile('g', 'leche', 'Leche por vaca', '–', 'Sin controles lecheros', '');
+      // tambo guardado con una versión anterior a la v31 (sin el resumen de controles del tambo) pero con controles por vaca:
+      // hay que volver a cargar el respaldo
+      var viejo = DB.ctrls === undefined && (DB.todos || DB.animales || []).some(function (a) { return a.pr && a.pr.length; });
+      if (!R.le) t2 = tile('g', 'leche', 'Leche por vaca', '–', viejo ? 'Volvé a cargar el respaldo de ' + SRC() + ' para ver la leche' : 'Sin controles lecheros', '');
       else {
         var d4 = R.le.prev ? (R.le.v / R.le.prev - 1) * 100 : null, s4 = d4 == null ? 'g' : d4 <= -10 ? 'r' : d4 <= -5 ? 'a' : 'v';
         if (s4 === 'r') avisos.push(['mal', 'Leche por vaca ' + nf(Math.abs(d4), 0) + '% abajo del año anterior']);
@@ -1548,7 +1567,7 @@
         var cmax = marca('cmax', mal && !tact) + (dn ? '<span>' + (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '</span><small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
         var creal = marca('creal', mal && tact) + '<span>' + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '</span><small>' + c.sOk + '/' + dr + '</small></td>';
         var aviso = !ab ? '' : '<tr class="ralrow"><td colspan="6">' + (!mal ? '' : '<p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>') +
-          tiHTML(C.svs.filter(function (s) { return s.c === c.n; }), 'Ciclo ' + c.n + ' · ' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5), 0) + '</td></tr>';
+          tiHTML(C.svs.filter(function (s) { return s.c === c.n; }), 'Ciclo ' + c.n + ' · ' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5), 0, 'data-cal="' + c.n + '"') + '</td></tr>';
         return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
           '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
           (c.cerrado ? creal + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
@@ -1566,7 +1585,7 @@
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
           '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>' +
           '<button class="despbtn" data-a="repti" aria-expanded="' + !!state.repTI + '"><span>Concepción en el período por toro e inseminador</span><span class="chev">' + (state.repTI ? 'ocultar' : 'ver') + '</span></button>' +
-          (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5) : '')
+          (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5, 'data-a="repti"') : '')
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
@@ -1676,10 +1695,35 @@
     // alertas por toro e inseminador en la temporada: aviso solo cuando uno repite claramente más que el resto (sin tabla)
     /* concepción por toro y por inseminador de una lista de servicios (un ciclo o todo el período);
        con minimo > 0, los de menos servicios van juntos en "Otros" */
-    function tiHTML(svs, sub, minimo) {
+    /* toros o inseminadores que repiten más que el resto: 20 servicios o más, concepción máxima más de 10 puntos por debajo
+       del resto (con 20 servicios o más) y una diferencia que no se explica por casualidad (prueba de dos proporciones, 95%).
+       "El resto" son los que andan normal: se marca el peor, se lo saca del resto y se vuelve a comparar, así un toro malo no
+       tapa a otro; la prueba estadística frena el corte cuando ya no hay diferencias reales. Devuelve { nombre: { mx, rmx, n } } */
+    function repitenMas(svs, campo) {
+      var G = {}; svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; var g = G[k] || (G[k] = { ok: 0, pend: 0, mal: 0 }); g[s.r]++; });
+      var malos = {}, sigue = true;
+      while (sigue) {
+        sigue = false; var peor = null;
+        var R = { ok: 0, pend: 0, mal: 0 }; Object.keys(G).forEach(function (k) { if (!malos[k]) { R.ok += G[k].ok; R.pend += G[k].pend; R.mal += G[k].mal; } });
+        Object.keys(G).forEach(function (k) {
+          if (malos[k]) return; var g = G[k], n = g.ok + g.pend + g.mal, rn = R.ok + R.pend + R.mal - n; if (n < 20 || rn < 20) return;
+          var x1 = g.ok + g.pend, x2 = R.ok - g.ok + R.pend - g.pend, mx = x1 / n * 100, rmx = x2 / rn * 100;
+          var pp = (x1 + x2) / (n + rn), se = Math.sqrt(pp * (1 - pp) * (1 / n + 1 / rn)), z = se > 0 ? (x2 / rn - x1 / n) / se : 0;
+          if (mx < rmx - 10 && z >= 1.96 && (!peor || mx - rmx < peor.mx - peor.rmx)) peor = { k: k, mx: mx, rmx: rmx, n: n };
+        });
+        if (peor) { malos[peor.k] = peor; sigue = true; }
+      }
+      return malos;
+    }
+    // cerrar: atributo del botón que cierra el recuadro (el mismo toque que lo abrió)
+    function tiHTML(svs, sub, minimo, cerrar) {
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
-      if (!svs.length) return '<p class="cap">Sin servicios en este ' + (minimo ? 'período' : 'ciclo') + '.</p>';
+      var cab = '<div class="tihead"><span><small>Concepción por toro e inseminador</small><b>' + esc(sub) + '</b></span>' + (cerrar ? '<button class="ticerrar" ' + cerrar + ' aria-label="Cerrar">Cerrar ✕</button>' : '') + '</div>';
+      if (!svs.length) return '<div class="tibox">' + cab + '<p class="cap">Sin servicios en este ' + (minimo ? 'período' : 'ciclo') + '.</p></div>';
+      var avisos = [];
       var tabla = function (campo, col, sinDato) {
+        var MAL = repitenMas(svs, campo);
+        Object.keys(MAL).forEach(function (k) { var m = MAL[k]; avisos.push('<p class="ralerta">⚠ ' + (campo === 'toro' ? 'El toro' : 'El inseminador') + ' <b>' + esc(k) + '</b> repite más que el resto: ' + Math.round(m.mx) + '% de concepción máxima contra ' + Math.round(m.rmx) + '% del resto (' + m.n + ' servicios).</p>'); });
         var G = {};
         svs.forEach(function (s) { var k = String(s[campo] || '').trim() || sinDato; var g = G[k] = G[k] || { ok: 0, mal: 0, pend: 0 }; g[s.r]++; });
         var L = Object.keys(G).map(function (k) { var g = G[k]; return { k: k, g: g, n: g.ok + g.mal + g.pend, sd: k === sinDato }; })
@@ -1691,27 +1735,20 @@
             L = L.filter(function (t) { return chic.indexOf(t) < 0; }); L.push({ k: 'Otros (' + chic.length + ')', g: o, n: o.ok + o.mal + o.pend, otros: true });
           }
         }
-        var fila = function (t, tot) { var g = t.g; return '<tr' + (tot ? ' class="ttot"' : '') + '><td>' + (t.otros || t.sd ? '<i>' + esc(t.k) + '</i>' : '<b>' + esc(t.k) + '</b>') + '</td><td>' + t.n + '</td><td>' + p(g.ok, g.ok + g.mal) + '<small>' + g.ok + '/' + (g.ok + g.mal) + '</small></td><td>' + p(g.ok + g.pend, t.n) + '<small>' + (g.ok + g.pend) + '/' + t.n + '</small></td></tr>'; };
+        var fila = function (t, tot) { var g = t.g, mal = !tot && MAL[t.k]; return '<tr' + (tot ? ' class="ttot"' : mal ? ' class="tmal"' : '') + '><td>' + (t.otros || t.sd ? '<i>' + esc(t.k) + '</i>' : '<b>' + (mal ? '⚠ ' : '') + esc(t.k) + '</b>') + '</td><td>' + t.n + '</td><td>' + p(g.ok, g.ok + g.mal) + '<small>' + g.ok + '/' + (g.ok + g.mal) + '</small></td><td>' + p(g.ok + g.pend, t.n) + '<small>' + (g.ok + g.pend) + '/' + t.n + '</small></td></tr>'; };
         var T = { ok: 0, mal: 0, pend: 0 }; svs.forEach(function (s) { T[s.r]++; });
         return '<table class="tbl rtbl vtbl titbl"><thead><tr><th>' + col + '</th><th>Serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
           L.map(function (t) { return fila(t); }).join('') + (L.length > 1 ? fila({ k: 'Total', g: T, n: svs.length }, true) : '') + '</tbody></table>';
       };
-      return '<div class="tibox"><p class="cap tisub">' + esc(sub) + '</p>' +
+      return '<div class="tibox">' + cab +
         '<h3 class="vh3">Por toro</h3>' + tabla('toro', 'Toro', 'Sin dato de toro') +
-        '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') +
+        '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') + avisos.join('') +
         '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
     }
     function torosHTML(svs) {
       var grupo = function (campo, quien) {
-        var G = {}, tot = { ok: 0, pend: 0, mal: 0 }, out = [];
-        svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; G[k] = G[k] || { ok: 0, pend: 0, mal: 0 }; G[k][s.r]++; tot[s.r]++; });
-        Object.keys(G).forEach(function (k) {
-          var g = G[k], n = g.ok + g.pend + g.mal, rn = tot.ok + tot.pend + tot.mal - n;
-          if (n < 20 || rn < 20) return;
-          var mx = (g.ok + g.pend) / n * 100, rmx = (tot.ok - g.ok + tot.pend - g.pend) / rn * 100;
-          if (mx < rmx - 10) out.push('<p class="ralerta">⚠ ' + quien + ' <b>' + esc(k) + '</b> repite más que el resto: ' + Math.round(mx) + '% de concepción máxima contra ' + Math.round(rmx) + '% del resto (' + n + ' servicios en la temporada).</p>');
-        });
-        return out;
+        var M = repitenMas(svs, campo);
+        return Object.keys(M).map(function (k) { var m = M[k]; return '<p class="ralerta">⚠ ' + quien + ' <b>' + esc(k) + '</b> repite más que el resto: ' + Math.round(m.mx) + '% de concepción máxima contra ' + Math.round(m.rmx) + '% del resto (' + m.n + ' servicios en la temporada).</p>'; });
       };
       // una sola línea; los avisos se ven al tocarla
       var T = grupo('toro', 'El toro'), I = grupo('ins', 'El inseminador'), n = T.length + I.length;
@@ -2312,7 +2349,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'delpro' ? 'la base de DelPro' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -2322,7 +2359,7 @@
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">' + nombre[med] + ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian. El % compara con el mismo mes del año anterior.</p></section>';
+        '<p class="cap">' + nombre[med] + (DB.origen === 'delpro' ? ' según la producción diaria de cada vaca en DelPro (medidores), resumida por semana; el mes es el promedio de sus semanas.' : ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian.') + ' El % compara con el mismo mes del año anterior.</p></section>';
     }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
@@ -2959,7 +2996,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + (function () { var ids = {}; F.forEach(function (f) { ids[f.id] = 1; }); var nt = Object.keys(ids).length, nu = F.filter(function (f) { return f.unidad != null; }).length; return nt + ' tambos en este equipo' + (nu ? ' (' + F.length + ' filas: ' + (function () { var g = {}; F.forEach(function (f) { if (f.unidad != null) g[f.id] = (g[f.id] || 0) + 1; }); return Object.keys(g).length; })() + ' con varias unidades van una fila por unidad)' : '') + ': '; })() + (function () { var ids2 = {}, Fu = F.filter(function (f) { if (ids2[f.id]) return false; ids2[f.id] = 1; return true; }); var nf2 = Fu.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = Fu.filter(function (f) { return f.origen === 'sigea'; }).length, nd = Fu.filter(function (f) { return f.origen === 'dhm'; }).length, ns = Fu.length - nf2 - nm - nd; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + (function () { var ids = {}; F.forEach(function (f) { ids[f.id] = 1; }); var nt = Object.keys(ids).length, nu = F.filter(function (f) { return f.unidad != null; }).length; return nt + ' tambos en este equipo' + (nu ? ' (' + F.length + ' filas: ' + (function () { var g = {}; F.forEach(function (f) { if (f.unidad != null) g[f.id] = (g[f.id] || 0) + 1; }); return Object.keys(g).length; })() + ' con varias unidades van una fila por unidad)' : '') + ': '; })() + (function () { var ids2 = {}, Fu = F.filter(function (f) { if (ids2[f.id]) return false; ids2[f.id] = 1; return true; }); var nf2 = Fu.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = Fu.filter(function (f) { return f.origen === 'sigea'; }).length, nd = Fu.filter(function (f) { return f.origen === 'dhm'; }).length, ndp = Fu.filter(function (f) { return f.origen === 'delpro'; }).length, ns = Fu.length - nf2 - nm - nd - ndp; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : '', ndp ? ndp + ' con base de DelPro' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
