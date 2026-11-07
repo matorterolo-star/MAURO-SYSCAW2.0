@@ -1567,7 +1567,7 @@
         var cmax = marca('cmax', mal && !tact) + (dn ? '<span>' + (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '</span><small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
         var creal = marca('creal', mal && tact) + '<span>' + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '</span><small>' + c.sOk + '/' + dr + '</small></td>';
         var aviso = !ab ? '' : '<tr class="ralrow"><td colspan="6">' + (!mal ? '' : '<p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>') +
-          tiHTML(C.svs.filter(function (s) { return s.c === c.n; }), 'Ciclo ' + c.n + ' · ' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5), 0) + '</td></tr>';
+          tiHTML(C.svs.filter(function (s) { return s.c === c.n; }), 'Ciclo ' + c.n + ' · ' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5), 0, 'data-cal="' + c.n + '"') + '</td></tr>';
         return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
           '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
           (c.cerrado ? creal + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
@@ -1585,7 +1585,7 @@
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
           '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>' +
           '<button class="despbtn" data-a="repti" aria-expanded="' + !!state.repTI + '"><span>Concepción en el período por toro e inseminador</span><span class="chev">' + (state.repTI ? 'ocultar' : 'ver') + '</span></button>' +
-          (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5) : '')
+          (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5, 'data-a="repti"') : '')
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
@@ -1695,9 +1695,11 @@
     // alertas por toro e inseminador en la temporada: aviso solo cuando uno repite claramente más que el resto (sin tabla)
     /* concepción por toro y por inseminador de una lista de servicios (un ciclo o todo el período);
        con minimo > 0, los de menos servicios van juntos en "Otros" */
-    function tiHTML(svs, sub, minimo) {
+    // cerrar: atributo del botón que cierra el recuadro (el mismo toque que lo abrió)
+    function tiHTML(svs, sub, minimo, cerrar) {
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
-      if (!svs.length) return '<p class="cap">Sin servicios en este ' + (minimo ? 'período' : 'ciclo') + '.</p>';
+      var cab = '<div class="tihead"><span><small>Concepción por toro e inseminador</small><b>' + esc(sub) + '</b></span>' + (cerrar ? '<button class="ticerrar" ' + cerrar + ' aria-label="Cerrar">Cerrar ✕</button>' : '') + '</div>';
+      if (!svs.length) return '<div class="tibox">' + cab + '<p class="cap">Sin servicios en este ' + (minimo ? 'período' : 'ciclo') + '.</p></div>';
       var tabla = function (campo, col, sinDato) {
         var G = {};
         svs.forEach(function (s) { var k = String(s[campo] || '').trim() || sinDato; var g = G[k] = G[k] || { ok: 0, mal: 0, pend: 0 }; g[s.r]++; });
@@ -1715,7 +1717,7 @@
         return '<table class="tbl rtbl vtbl titbl"><thead><tr><th>' + col + '</th><th>Serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
           L.map(function (t) { return fila(t); }).join('') + (L.length > 1 ? fila({ k: 'Total', g: T, n: svs.length }, true) : '') + '</tbody></table>';
       };
-      return '<div class="tibox"><p class="cap tisub">' + esc(sub) + '</p>' +
+      return '<div class="tibox">' + cab +
         '<h3 class="vh3">Por toro</h3>' + tabla('toro', 'Toro', 'Sin dato de toro') +
         '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') +
         '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
