@@ -839,6 +839,7 @@
           DB = r.n.db;
           aplicarUnidad();
           busy(false);
+          if (state.lnkPend) { var tl = tamboAct(); if (tl) { tl.lnkIn = state.lnkPend; saveTambos(); } state.lnkPend = null; }
           saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'panel'; state.cat = 'todas';
           try { location.hash = ''; } catch (e) {}
           render();
@@ -847,7 +848,7 @@
           toast((cambio === 'nuevo' ? 'Tambo nuevo: ' : cambio === 'actualizado' ? 'Actualizado: ' : '') + (PERFIL.nombre ? PERFIL.nombre + ' · ' : '') + DB.animales.length + ' animales' + (r.n.bajas ? ' · se ' + (r.n.bajas === 1 ? 'conserva 1 baja' : 'conservan ' + r.n.bajas + ' bajas') + ' de respaldos anteriores' : ''));
         }).catch(function (e) {
           busy(false);
-          state.destino = null;
+          state.destino = null; state.lnkPend = null;
           if (e && e.cancelado) { toast('Carga cancelada. La libreta anterior sigue igual.'); return; }
           state.error = 'No pude leer el respaldo: ' + (e && e.message || e); render();
         });
@@ -1012,6 +1013,8 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
+      $('#btnLnk').hidden = $('#btnAct').hidden;
+      $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
@@ -2467,6 +2470,129 @@
       state.destino = 'nuevo';
       listo.then(function () { cargarRespaldo(datos, { name: 'tambo-precargado' }, 'pre'); });
     }
+    /* ===== link con los datos (productor u operario) =====
+       El veterinario sube el tambo cifrado al sitio (datos/<id>.bin, con su permiso de GitHub) y manda un link
+       #libreta=<id>.<clave>.<activación firmada>. La clave viaja solo en el link: en el sitio queda cifrado.
+       Quien abre el link queda activado (productor u operario) y con el tambo cargado; el link no cambia y, cuando el
+       veterinario sube datos nuevos, la app los toma sola al abrirse con internet. */
+    var GH_REPO = 'matorterolo-star/MAURO-SYSCAW2.0';
+    function ghToken() { try { return localStorage.getItem('libreta:gh') || ''; } catch (e) { return ''; } }
+    function dirDatos() { return /\/prueba\//.test(location.pathname) ? 'prueba/datos/' : 'datos/'; }
+    function baseApp() { return location.href.split('#')[0].split('?')[0].replace(/index\.html$/, ''); }
+    function lnkMeta(id) { try { return JSON.parse(localStorage.getItem('libreta:lnk:' + id) || 'null'); } catch (e) { return null; } }
+    function pedirToken() {
+      var t = (prompt('Pegá el permiso (token) de GitHub para subir los datos de los links. Empieza con "github_pat_".', '') || '').trim();
+      if (!t) return;
+      busy(true, 'Probando el permiso…');
+      fetch('https://api.github.com/repos/' + GH_REPO, { headers: { Authorization: 'Bearer ' + t, Accept: 'application/vnd.github+json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          busy(false);
+          if (!j || !j.permissions || !j.permissions.push) { toast('Ese permiso no sirve: tiene que poder escribir en la app (Contents: Read and write).'); return; }
+          try { localStorage.setItem('libreta:gh', t); } catch (e) {}
+          toast('Permiso guardado. Ya podés mandar links con los datos.'); render();
+        }, function () { busy(false); toast('No pude probar el permiso (¿sin internet?).'); });
+    }
+    function b64std(u) { var s = '', i, n = 0x8000; for (i = 0; i < u.length; i += n) s += String.fromCharCode.apply(null, u.subarray(i, i + n)); return btoa(s); }
+    // el tambo activo, completo (todas las unidades), con el formato de un respaldo recién leído
+    function paqueteTambo() {
+      var t = tamboAct();
+      return leerDB(TAMBOS.activo).then(function (o) {
+        if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd || [], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+      });
+    }
+    function subirDatos() {
+      var tok = ghToken(), meta = lnkMeta(TAMBOS.activo), nuevo = !meta;
+      if (nuevo) { var r = crypto.getRandomValues(new Uint8Array(8)), k = crypto.getRandomValues(new Uint8Array(32)); meta = { id: Array.prototype.map.call(r, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''), k: b64u(k) }; }
+      var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/' + dirDatos() + meta.id + '.bin', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+      return paqueteTambo().then(function (d) {
+        var json = JSON.stringify({ v: 1, subido: new Date().toISOString(), d: d });
+        return new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+      }).then(function (gz) {
+        var iv = crypto.getRandomValues(new Uint8Array(12));
+        return crypto.subtle.importKey('raw', unb64u(meta.k), 'AES-GCM', false, ['encrypt']).then(function (key) { return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, gz); })
+          .then(function (ct) { var u = new Uint8Array(12 + ct.byteLength); u.set(iv, 0); u.set(new Uint8Array(ct), 12); return u; });
+      }).then(function (u) {
+        return (nuevo ? Promise.resolve(null) : fetch(url + '?ref=main', { headers: H, cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { return j && j.sha; }, function () { return null; }))
+          .then(function (sha) {
+            var body = { message: 'Datos del tambo para link (' + today() + ')', content: b64std(u), branch: 'main' }; if (sha) body.sha = sha;
+            return fetch(url, { method: 'PUT', headers: H, body: JSON.stringify(body) });
+          }).then(function (r) {
+            if (r.status === 401 || r.status === 403) throw new Error('el permiso de GitHub venció o no alcanza. Cargalo de nuevo en Ajustes.');
+            if (!r.ok) return r.text().then(function (t) { throw new Error('GitHub respondió ' + r.status + (t ? ': ' + t.slice(0, 120) : '')); });
+            try { localStorage.setItem('libreta:lnk:' + TAMBOS.activo, JSON.stringify(meta)); } catch (e) {}
+            return meta;
+          });
+      });
+    }
+    function linkDatos() {
+      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
+      if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
+      if (!root.CompressionStream || !crypto.subtle) { toast('Este navegador no puede armar el link. Usá Chrome.'); return; }
+      if (!ghToken()) { if (confirm('Para mandar links con los datos, primero hay que cargar el permiso de GitHub (se hace una sola vez). ¿Cargarlo ahora?')) { closeSheet(); pedirToken(); } return; }
+      closeSheet();
+      var m = lnkMeta(TAMBOS.activo);
+      $('#sheetXTitle').textContent = 'Link con los datos';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function linkDatosRol(rol) {
+      $('#sheetX').hidden = true;
+      busy(true, 'Subiendo los datos…<small>Quedan cifrados; la clave va solo en el link</small>');
+      var nombre = PERFIL.nombre || 'tu tambo';
+      subirDatos().then(function (meta) {
+        if (rol === 'act') { busy(false); toast('Datos actualizados: en 1 o 2 minutos les llegan a quienes tienen el link.'); return; }
+        var pl = { p: DB.idProd, n: nombre, f: today() }; if (rol === 'op') pl.r = 'op';
+        return firmar(pl).then(function (tok) {
+          busy(false);
+          var link = baseApp() + '#libreta=' + meta.id + '.' + meta.k + '.' + tok;
+          var txt = 'Hola. Este es el link de la *Libreta de vacas* de ' + nombre + (rol === 'op' ? ' (operario)' : '') + ', con los datos ya cargados:\n\n' + link +
+            '\n\nTocalo y se abre lista para usar. Cuando haya datos nuevos, se actualiza sola al abrirla con internet.\n\nDr. Mauro Torterolo';
+          if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+          toast('Link listo. Funciona en 1 o 2 minutos (lo que tarda en publicarse).');
+        });
+      }).catch(function (e) { busy(false); toast('No pude subir los datos: ' + (e && e.message || e)); });
+    }
+    // bajar y descifrar los datos de un link
+    function bajarLibreta(id, k) {
+      return fetch('datos/' + id + '.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status === 404 ? 'Los datos todavía no están publicados. Probá de nuevo en un par de minutos.' : 'No pude bajar los datos (' + r.status + ').'); return r.arrayBuffer(); })
+        .then(function (buf) { return crypto.subtle.importKey('raw', unb64u(k), 'AES-GCM', false, ['decrypt']).then(function (key) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(buf, 0, 12) }, key, new Uint8Array(buf, 12)); }); })
+        .then(function (plano) { return new Response(new Blob([plano]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); })
+        .then(function (t) { var o = JSON.parse(t), d = o.d; d.unidades = d.unidades || []; d.sel = null; d.unidadesSel = []; return { subido: o.subido || '', d: d }; });
+    }
+    function leerLibreta(texto) {
+      var re = /#libreta=([a-f0-9]+)\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/;
+      var m = re.exec(texto != null ? texto : (location.hash || ''));
+      if (!m) { if (texto != null) toast('No encontré un link de libreta en lo que pegaste.'); return false; }
+      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el link. Probá con Chrome o actualizá el teléfono.'); return true; }
+      state.inicio = false;
+      busy(true, 'Abriendo la libreta…');
+      verificar(m[3]).then(function (pl) {
+        if (!pl || !pl.p) throw new Error('El link no es válido.');
+        if (!esVet()) { ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
+        return bajarLibreta(m[1], m[2]);
+      }).then(function (pk) {
+        return listo.then(function () {
+          var ya = null; TAMBOS.lista.forEach(function (t) { if (t.lnkIn && t.lnkIn.id === m[1]) ya = t; });
+          if (ya) { TAMBOS.activo = ya.id; state.destino = null; } else state.destino = 'nuevo';
+          state.lnkPend = { id: m[1], k: m[2], subido: pk.subido };
+          cargarRespaldo(Promise.resolve(pk.d), { name: 'link' }, 'pre');
+        });
+      }).catch(function (e) { busy(false); state.error = 'No pude abrir el link: ' + (e && e.message || e); render(); });
+      return true;
+    }
+    // al abrir la app con internet: si el tambo vino por link y hay datos más nuevos, se actualiza solo
+    function actualizarDesdeLink() {
+      var t = tamboAct(); if (!t || !t.lnkIn || navigator.onLine === false || !root.DecompressionStream) return;
+      bajarLibreta(t.lnkIn.id, t.lnkIn.k).then(function (pk) {
+        if (!pk.subido || pk.subido <= (t.lnkIn.subido || '')) return;
+        state.destino = null; state.lnkPend = { id: t.lnkIn.id, k: t.lnkIn.k, subido: pk.subido };
+        cargarRespaldo(Promise.resolve(pk.d), { name: 'link' }, 'pre');
+      }).catch(function () {});
+    }
     function pedirCodigo() { var t = prompt('Escribí el código de activación que te mandó el Dr. Mauro Torterolo'); if (t) activarCodigo(t); }
     function leerActivacion(texto) {
       var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
@@ -2487,8 +2613,8 @@
         '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Te mandaron un link? Pegalo acá</button>';
     }
     function pegarActivacion() {
-      var pedir = function (pre) { var t = prompt(esVet() ? 'Pegá acá el link del tambo' : 'Pegá acá el link de activación que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) { if (/#cargar=/.test(t)) leerPrecarga(t); else leerActivacion(t); } };
-      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#cargar=/.test(t || '')) leerPrecarga(t); else if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
+      var pedir = function (pre) { var t = prompt(esVet() ? 'Pegá acá el link del tambo' : 'Pegá acá el link que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) { if (/#libreta=/.test(t)) leerLibreta(t); else if (/#cargar=/.test(t)) leerPrecarga(t); else leerActivacion(t); } };
+      if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(function (t) { if (/#libreta=/.test(t || '')) leerLibreta(t); else if (/#cargar=/.test(t || '')) leerPrecarga(t); else if (/#act=/.test(t || '')) leerActivacion(t); else pedir(''); }, function () { pedir(''); });
       else pedir('');
     }
     /* copia de la clave de veterinario: para pasar el modo veterinario a otro teléfono (las activaciones de los productores dependen de esta clave) */
@@ -3267,6 +3393,11 @@
       else if (a === 'repti') { state.repTI = !state.repTI; render(); }
       else if (a === 'ini21def') ini21Default();
       else if (a === 'enviaract') enviarActivacion();
+      else if (a === 'lnkdatos') linkDatos();
+      else if (a === 'lnkprod') linkDatosRol('prod');
+      else if (a === 'lnkop') linkDatosRol('op');
+      else if (a === 'lnkact') linkDatosRol('act');
+      else if (a === 'ghtoken') { closeSheet(); pedirToken(); }
       else if (a === 'actprod') enviarActivacionRol('prod');
       else if (a === 'actop') enviarActivacionRol('op');
       else if (a === 'vet') modoVet();
@@ -3341,8 +3472,7 @@
       var n2 = limpiarNombre(PERFIL.nombre); if (n2 !== (PERFIL.nombre || '')) { PERFIL.nombre = n2; cambio = true; }
       if (cambio) { saveTambos(); savePerfil(); render(); }
     });
-    leerActivacion();
-    leerPrecarga();
+    if (!leerLibreta()) { leerActivacion(); leerPrecarga(); listo.then(function () { setTimeout(actualizarDesdeLink, 800); }); }
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
