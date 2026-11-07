@@ -1484,7 +1484,10 @@
       }
       // 2) leche por vaca
       var t2;
-      if (!R.le) t2 = tile('g', 'leche', 'Leche por vaca', '–', 'Sin controles lecheros', '');
+      // tambo guardado con una versión anterior a la v31 (sin el resumen de controles del tambo) pero con controles por vaca:
+      // hay que volver a cargar el respaldo
+      var viejo = DB.ctrls === undefined && (DB.todos || DB.animales || []).some(function (a) { return a.pr && a.pr.length; });
+      if (!R.le) t2 = tile('g', 'leche', 'Leche por vaca', '–', viejo ? 'Volvé a cargar el respaldo de ' + SRC() + ' para ver la leche' : 'Sin controles lecheros', '');
       else {
         var d4 = R.le.prev ? (R.le.v / R.le.prev - 1) * 100 : null, s4 = d4 == null ? 'g' : d4 <= -10 ? 'r' : d4 <= -5 ? 'a' : 'v';
         if (s4 === 'r') avisos.push(['mal', 'Leche por vaca ' + nf(Math.abs(d4), 0) + '% abajo del año anterior']);
