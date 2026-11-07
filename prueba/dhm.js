@@ -119,12 +119,15 @@
     var sById = {}; servs.forEach(function (s) { sById[s.Ser_IdServicio] = s; });
     var pid = function (id) { return A[id] ? (A[id].Ani_Apodo || A[id].Ani_Nombre || A[id].Ani_RP) : null; };
 
+    // DHM puede tener el mismo evento cargado dos veces (importaciones repetidas: "Ingreso por Importación"):
+    // se deja uno solo por vaca y día
+    var visto = {}, unico = function (tipo, id, f) { var k = tipo + '|' + id + '|' + f; if (visto[k]) return false; visto[k] = 1; return true; };
     // historial por hembra
     var G = {}, maxF = '0000';
     var g = function (id) { return G[id] || (G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [] }); };
     var ver = function (f) { if (f && f > maxF) maxF = f; };
-    servs.forEach(function (s) { if (!mio[s.Ani_IdAnimal]) return; var f = fch(s.Ser_Fecha); if (!f) return; ver(f); g(s.Ani_IdAnimal).ev.push([f, 'S', toroDe(s), null, s.Ser_IdServicio, s.Est_IdEstablecimiento]); });
-    T('DHM_Celos', ['Ani_IdAnimal', 'Cel_Fecha']).forEach(function (c) { if (!mio[c.Ani_IdAnimal]) return; var f = fch(c.Cel_Fecha); if (!f) return; ver(f); g(c.Ani_IdAnimal).ev.push([f, 'C', '', null]); });
+    servs.forEach(function (s) { if (!mio[s.Ani_IdAnimal]) return; var f = fch(s.Ser_Fecha); if (!f || !unico('S', s.Ani_IdAnimal, f)) return; ver(f); g(s.Ani_IdAnimal).ev.push([f, 'S', toroDe(s), null, s.Ser_IdServicio, s.Est_IdEstablecimiento]); });
+    T('DHM_Celos', ['Ani_IdAnimal', 'Cel_Fecha']).forEach(function (c) { if (!mio[c.Ani_IdAnimal]) return; var f = fch(c.Cel_Fecha); if (!f || !unico('C', c.Ani_IdAnimal, f)) return; ver(f); g(c.Ani_IdAnimal).ev.push([f, 'C', '', null]); });
 
     // partos y lactancias (una lactancia puede empezar con un aborto avanzado)
     var partoLac = {}; T('DHM_Partos', ['Ani_IdAnimal', 'Par_Fecha', 'Par_NroParto', 'Par_SexoCria1', 'Par_SexoCria2', 'Par_SexoCria3', 'Ser_IdServicio', 'Lac_IdLactancia']).forEach(function (p) { if (mio[p.Ani_IdAnimal] && p.Lac_IdLactancia > 0) partoLac[p.Lac_IdLactancia] = p; });
@@ -136,6 +139,7 @@
       var p = partoLac[l.Lac_IdLactancia], sx = [];
       // DHM abre una "lactancia 0" del nacimiento al primer parto: no es una lactancia
       if (!p && (l.Lac_TipoLactancia === 0 || !(l.Lac_NroSecuencia > 0))) return;
+      if (!unico('L', l.Ani_IdAnimal, f)) return;
       ver(f);
       if (p) [p.Par_SexoCria1, p.Par_SexoCria2, p.Par_SexoCria3].forEach(function (x) { if (x === 2) sx.push('H'); else if (x === 1) sx.push('M'); });
       var res = p ? sx.slice(0, 2).join('/') : l.Cil_IdCodILactancia === 15 ? 'A' : '';
@@ -158,7 +162,7 @@
       // cada tacto (día y unidad): cuántas preñeces y a cuántos días del servicio se diagnosticaron
       var k = p.Est_IdEstablecimiento + '|' + f, sp = sById[p.Ser_IdServicio], ds = sp && fch(sp.Ser_Fecha) ? diffDays(f, fch(sp.Ser_Fecha)) : null;
       var o = ses[k] || (ses[k] = { n: 0, d: [] }); o.n++; if (ds != null && ds > 0) o.d.push(ds);
-      if (!mio[p.Ani_IdAnimal]) return; ver(f); g(p.Ani_IdAnimal).ta.push([f, 1]);
+      if (!mio[p.Ani_IdAnimal] || !unico('P', p.Ani_IdAnimal, f)) return; ver(f); g(p.Ani_IdAnimal).ta.push([f, 1]);
     });
     T('DHM_ExamenesGenitales', ['Ani_IdAnimal', 'Ege_Fecha', 'Dia_IdDiagnosticoOvario', 'Dia_IdDiagnosticoUtero']).forEach(function (e) {
       var f = fch(e.Ege_Fecha); if (!mio[e.Ani_IdAnimal] || !f) return;

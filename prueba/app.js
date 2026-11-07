@@ -787,7 +787,7 @@
     function cargarDhm() {
       if (root.Dhm && root.MDBReader) return Promise.resolve(root.Dhm);
       var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
-      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=1'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
+      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=2'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
     }
     // base de Access (DHM): "Standard Jet DB" o "Standard ACE DB" en el encabezado
     function esAccess(buf) { if (!buf || buf.byteLength < 32) return false; var u = new Uint8Array(buf, 4, 15), t = ''; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return t === 'Standard Jet DB' || t === 'Standard ACE DB'; }
@@ -2564,6 +2564,11 @@
       var ini = inicio21(), ref = DB.fecha || today(), fin = null;
       L.forEach(function (x) { x.h.ev.forEach(function (e) { if (e[1] === 'S' && e[0] >= ini && e[0] <= ref && (!fin || e[0] > fin) && enSel(unidadEn(x, e[0]))) fin = e[0]; }); });
       var ips = [], ipp = [], nServ = 0, nPren = 0, apt = 0, pre = 0;
+      // servicios por preñez: como la concepción de los ciclos cerrados, solo servicios hechos al menos 28 días antes del
+      // último tacto (si no, las que repiten se conocen antes que las preñadas y la cuenta se infla)
+      var ultT = null; L.forEach(function (x) { x.h.ta.forEach(function (t) { if (t[0] <= ref && (!ultT || t[0] > ultT) && enSel(unidadEn(x, t[0]))) ultT = t[0]; }); });
+      var finS = ultT ? A.addDays(ultT, -28) : null; if (finS && fin && finS > fin) finS = fin;
+      var nServS = 0, nPrenS = 0;
       if (fin) L.forEach(function (x) {
         var h = x.h;
         h.pa.forEach(function (p, i) {
@@ -2571,6 +2576,17 @@
           var c = concLac(h, i);
           var s1 = c.sv[0];
           if (s1 && s1[0] >= ini && s1[0] <= fin) ips.push(A.diffDays(s1[0], p[0]));
+          // servicios por preñez: solo servicios con resultado conocido (igual que la concepción): el que preñó, o uno que
+          // repitió (hubo otro servicio después o tacto vacía 25 días o más después). No cuentan los servicios todavía sin
+          // resultado (servidas sin tacto) ni los hechos después de la concepción
+          var vac = h.ta.filter(function (t) { return t[0] > p[0] && !esPren(t[1]); }).map(function (t) { return t[0]; });
+          c.sv.forEach(function (e, j) {
+            if (e[0] < ini || !finS || e[0] > finS) return;
+            if (c.conc) { if (e[0] <= c.conc) nServS++; return; }
+            var luego = c.sv[j + 1] || vac.some(function (d) { return d > e[0] && A.diffDays(d, e[0]) >= 25; });
+            if (luego) nServS++;
+          });
+          if (c.conc && finS && c.conc >= ini && c.conc <= finS) nPrenS++;
           c.sv.forEach(function (e) { if (e[0] >= ini && e[0] <= fin) nServ++; });
           if (c.conc && c.conc >= ini && c.conc <= fin) { nPren++; ipp.push(A.diffDays(c.conc, p[0])); }
           // % preñez general: vacas paridas antes del inicio, vacías al inicio, que cumplieron la espera voluntaria en la temporada
@@ -2583,7 +2599,7 @@
       var CY = fin ? A.ciclos21(an, esPren, ini, pevActual(), ref) : [], Tc = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 };
       CY.forEach(function (c) { if (c.cerrado) ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { Tc[k] += c[k]; }); });
       return { M: M, vo: vo, vs: vs, vm: vm, avo: av(vo), avs: av(vs), avm: av(vm), pv: pv, pq: pq, ab: ab, best: best, ini: ini, fin: fin,
-        ips: av(ips), spp: nPren ? nServ / nPren : null, ipp: av(ipp), pg: apt ? pre / apt * 100 : null, apt: apt, pre: pre,
+        ips: av(ips), spp: nPrenS ? nServS / nPrenS : null, sppN: nServS, sppP: nPrenS, sppHasta: finS, ipp: av(ipp), pg: apt ? pre / apt * 100 : null, apt: apt, pre: pre,
         det: Tc.aptas ? Tc.serv / Tc.aptas * 100 : null, con: Tc.sOk + Tc.sMal ? Tc.sOk / (Tc.sOk + Tc.sMal) * 100 : null, tp: Tc.aptas ? Tc.pren / Tc.aptas * 100 : null };
     }
     function infBarras(M, series, H, opt) {
