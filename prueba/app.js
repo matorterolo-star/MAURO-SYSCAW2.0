@@ -286,12 +286,12 @@
         // servicios del ciclo y su resultado
         L.sv.forEach(function (e, i) {
           if (e[0] < cy.ini || e[0] > cy.fin) return;
-          if (L.conc) { if (e[0] === L.conc) { cy.sOk++; C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'ok' }); } else if (e[0] < L.conc) { cy.sMal++; C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'mal' }); } return; }
+          if (L.conc) { if (e[0] === L.conc) { cy.sOk++; C.svs.push({ c: cy.n, f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'ok' }); } else if (e[0] < L.conc) { cy.sMal++; C.svs.push({ c: cy.n, f: e[0], toro: e[2] || '', ins: e[3] || '', r: 'mal' }); } return; }
           var luego = L.sv[i + 1] || L.neg.some(function (d) { return d > e[0] && diffDays(d, e[0]) >= 25; });
           // no retorno: solo cuenta si pasaron al menos 24 días desde el servicio (si no, todavía no pudo repetir)
           if (diffDays(ref, e[0]) < 24) return;
           if (luego) cy.sMal++; else cy.sPend++;
-          C.svs.push({ f: e[0], toro: e[2] || '', ins: e[3] || '', r: luego ? 'mal' : 'pend' });
+          C.svs.push({ c: cy.n, f: e[0], toro: e[2] || '', ins: e[3] || '', r: luego ? 'mal' : 'pend' });
         });
         // servida en un ciclo anterior y todavía sin resultado (sin tacto vacía ni nuevo servicio): no es apta
         // hasta que se la vuelva a servir; si después el tacto da vacía, cuenta para atrás
@@ -1515,11 +1515,13 @@
         var tact = c.cerrado && c.sPend <= dn * 0.1;
         var val = tact ? cr : mx, mal = hab != null && val != null && val < hab - 10;
         if (mal) hayRojo = true;
-        var ab = mal && state.cicloAl === c.n;
-        var marca = function (cls) { return '<td class="' + cls + (mal ? ' alerta' : '') + '"' + (mal ? ' data-cal="' + c.n + '" role="button" tabindex="0" aria-expanded="' + ab + '"' : '') + '>'; };
-        var cmax = (tact ? '<td class="cmax">' : marca('cmax')) + (dn ? (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '<small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
-        var creal = (tact ? marca('creal') : '<td class="creal">') + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '<small>' + c.sOk + '/' + dr + '</small></td>';
-        var aviso = ab ? '<tr class="ralrow"><td colspan="6"><p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p></td></tr>' : '';
+        var ab = !!dn && state.cicloAl === c.n;
+        // al tocar la concepción (o la máxima) de un ciclo se abre debajo el detalle por toro e inseminador
+        var marca = function (cls, al) { return '<td class="' + cls + (al ? ' alerta' : '') + (dn ? ' tq' : '') + '"' + (dn ? ' data-cal="' + c.n + '" role="button" tabindex="0" aria-expanded="' + ab + '"' : '') + '>'; };
+        var cmax = marca('cmax', mal && !tact) + (dn ? '<span>' + (mal && !tact ? '⚠ ' : '') + p(c.sOk + c.sPend, dn) + '</span><small>' + (c.sOk + c.sPend) + '/' + dn + '</small>' : '–') + '</td>';
+        var creal = marca('creal', mal && tact) + '<span>' + (mal && tact ? '⚠ ' : '') + p(c.sOk, dr) + '</span><small>' + c.sOk + '/' + dr + '</small></td>';
+        var aviso = !ab ? '' : '<tr class="ralrow"><td colspan="6">' + (!mal ? '' : '<p class="ralerta">⚠ Ciclo ' + c.n + ': ' + (tact ? 'la concepción fue ' + Math.round(cr) + '% (' + c.sOk + ' de ' + dr + ' servicios con tacto)' : 'mucha repetición antes del tacto. La concepción máxima es ' + Math.round(mx) + '% y la concepción no va a pasar de ese número' + (c.cerrado ? ' (faltan tactar ' + c.sPend + ' servicios)' : '')) + '; lo habitual del tambo es ' + Math.round(hab) + '% (' + habTxt + ').</p>') +
+          tiHTML(C.svs.filter(function (s) { return s.c === c.n; }), 'Ciclo ' + c.n + ' · ' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5), 0) + '</td></tr>';
         return '<tr' + (c.cerrado ? '' : ' class="abierto"') + '><td><b>' + c.n + '</b> <small>' + A.fmt(c.ini).slice(0, 5) + '</small></td><td>' + c.aptas + '</td>' +
           '<td>' + p(c.serv, c.aptas) + '<small>' + c.serv + '</small></td>' +
           (c.cerrado ? creal + cmax + '<td><b>' + p(c.pren, c.aptas) + '</b><small>' + c.pren + '</small></td>'
@@ -1533,9 +1535,11 @@
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
           torosHTML(C.svs) +
-          (hayRojo ? '<p class="cap ralhint">Tocá un ⚠ en rojo para ver el aviso de ese ciclo.</p>' : '') +
+          '<p class="cap ralhint">Tocá la concepción de un ciclo para verla por toro e inseminador' + (hayRojo ? ' (en los ⚠ en rojo, también el aviso)' : '') + '.</p>' +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>'
+          '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>' +
+          '<button class="despbtn" data-a="repti" aria-expanded="' + !!state.repTI + '"><span>Concepción en el período por toro e inseminador</span><span class="chev">' + (state.repTI ? 'ocultar' : 'ver') + '</span></button>' +
+          (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5) : '')
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
@@ -1643,6 +1647,33 @@
         '</section>';
     }
     // alertas por toro e inseminador en la temporada: aviso solo cuando uno repite claramente más que el resto (sin tabla)
+    /* concepción por toro y por inseminador de una lista de servicios (un ciclo o todo el período);
+       con minimo > 0, los de menos servicios van juntos en "Otros" */
+    function tiHTML(svs, sub, minimo) {
+      var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; };
+      if (!svs.length) return '<p class="cap">Sin servicios en este ' + (minimo ? 'período' : 'ciclo') + '.</p>';
+      var tabla = function (campo, col, sinDato) {
+        var G = {};
+        svs.forEach(function (s) { var k = String(s[campo] || '').trim() || sinDato; var g = G[k] = G[k] || { ok: 0, mal: 0, pend: 0 }; g[s.r]++; });
+        var L = Object.keys(G).map(function (k) { var g = G[k]; return { k: k, g: g, n: g.ok + g.mal + g.pend, sd: k === sinDato }; })
+          .sort(function (a, b) { return a.sd !== b.sd ? (a.sd ? 1 : -1) : b.n - a.n || (a.k < b.k ? -1 : 1); });
+        if (minimo) {
+          var chic = L.filter(function (t) { return t.n < minimo && !t.sd; });
+          if (chic.length > 1) {
+            var o = { ok: 0, mal: 0, pend: 0 }; chic.forEach(function (t) { o.ok += t.g.ok; o.mal += t.g.mal; o.pend += t.g.pend; });
+            L = L.filter(function (t) { return chic.indexOf(t) < 0; }); L.push({ k: 'Otros (' + chic.length + ')', g: o, n: o.ok + o.mal + o.pend, otros: true });
+          }
+        }
+        var fila = function (t, tot) { var g = t.g; return '<tr' + (tot ? ' class="ttot"' : '') + '><td>' + (t.otros || t.sd ? '<i>' + esc(t.k) + '</i>' : '<b>' + esc(t.k) + '</b>') + '</td><td>' + t.n + '</td><td>' + p(g.ok, g.ok + g.mal) + '<small>' + g.ok + '/' + (g.ok + g.mal) + '</small></td><td>' + p(g.ok + g.pend, t.n) + '<small>' + (g.ok + g.pend) + '/' + t.n + '</small></td></tr>'; };
+        var T = { ok: 0, mal: 0, pend: 0 }; svs.forEach(function (s) { T[s.r]++; });
+        return '<table class="tbl rtbl vtbl titbl"><thead><tr><th>' + col + '</th><th>Serv.</th><th>Concep.</th><th>Conc. máx.</th></tr></thead><tbody>' +
+          L.map(function (t) { return fila(t); }).join('') + (L.length > 1 ? fila({ k: 'Total', g: T, n: svs.length }, true) : '') + '</tbody></table>';
+      };
+      return '<div class="tibox"><p class="cap tisub">' + esc(sub) + '</p>' +
+        '<h3 class="vh3">Por toro</h3>' + tabla('toro', 'Toro', 'Sin dato de toro') +
+        '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') +
+        '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
+    }
     function torosHTML(svs) {
       var grupo = function (campo, quien) {
         var G = {}, tot = { ok: 0, pend: 0, mal: 0 }, out = [];
@@ -3004,6 +3035,7 @@
       else if (a === 'tambos') tambosSheet();
       else if (a === 'inicio') irInicio();
       else if (a === 'toroal') { state.toroAb = !state.toroAb; render(); }
+      else if (a === 'repti') { state.repTI = !state.repTI; render(); }
       else if (a === 'ini21def') ini21Default();
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'actprod') enviarActivacionRol('prod');

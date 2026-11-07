@@ -300,6 +300,11 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .rtbl tr.abierto td.cmax{color:var(--ink);font-weight:700}
 .rtbl td.alerta,.rtbl tr.abierto td.alerta{color:#c0392b;font-weight:800}
 .rtbl td[data-cal]{cursor:pointer}
+.rtbl td.tq{cursor:pointer}.rtbl td.tq>span{border-bottom:1.5px dotted currentColor}.rtbl td.tq[aria-expanded="true"]{background:var(--chip,rgba(127,127,127,.12));border-radius:8px}
+.tibox{text-align:left;padding:4px 2px 10px}.tibox .tisub{margin:6px 0 0;font-weight:700;color:var(--ink)}.tibox .vh3{margin:10px 0 2px}
+.titbl tr.ttot td{border-top:2px solid var(--line);font-weight:700}.rtbl .titbl td small{display:block}.rtbl tr.ralrow .titbl td{padding:7px 3px;text-align:right;white-space:nowrap}.rtbl tr.ralrow .titbl td:first-child{text-align:left;white-space:normal}
+.despbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:12px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;font-weight:700;font-size:14.5px;text-align:left;cursor:pointer;min-height:44px}
+.despbtn .chev{flex:none;font-size:12.5px;color:var(--link);text-decoration:underline;text-underline-offset:2px}
 .ralbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:10px 0 4px;padding:9px 12px;border:0;border-radius:12px;background:#fdecea;color:#8e1f14;font:inherit;font-weight:700;font-size:14px;text-align:left;cursor:pointer;min-height:44px}
 .ralbtn .chev{flex:none;font-size:12.5px;text-decoration:underline;text-underline-offset:2px}
 @media (prefers-color-scheme:dark){.ralbtn{background:#4a1d18;color:#ffd4cf}}
@@ -608,6 +613,6 @@ details.lac summary .l{flex:1}
 <script src="fosapp.js?v=p101"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p125"></script>
+<script src="app.js?v=p126"></script>
 </body>
 </html>
