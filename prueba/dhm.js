@@ -210,7 +210,8 @@
     var ref = maxF, desdeHist = addDays(ref, -730);
     // hembras que siguen activas en DHM pero no tienen ningún registro en 2 años (nunca se les dio la baja): no van a la libreta
     var ultAct = {}, act = function (id, f) { f = fch(f); if (f && (!ultAct[id] || f > ultAct[id])) ultAct[id] = f; };
-    Object.keys(G).forEach(function (id) { var x = G[id]; [x.pa, x.ev, x.ta, x.ct].forEach(function (L) { L.forEach(function (e) { if (!ultAct[id] || e[0] > ultAct[id]) ultAct[id] = e[0]; }); }); });
+    // (las vacías deducidas no cuentan: no son un registro de DHM)
+    Object.keys(G).forEach(function (id) { var x = G[id]; [x.pa, x.ev, x.ta, x.ct].forEach(function (L) { L.forEach(function (e) { if (L === x.ta && e[1] === 3) return; if (!ultAct[id] || e[0] > ultAct[id]) ultAct[id] = e[0]; }); }); });
     T('DHM_CambioLote', ['Ani_IdAnimal', 'Cal_Fecha']).forEach(function (c) { if (mio[c.Ani_IdAnimal]) act(c.Ani_IdAnimal, c.Cal_Fecha); });
     T('DHM_MovimientosAnimales', ['Ani_IdAnimal', 'Man_Fecha']).forEach(function (c) { if (mio[c.Ani_IdAnimal]) act(c.Ani_IdAnimal, c.Man_Fecha); });
     T('DHM_EvSanitarios', ['Ani_IdAnimal', 'Evs_Fecha']).forEach(function (c) { if (mio[c.Ani_IdAnimal]) act(c.Ani_IdAnimal, c.Evs_Fecha); });

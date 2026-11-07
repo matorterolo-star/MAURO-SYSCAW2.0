@@ -2772,10 +2772,96 @@
       if (!esVet()) return;
       closeSheet(); state.pobIni = !!state.inicio; state.inicio = false; state.pobl = true; state.informe = false; pobCalc(); window.scrollTo(0, 0);
     }
+    /* ===== indicadores de la población: ranking por indicador e informe general con rangos ===== */
+    // cada indicador: valor de una fila (tambo o unidad), si más alto es mejor, unidad y decimales.
+    // mín: lo que hace falta para que la fila entre (evita porcentajes con pocos datos)
+    var POB_IND = [
+      { k: 'serv', g: 'Reproducción', t: 'Tasa de servicio', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.aptas >= 30 ? f.T.serv / f.T.aptas * 100 : null; }, nota: 'Aptas servidas / aptas, ciclos de 21 días cerrados de la temporada actual.' },
+      { k: 'conc', g: 'Reproducción', t: 'Tasa de concepción', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.sOk + f.T.sMal >= 20 ? f.T.sOk / (f.T.sOk + f.T.sMal) * 100 : null; }, nota: 'Servicios que preñaron / servicios con resultado, ciclos cerrados.' },
+      { k: 'pren', g: 'Reproducción', t: 'Tasa de preñez (21 días)', u: '%', alto: true, d: 0, val: function (f) { return f.T && f.T.aptas >= 30 ? f.T.pren / f.T.aptas * 100 : null; }, nota: 'Aptas que se preñan en el ciclo / aptas, ciclos cerrados.' },
+      { k: 'prenA', g: 'Reproducción', t: 'Tasa de preñez temporada anterior', u: '%', alto: true, d: 0, val: function (f) { return f.TA && f.TA.aptas >= 30 ? f.TA.pren / f.TA.aptas * 100 : null; }, nota: 'La misma cuenta en la temporada del año pasado.' },
+      { k: 'pg', g: 'Reproducción', t: '% preñez general', u: '%', alto: true, d: 0, val: function (f) { return f.pg; }, nota: 'Vacas preñadas en la temporada / vacas aptas al inicio (como el informe anual).' },
+      { k: 'ips', g: 'Reproducción', t: 'Intervalo parto – 1er servicio', u: 'días', alto: false, d: 0, val: function (f) { return f.ips; }, nota: 'Días promedio, temporada actual.' },
+      { k: 'ipp', g: 'Reproducción', t: 'Intervalo parto – preñez', u: 'días', alto: false, d: 0, val: function (f) { return f.ipp; }, nota: 'Días promedio, temporada actual.' },
+      { k: 'spp', g: 'Reproducción', t: 'Servicios por preñez', u: '', alto: false, d: 1, val: function (f) { return f.spp; }, nota: 'Servicios de la temporada / preñeces de la temporada. Sube si falta tactar.' },
+      { k: 'lv', g: 'Leche', t: 'Litros por vaca, último control', u: 'L', alto: true, d: 1, val: function (f) { return f.lv; }, nota: 'Litros por vaca en ordeñe en el último control (ronda de todas las unidades).' },
+      { k: 'lv12', g: 'Leche', t: 'Litros por vaca, últimos 12 meses', u: 'L', alto: true, d: 1, val: function (f) { return f.lv12; }, nota: 'Promedio de los controles de los últimos 12 meses.' },
+      { k: 'po', g: 'Rodeo', t: '% de vacas en ordeñe', u: '%', alto: true, d: 0, val: function (f) { return f.vo != null && f.vo + f.vs ? f.vo / (f.vo + f.vs) * 100 : null; }, nota: 'Vacas en ordeñe / (en ordeñe + secas), promedio de los últimos 12 meses.' },
+      { k: 'vacas', g: 'Rodeo', t: 'Vacas (en ordeñe y secas)', u: '', alto: true, d: 0, neutro: true, val: function (f) { return f.vacas || null; }, nota: 'Tamaño del rodeo de vacas a la fecha del respaldo.' }
+    ];
+    // percentil con interpolación (p entre 0 y 1) de una lista ordenada
+    function pctl(o, p) { if (!o.length) return null; var i = (o.length - 1) * p, a = Math.floor(i), b = Math.ceil(i); return o[a] + (o[b] - o[a]) * (i - a); }
+    function pobStats(F, ind) {
+      var L = F.map(function (f) { return { f: f, x: ind.val(f) }; }).filter(function (z) { return z.x != null && !isNaN(z.x); });
+      var o = L.map(function (z) { return z.x; }).sort(function (a, b) { return a - b; });
+      return { L: L.sort(function (a, b) { return ind.alto ? b.x - a.x : a.x - b.x; }), n: o.length, prom: o.length ? o.reduce(function (s, x) { return s + x; }, 0) / o.length : null, min: o[0], max: o[o.length - 1], p25: pctl(o, .25), med: pctl(o, .5), p75: pctl(o, .75) };
+    }
+    // sin la unidad (va en el nombre del indicador), para la tabla compacta del informe general
+    function pobNum(x, ind) { return x == null || isNaN(x) ? '–' : nf(x, ind.d, ind.d); }
+    function pobTit(ind) { return ind.t + (ind.u ? ' (' + ind.u + ')' : ''); }
+    function pobFmt(x, ind) { return x == null || isNaN(x) ? '–' : nf(x, ind.d, ind.d) + (ind.u === '%' ? '%' : ind.u ? ' ' + ind.u : ''); }
+    // ranking: modo 'anon' (sin nombres), 'nombres' (todos) o el id de un tambo (solo se ve ese nombre)
+    function pobRankHTML(F) {
+      var modo = state.pobModo || 'anon', tambos = {}; F.forEach(function (f) { if (!tambos[f.id]) tambos[f.id] = (f.nombre || '').split(' · ')[0]; });
+      var sel = modo !== 'anon' && modo !== 'nombres' ? modo : null;
+      var ctrl = '<section class="card noprint"><h2>Ranking por indicador</h2><label class="secfecha">Mostrar <select id="pobSel"><option value="anon"' + (modo === 'anon' ? ' selected' : '') + '>Sin nombres (anónimo)</option><option value="nombres"' + (modo === 'nombres' ? ' selected' : '') + '>Con todos los nombres</option>' +
+        Object.keys(tambos).sort(function (a, b) { return tambos[a].localeCompare(tambos[b], 'es'); }).map(function (id) { return '<option value="' + esc(id) + '"' + (sel === id ? ' selected' : '') + '>Solo ' + esc(tambos[id]) + '</option>'; }).join('') + '</select></label>' +
+        '<p class="cap">Con "Solo …" se ve únicamente el nombre de ese tambo (y sus unidades); el resto queda como barras sin nombre. El 1° es el mejor en cada indicador.</p></section>';
+      var nom = function (f) { return modo === 'nombres' || (sel && String(f.id) === String(sel)) ? esc(f.nombre) : ''; };
+      var res = '';
+      if (sel) {
+        var mios = F.filter(function (f) { return String(f.id) === String(sel); });
+        res = '<section class="card rkres"><h2>' + esc(tambos[sel]) + ' en la población</h2><div class="tblwrap"><table class="tbl"><thead><tr><th>Indicador</th>' + mios.map(function (f) { return '<th>' + esc(f.nombre.split(' · ')[1] || 'Valor') + '</th>'; }).join('') + '<th>Población</th></tr></thead><tbody>' +
+          POB_IND.filter(function (i) { return !i.neutro; }).map(function (ind) {
+            var S = pobStats(F, ind);
+            return '<tr><td>' + esc(ind.t) + '</td>' + mios.map(function (f) { var k = -1; S.L.forEach(function (z, j) { if (z.f === f) k = j; }); return '<td>' + (k < 0 ? '–' : '<b>' + pobFmt(S.L[k].x, ind) + '</b><small>' + (k + 1) + '° de ' + S.n + '</small>') + '</td>'; }).join('') + '<td>' + pobFmt(S.prom, ind) + '</td></tr>';
+          }).join('') + '</tbody></table></div><p class="cap">Puesto entre los tambos o unidades con dato en cada indicador (1° = el mejor).</p></section>';
+      }
+      var cards = POB_IND.map(function (ind) {
+        var S = pobStats(F, ind); if (!S.n) return '';
+        var max = S.max > 0 ? S.max : 1, pos = function (x) { return Math.max(0, Math.min(100, x / max * 100)); };
+        return '<section class="card rkcard"><h3>' + esc(ind.t) + '</h3><p class="cap">' + esc(ind.nota) + (ind.neutro ? '' : ' ' + (ind.alto ? 'Más alto es mejor.' : 'Más bajo es mejor.')) + '</p><div class="rk">' +
+          S.L.map(function (z, j) {
+            var mio = sel && String(z.f.id) === String(sel), n = nom(z.f);
+            return '<div class="rkr' + (mio ? ' mio' : '') + '"><span class="rkp">' + (j + 1) + '°</span><span class="rkn">' + n + '</span><span class="rkb"><i style="width:' + pos(z.x).toFixed(1) + '%"></i><em style="left:' + pos(S.prom).toFixed(1) + '%"></em></span><span class="rkv">' + pobFmt(z.x, ind) + '</span></div>';
+          }).join('') + '</div><p class="cap rkpie"><span class="rkleg"></span> Promedio de la población: <b>' + pobFmt(S.prom, ind) + '</b> · ' + S.n + ' tambos o unidades con dato</p></section>';
+      }).join('');
+      return ctrl + '<section class="card rkhead"><h2>Población de tambos · ranking por indicador</h2><p class="cap">' + F.length + ' tambos o unidades · ' + (sel ? 'se muestra solo ' + esc(tambos[sel]) : modo === 'nombres' ? 'con nombres' : 'anónimo') + ' · ' + A.fmt(today()) + '</p></section>' + res + cards + '<p class="ifirma">Dr. Mauro Torterolo</p>';
+    }
+    // informe general: cada indicador con promedio y rangos de la población, sin nombres
+    function pobGenHTML(F) {
+      var grupos = [];
+      POB_IND.forEach(function (ind) { if (grupos.indexOf(ind.g) < 0) grupos.push(ind.g); });
+      var vac = F.reduce(function (s, f) { return s + (f.vacas || 0); }, 0), ids = {}; F.forEach(function (f) { ids[f.id] = 1; });
+      return '<section class="card rkhead"><h2>Indicadores de la población</h2><p class="cap">' + Object.keys(ids).length + ' tambos (' + F.length + ' tambos o unidades) · ' + nf(vac) + ' vacas · ' + A.fmt(today()) + '</p></section>' +
+        grupos.map(function (g) {
+          return '<section class="card genc"><h3>' + esc(g) + '</h3><div class="tblwrap"><table class="tbl gentbl"><thead><tr><th>Indicador</th><th>Prom.</th><th>Med.</th><th>25% mejor</th><th>25% peor</th><th>Rango</th></tr></thead><tbody>' +
+            POB_IND.filter(function (i) { return i.g === g; }).map(function (ind) {
+              var S = pobStats(F, ind); if (!S.n) return '<tr><td>' + esc(pobTit(ind)) + '</td><td colspan="5">Sin datos</td></tr>';
+              var mej = ind.alto ? S.p75 : S.p25, peo = ind.alto ? S.p25 : S.p75;
+              return '<tr><td>' + esc(pobTit(ind)) + '<small>' + S.n + ' con dato</small></td><td><b>' + pobNum(S.prom, ind) + '</b></td><td>' + pobNum(S.med, ind) + '</td><td>' + (ind.neutro ? '–' : pobNum(mej, ind)) + '</td><td>' + (ind.neutro ? '–' : pobNum(peo, ind)) + '</td><td class="nw">' + pobNum(S.min, ind) + '–' + pobNum(S.max, ind) + '</td></tr>';
+            }).join('') + '</tbody></table></div>' +
+            POB_IND.filter(function (i) { return i.g === g; }).map(function (ind) {
+              var S = pobStats(F, ind); if (!S.n || S.max === S.min) return '';
+              // franja: rango completo, caja del 25% al 75%, raya en la mediana y punto en el promedio
+              var a = S.min, b = S.max, w = function (x) { return ((x - a) / (b - a) * 100).toFixed(1); };
+              return '<div class="genr"><span class="genl">' + esc(ind.t) + '</span><span class="genb"><i class="r"></i><i class="q" style="left:' + w(S.p25) + '%;width:' + (w(S.p75) - w(S.p25)).toFixed(1) + '%"></i><i class="m" style="left:' + w(S.med) + '%"></i><i class="p" style="left:' + w(S.prom) + '%"></i></span><span class="genx">' + pobNum(a, ind) + '–' + pobNum(b, ind) + (ind.u ? ' ' + ind.u : '') + '</span></div>';
+            }).join('') + '</section>';
+        }).join('') +
+        '<p class="cap">Prom.: promedio simple de los tambos o unidades (cada uno pesa igual). Med.: mediana (la mitad está por encima y la mitad por debajo). 25% mejor: el valor a partir del cual está el cuarto de mejores resultados; 25% peor: el límite del cuarto de peores. Debajo de cada indicador, cuántos tambos o unidades tienen dato. En las barras, la franja oscura va del 25% al 75% de los tambos, la raya es la mediana y el punto el promedio. Los tambos con varias unidades cuentan cada unidad con vacas por separado. Tasas de 21 días: solo filas con 30 aptas o más (concepción: 20 servicios con resultado).</p><p class="ifirma">Dr. Mauro Torterolo</p>';
+    }
+    function pdfPob() {
+      var t = document.title; document.title = (state.pobVista === 'gen' ? 'Indicadores de la poblacion ' : 'Ranking de la poblacion ') + today();
+      setTimeout(function () { window.print(); setTimeout(function () { document.title = t; }, 500); }, 50);
+    }
     function pobHTML() {
-      var bar = '<div class="infbar"><button class="btn" data-a="pobcerrar">Volver</button><button class="btn" data-a="pobcalc">Recalcular</button></div>';
+      var vista = state.pobVista || 'tabla';
+      var bar = '<div class="infbar"><button class="btn" data-a="pobcerrar">Volver</button><div class="filters">' + [['tabla', 'Tablas'], ['rank', 'Ranking'], ['gen', 'Indicadores']].map(function (c) { return '<button class="fchip" data-a="pobvista" data-pv="' + c[0] + '" aria-pressed="' + (vista === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+        (vista === 'tabla' ? '<button class="btn" data-a="pobcalc">Recalcular</button>' : '<button class="btn primary" data-a="pobpdf">PDF</button>') + '</div>';
       if (!POB || POB.cargando) return bar + '<section class="card"><h2>Población de tambos</h2><p class="hint">Calculando… ' + esc(POB && POB.prog || '') + '</p></section>';
       var F = POB.filas.filter(function (f) { return !f.sin && !f.error; }), sin = POB.filas.filter(function (f) { return f.sin || f.error; });
+      if (vista === 'rank') return '<div class="pob">' + bar + pobRankHTML(F) + '</div>';
+      if (vista === 'gen') return '<div class="pob">' + bar + pobGenHTML(F) + '</div>';
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; }, v = function (x, d) { return x == null || isNaN(x) ? '–' : nf(x, d || 0); };
       var hoy = today(), viejo = function (f) { return A.diffDays(hoy, f.ref) > 60; };
       var Tt = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 }, TAt = { aptas: 0, pren: 0 }, vac = 0;
@@ -3115,6 +3201,8 @@
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
+      else if (a === 'pobvista') { state.pobVista = b.dataset.pv; render(); window.scrollTo(0, 0); }
+      else if (a === 'pobpdf') pdfPob();
       else if (a === 'pobcerrar') { state.pobl = false; if (state.pobIni) { state.pobIni = false; state.inicio = true; } render(); window.scrollTo(0, 0); }
       else if (a === 'pobcalc') pobCalc();
       else if (a === 'base') exportarBase();
@@ -3131,6 +3219,7 @@
     });
     document.addEventListener('change', function (e) {
       if ((e.target.id === 'vomes' || e.target.id === 'pomes') && e.target.value) { state.vomes = e.target.value; render(); return; }
+      if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });

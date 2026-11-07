@@ -224,6 +224,24 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
  @page{margin:12mm}
 }
 .actinfo{text-align:center;margin:14px 0 2px}
+.rkcard h3,.genc h3{margin:0 0 2px;font-size:17px}.rkhead h2{margin-bottom:2px}
+.rk{display:flex;flex-direction:column;gap:5px;margin:8px 0 4px}
+.rkr{display:grid;grid-template-columns:30px minmax(0,8.5em) 1fr 64px;align-items:center;gap:6px;font-size:13px}
+.rkp{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}.rkn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.rkb{position:relative;height:16px;background:transparent}.rkb i{position:absolute;left:0;top:2px;bottom:2px;background:#B9C3D3;border-radius:0 4px 4px 0}
+.rkb em{position:absolute;top:-2px;bottom:-2px;width:0;border-left:2px dashed var(--ink);opacity:.55}
+.rkv{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.rkr.mio .rkb i{background:#C8961E}.rkr.mio .rkn,.rkr.mio .rkv,.rkr.mio .rkp{color:var(--ink);font-weight:800}
+.rkleg{display:inline-block;width:14px;border-top:2px dashed var(--ink);opacity:.55;vertical-align:middle}
+.rkres td small{display:block;font-size:11.5px;color:var(--muted)}
+.gentbl{font-size:13.5px}.gentbl td,.gentbl th{padding:6px 3px}.gentbl th{font-size:12px;white-space:normal;line-height:1.15}.gentbl td.nw{white-space:nowrap}.gentbl td:first-child small{display:block;font-size:11px;color:var(--muted)}.gentbl td:first-child{text-align:left;white-space:normal;min-width:8.5em}.gentbl th:first-child{text-align:left}
+.genr{display:grid;grid-template-columns:minmax(0,11em) 1fr auto;gap:8px;align-items:center;font-size:12.5px;margin:6px 0}
+.genl{color:var(--muted)}.genx{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+.genb{position:relative;height:14px}.genb i{position:absolute;top:5px;height:4px}.genb i.r{left:0;right:0;background:var(--line);border-radius:2px}
+.genb i.q{top:2px;height:10px;background:#7E8CA6;border-radius:3px}.genb i.m{top:0;height:14px;width:2px;background:var(--ink);margin-left:-1px}
+.genb i.p{top:3px;width:8px;height:8px;border-radius:50%;background:#C8961E;margin-left:-4px;border:1px solid var(--surface)}
+@media (prefers-color-scheme:dark){.rkb i{background:#4A5872}.rkr.mio .rkb i{background:#D9A93A}}
+@media print{.noprint{display:none!important}.rkcard,.genc,.rkres{break-inside:avoid}.rkb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}.genb i{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .vetlnk{display:block;margin:4px auto 0;border:0;background:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;min-height:36px}
 .lchart{width:100%;height:auto;display:block;margin:4px 0 6px}
 .lgrid{stroke:var(--line);stroke-width:1}
@@ -613,6 +631,6 @@ details.lac summary .l{flex:1}
 <script src="fosapp.js?v=p101"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p129"></script>
+<script src="app.js?v=p131"></script>
 </body>
 </html>
