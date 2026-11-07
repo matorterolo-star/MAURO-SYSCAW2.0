@@ -1101,13 +1101,16 @@
         '<span class="rt"><span class="chip ' + a.bTipo + '">' + BAJA[a.bTipo] + '</span></span>' +
         '<span class="sub">' + (a.cat ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + esc(bajaTxt(a)) + (a.bCausa ? ' · ' + esc(a.bCausa) : '') + '</span></button>';
     }
+    // repetidora: vaca con 4 servicios o más en la lactancia actual que todavía no está preñada
+    function repetidora(a) { return !!a && (a.cat === 'vaca' || a.cat === 'seca') && a.estado !== 'prenada' && (a.sN || 0) >= 4; }
+    var SELLO_REP = '<span class="sellorep" title="4 servicios o más sin preñar">Repetidora</span>';
     function rowHTML(a, o) {
       if (a.bTipo) return rowBajaHTML(a);
       o = o || {};
       var qd = String(state.q || '').replace(/\s+/g, '');
       if (o.sub == null && /^\d{5,8}$/.test(qd) && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) o.sub = '<b>ID …' + esc(a.idElec.slice(-8)) + '</b>';
       return '<button class="row" data-rp="' + esc(a.rp) + '">' + tagSVG(a.rp, 54) +
-        '<span class="rt">' + (o.right != null ? o.right : chip(a)) + '</span>' +
+        '<span class="rt' + (repetidora(a) ? ' conrep' : '') + '">' + (repetidora(a) ? SELLO_REP : '') + (o.right != null ? o.right : chip(a)) + '</span>' +
         '<span class="sub">' + (o.sub != null ? (a.cat && a.cat !== 'vaca' ? '<span class="catlbl">' + CATL[a.cat] + '</span> · ' : '') + o.sub : subDefault(a)) + '</span></button>';
     }
     function emptyHTML() {
@@ -2233,7 +2236,7 @@
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (repetidora(a) ? SELLO_REP : '') + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
