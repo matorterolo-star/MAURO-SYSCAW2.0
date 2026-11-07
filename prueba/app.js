@@ -2557,7 +2557,7 @@
     }
     // bajar y descifrar los datos de un link
     function bajarLibreta(id, k) {
-      return fetch('datos/' + id + '.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status === 404 ? 'Los datos todavía no están publicados. Probá de nuevo en un par de minutos.' : 'No pude bajar los datos (' + r.status + ').'); return r.arrayBuffer(); })
+      return fetch('datos/' + id + '.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) { var e = new Error(r.status === 404 ? 'Los datos todavía no están publicados. Probá de nuevo en un par de minutos.' : 'No pude bajar los datos (' + r.status + ').'); e.noPublicado = r.status === 404; throw e; } return r.arrayBuffer(); })
         .then(function (buf) { return crypto.subtle.importKey('raw', unb64u(k), 'AES-GCM', false, ['decrypt']).then(function (key) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(buf, 0, 12) }, key, new Uint8Array(buf, 12)); }); })
         .then(function (plano) { return new Response(new Blob([plano]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); })
         .then(function (t) { var o = JSON.parse(t), d = o.d; d.unidades = d.unidades || []; d.sel = null; d.unidadesSel = []; return { subido: o.subido || '', d: d }; });
@@ -2573,7 +2573,16 @@
       verificar(m[3]).then(function (pl) {
         if (!pl || !pl.p) throw new Error('El link no es válido.');
         if (!esVet()) { ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
-        return bajarLibreta(m[1], m[2]);
+        // recién generado, el link puede tardar 1 o 2 minutos en publicarse: se reintenta solo hasta 4 minutos
+        var intento = 0;
+        var probar = function () {
+          return bajarLibreta(m[1], m[2]).catch(function (e) {
+            if (!e || !e.noPublicado || ++intento > 12) throw e;
+            busy(true, 'Esperando que se publiquen los datos…<small>Recién generado, el link tarda 1 o 2 minutos. No cierres la app.</small>');
+            return new Promise(function (ok) { setTimeout(ok, 20000); }).then(probar);
+          });
+        };
+        return probar();
       }).then(function (pk) {
         return listo.then(function () {
           var ya = null; TAMBOS.lista.forEach(function (t) { if (t.lnkIn && t.lnkIn.id === m[1]) ya = t; });
