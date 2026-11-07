@@ -783,15 +783,33 @@
         document.head.appendChild(s);
       });
     }
+    // lector de DHM (base de Access .mdb): se baja recién la primera vez que el veterinario abre una base de DHM
+    function cargarDhm() {
+      if (root.Dhm && root.MDBReader) return Promise.resolve(root.Dhm);
+      var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
+      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=1'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
+    }
+    // base de Access (DHM): "Standard Jet DB" o "Standard ACE DB" en el encabezado
+    function esAccess(buf) { if (!buf || buf.byteLength < 32) return false; var u = new Uint8Array(buf, 4, 15), t = ''; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return t === 'Standard Jet DB' || t === 'Standard ACE DB'; }
+    // ¿el .rar trae una base de Access (DHM.rar) en vez de un respaldo de SysCaw?
+    function rarConMdb(buf) {
+      return root.Unrar.createExtractorFromData({ data: buf.slice(0), wasmBinary: b64(root.UNRAR_WASM_B64) }).then(function (ex) {
+        var hay = false; for (var h of ex.getFileList().fileHeaders) if (/\.(mdb|accdb)$/i.test(h.name)) hay = true; return hay;
+      }).catch(function () { return false; });
+    }
     // base de Firebird (SIGEA de Macoel): página de encabezado con la firma 12345 y ODS 10 u 11
     function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
     // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
-    function externo(o) { return o === 'fosapp' || o === 'sigea'; }
+    function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm'; }
     function cargarRespaldo(buf, f, tipo) {
-      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea';
-      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
+      var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar';
+      busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
       setTimeout(function () {
-        (tipo === 'pre' ? buf : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+        (tipo === 'pre' ? buf : dhm ? cargarDhm().then(function (H) {
+          return (tipo === 'dhmrar' ? H.mdbDeRar(buf, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64) }) : Promise.resolve(buf)).then(function (mdb) {
+            return H.fromFile(mdb, f.name, { elegir: function (us) { return elegirUnidad(us, null, true); } });
+          }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; });
+        }) : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
           : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
@@ -936,7 +954,16 @@
           if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
           cargarRespaldo(fr.result, f, true); return;
         }
-        if (esRar(fr.result) || /\.rar$/i.test(f.name)) { cargarRespaldo(fr.result, f); return; }
+        if (esAccess(fr.result)) {
+          // base de DHM (Access): solo en el modo veterinario
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          cargarRespaldo(fr.result, f, 'dhm'); return;
+        }
+        if (esRar(fr.result) || /\.rar$/i.test(f.name)) {
+          // en el modo veterinario, un .rar puede traer la base de DHM (DHM.rar)
+          if (esVet()) { rarConMdb(fr.result).then(function (m) { cargarRespaldo(fr.result, f, m ? 'dhmrar' : undefined); }); return; }
+          cargarRespaldo(fr.result, f); return;
+        }
         if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
         try {
           var res = A.parseLibreta(root.XLSX, fr.result);
@@ -1365,8 +1392,8 @@
       try { localStorage.removeItem('libreta:ini21:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:ini21'); } catch (e) {}
       state.ini21 = null; render();
     }
-    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : 'SysCaw'; }
-    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : 'respaldo SysCaw'; }
+    function SRC() { return DB.origen === 'fosapp' ? 'FOSAPP' : DB.origen === 'sigea' ? 'SIGEA' : DB.origen === 'dhm' ? 'DHM' : 'SysCaw'; }
+    function SRCbase() { return DB.origen === 'fosapp' ? 'base FOSAPP' : DB.origen === 'sigea' ? 'base SIGEA' : DB.origen === 'dhm' ? 'base DHM' : 'respaldo SysCaw'; }
     function esVacia(c) { var x = DB.codes && DB.codes[c]; return !!x && x[2] === '1' && !/^(evnor|evol)/i.test(x[0] || ''); }
     function esPren(c) { var x = DB.codes && DB.codes[c]; return !!x && (x[2] != null ? x[2] === '2' : /^pr(e|ñ)/i.test(x[0] || '')); }
     /* ----- Panel: primera pantalla del productor, 4 indicadores con semáforo ----- */
@@ -2272,7 +2299,7 @@
     }
     function evolHTML() {
       var med = state.evMed || 'lv', E = evolucion(med);
-      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
+      if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
       var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
@@ -2774,7 +2801,7 @@
           '<p class="cap">Mejores 6 meses seguidos: qué parte de los partos del año cayó en los 6 meses seguidos con más partos (más alto = partos más concentrados).</p></section>';
       }
       return '<div class="pob">' + bar +
-        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = F.filter(function (f) { return f.origen === 'sigea'; }).length, ns = F.length - nf2 - nm; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
+        '<section class="card"><h2>Población de tambos</h2><p>' + F.length + ' tambos en este equipo: ' + (function () { var nf2 = F.filter(function (f) { return f.origen === 'fosapp'; }).length, nm = F.filter(function (f) { return f.origen === 'sigea'; }).length, nd = F.filter(function (f) { return f.origen === 'dhm'; }).length, ns = F.length - nf2 - nm - nd; var p = [ns ? ns + ' con respaldo de SysCaw' : '', nf2 ? nf2 + ' con base de FOSAPP' : '', nm ? nm + ' con base de SIGEA' : '', nd ? nd + ' con base de DHM' : ''].filter(Boolean); return p.length > 1 ? p.slice(0, -1).join(', ') + ' y ' + p[p.length - 1] : p.join(''); })() + (sin.length ? ' · sin respaldo: ' + sin.map(function (f) { return esc(f.nombre); }).join(', ') : '') + '.</p>' +
         '<p class="cap">Para sumar un tambo, cargá su respaldo (Ajustes → Agregar otro tambo). Para usar la población en la computadora: Ajustes → Guardar copia de la base, y en la computadora, Cargar copia de la base.</p></section>' +
         '<div class="pobgrid">' + rep + par + inter + lec + '</div></div>';
     }
