@@ -968,9 +968,9 @@
           cargarRespaldo(fr.result, f, 'delpro'); return;
         }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
-          // base de FOSAPP: solo en el modo veterinario
-          // fuera del modo veterinario no se reconoce: se responde como cualquier archivo que la app no lee
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          // base de FOSAPP: modo veterinario, o productor activado para un tambo de FOSAPP (cargarRespaldo comprueba que la base sea de su tambo)
+          // a cualquier otro se le responde como a un archivo que la app no lee
+          if (!esVet() && !ACT.some(function (x) { return (x.p || []).some(function (q) { return /^F\d/.test(q); }); })) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
           cargarRespaldo(fr.result, f, true); return;
         }
         if (esAccess(fr.result)) {
@@ -1019,14 +1019,14 @@
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       // productor con un tambo de FOSAPP que le llegó por link: no carga archivos ni códigos; los datos le llegan por el link
-      var porLink = !esVet() && DB.origen === 'fosapp' && tamboAct() && tamboAct().lnkIn;
-      $('#btnCambiar').textContent = porLink ? 'Buscar datos nuevos' : 'Actualizar este tambo (cargar respaldo o libreta)';
-      $('#btnCambiar').dataset.a = porLink ? 'lnkbuscar' : 'cambiar';
+      var porLink = !esVet() && tamboAct() && tamboAct().lnkIn;
+      $('#btnLnkBuscar').hidden = !porLink;
+      $('#btnCambiar').textContent = DB.origen === 'fosapp' && !esVet() ? 'Actualizar este tambo (cargar la base de FOSAPP)' : 'Actualizar este tambo (cargar respaldo o libreta)';
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
-      $('#btnCod').hidden = esVet() || !!porLink;
+      $('#btnCod').hidden = esVet() || (!!porLink && DB.origen === 'fosapp');
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
@@ -2624,13 +2624,14 @@
     }
     function b64std(u) { var s = '', i, n = 0x8000; for (i = 0; i < u.length; i += n) s += String.fromCharCode.apply(null, u.subarray(i, i + n)); return btoa(s); }
     // el tambo activo, completo (todas las unidades), con el formato de un respaldo recién leído
-    // FOSAPP: el número de productor de la base no es seguro que sea único entre tambos, así que el link se identifica por su propio código
-    function idsLink(meta) { return DB.origen !== 'fosapp' && DB.idProd && DB.idProd.length ? DB.idProd : ['L' + meta.id]; }
+    // SysCaw: número de productor; FOSAPP: 'F' + ProductorId (es el número del productor en el servidor de FOSAPP, distinto en cada tambo);
+    // sin número: el código del link
+    function idsLink(meta) { return DB.idProd && DB.idProd.length ? DB.idProd : ['L' + meta.id]; }
     function paqueteTambo(meta) {
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.origen !== 'fosapp' && o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
@@ -2666,7 +2667,7 @@
       closeSheet();
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' ? ' Código para bloquearlo: <b>L' + m.id + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' ? ' Número para bloquearlo: <b>' + esc(String(idsLink(m)[0])) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
@@ -2734,6 +2735,11 @@
       bajarLibreta(t.lnkIn.id, t.lnkIn.k).then(function (pk) {
         if (aviso) busy(false);
         if (!pk.subido || pk.subido <= (t.lnkIn.subido || '')) { if (aviso) toast('Ya tenés los últimos datos' + (t.lnkIn.subido ? ' (del ' + A.fmt(t.lnkIn.subido.slice(0, 10)) + ')' : '') + '.'); return; }
+        var ids = pk.d.idProd || [];
+        if (ids.length && !habilitado(ids)) {
+          var ya = ACT.filter(function (x) { return (x.p || []).indexOf('L' + t.lnkIn.id) >= 0; })[0];
+          if (ya) { ids.forEach(function (q) { if (ya.p.indexOf(q) < 0) ya.p.push(q); }); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
+        }
         state.destino = null; state.lnkPend = { id: t.lnkIn.id, k: t.lnkIn.k, subido: pk.subido };
         cargarRespaldo(Promise.resolve(pk.d), { name: 'link' }, 'pre');
       }).catch(function () { if (aviso) { busy(false); toast('No pude buscar datos nuevos. Probá de nuevo más tarde.'); } });
