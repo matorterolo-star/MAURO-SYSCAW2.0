@@ -1015,7 +1015,7 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
-      $('#btnLnk').hidden = $('#btnAct').hidden;
+      $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP: solo por link (los productores con iPhone no tienen FOSAPP)
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
@@ -2505,7 +2505,8 @@
        app y al volver la conexión; la última lista leída queda guardada, así que un productor bloqueado sigue bloqueado sin internet.
        No borra nada: si se lo saca de la lista, vuelve a ver todo con su misma activación. */
     var BLOQ = []; try { BLOQ = JSON.parse(localStorage.getItem('libreta:bloq')) || []; } catch (e) { BLOQ = []; }
-    function esBloq(p) { return BLOQ.indexOf(+p) >= 0; }
+    function esBloq(p) { return BLOQ.indexOf(String(p)) >= 0; }
+    BLOQ = BLOQ.map(String);
     function actOK(x) { return !(x.p || []).some(esBloq); }
     function suspendido() {
       if (esVet()) return false;
@@ -2517,7 +2518,7 @@
       fetch(baseApp().replace(/prueba\/$/, '') + 'bloqueos.json?t=' + Date.now(), { cache: 'no-store' })
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (o) {
-          var L = ((o && o.productores) || []).map(function (x) { return +(x && x.p != null ? x.p : x); }).filter(function (n) { return n > 0; }).sort(function (a, b) { return a - b; });
+          var L = ((o && o.productores) || []).map(function (x) { return String(x && typeof x === 'object' ? x.p : x).trim(); }).filter(function (n) { return n && n !== 'undefined' && n !== 'null'; }).sort();
           if (JSON.stringify(L) === JSON.stringify(BLOQ)) return;
           BLOQ = L; try { localStorage.setItem('libreta:bloq', JSON.stringify(BLOQ)); } catch (e) {}
           render();
@@ -2619,18 +2620,20 @@
     }
     function b64std(u) { var s = '', i, n = 0x8000; for (i = 0; i < u.length; i += n) s += String.fromCharCode.apply(null, u.subarray(i, i + n)); return btoa(s); }
     // el tambo activo, completo (todas las unidades), con el formato de un respaldo recién leído
-    function paqueteTambo() {
+    // FOSAPP: el número de productor de la base no es seguro que sea único entre tambos, así que el link se identifica por su propio código
+    function idsLink(meta) { return DB.origen !== 'fosapp' && DB.idProd && DB.idProd.length ? DB.idProd : ['L' + meta.id]; }
+    function paqueteTambo(meta) {
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd || [], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.origen !== 'fosapp' && o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
       var tok = ghToken(), meta = lnkMeta(TAMBOS.activo), nuevo = !meta;
       if (nuevo) { var r = crypto.getRandomValues(new Uint8Array(8)), k = crypto.getRandomValues(new Uint8Array(32)); meta = { id: Array.prototype.map.call(r, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''), k: b64u(k) }; }
       var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/' + dirDatos() + meta.id + '.bin', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
-      return paqueteTambo().then(function (d) {
+      return paqueteTambo(meta).then(function (d) {
         var json = JSON.stringify({ v: 1, subido: new Date().toISOString(), d: d });
         return new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
       }).then(function (gz) {
@@ -2651,14 +2654,15 @@
       });
     }
     function linkDatos() {
-      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
-      if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
+      var fos = DB.origen === 'fosapp';
+      if (externo(DB.origen) && !fos) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
+      if (!fos && (!DB.idProd || !DB.idProd.length)) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
       if (!root.CompressionStream || !crypto.subtle) { toast('Este navegador no puede armar el link. Usá Chrome.'); return; }
       if (!ghToken()) { if (confirm('Para mandar links con los datos, primero hay que cargar el permiso de GitHub (se hace una sola vez). ¿Cargarlo ahora?')) { closeSheet(); pedirToken(); } return; }
       closeSheet();
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' ? ' Código para bloquearlo: <b>L' + m.id + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
@@ -2668,7 +2672,7 @@
       var nombre = PERFIL.nombre || 'tu tambo';
       subirDatos().then(function (meta) {
         if (rol === 'act') { busy(false); toast('Datos actualizados: en 1 o 2 minutos les llegan a quienes tienen el link.'); return; }
-        var pl = { p: DB.idProd, n: nombre, f: today() }; if (rol === 'op') pl.r = 'op';
+        var pl = { p: idsLink(meta), n: nombre, f: today() }; if (rol === 'op') pl.r = 'op';
         return firmar(pl).then(function (tok) {
           busy(false);
           var link = baseApp() + '#libreta=' + meta.id + '.' + meta.k + '.' + tok;
