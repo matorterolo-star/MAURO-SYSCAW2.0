@@ -1018,11 +1018,15 @@
       $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP: solo por link (los productores con iPhone no tienen FOSAPP)
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
+      // productor con un tambo de FOSAPP que le llegó por link: no carga archivos ni códigos; los datos le llegan por el link
+      var porLink = !esVet() && DB.origen === 'fosapp' && tamboAct() && tamboAct().lnkIn;
+      $('#btnCambiar').textContent = porLink ? 'Buscar datos nuevos' : 'Actualizar este tambo (cargar respaldo o libreta)';
+      $('#btnCambiar').dataset.a = porLink ? 'lnkbuscar' : 'cambiar';
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
-      $('#btnCod').hidden = esVet();
+      $('#btnCod').hidden = esVet() || !!porLink;
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
@@ -2722,14 +2726,17 @@
       return true;
     }
     // al abrir la app con internet: si el tambo vino por link y hay datos más nuevos, se actualiza solo
-    function actualizarDesdeLink() {
+    function actualizarDesdeLink(aviso) {
       if (suspendido()) return;
-      var t = tamboAct(); if (!t || !t.lnkIn || navigator.onLine === false || !root.DecompressionStream) return;
+      var t = tamboAct(); if (!t || !t.lnkIn || !root.DecompressionStream) return;
+      if (navigator.onLine === false) { if (aviso) toast('Sin internet: probá de nuevo cuando tengas conexión.'); return; }
+      if (aviso) busy(true, 'Buscando datos nuevos…');
       bajarLibreta(t.lnkIn.id, t.lnkIn.k).then(function (pk) {
-        if (!pk.subido || pk.subido <= (t.lnkIn.subido || '')) return;
+        if (aviso) busy(false);
+        if (!pk.subido || pk.subido <= (t.lnkIn.subido || '')) { if (aviso) toast('Ya tenés los últimos datos' + (t.lnkIn.subido ? ' (del ' + A.fmt(t.lnkIn.subido.slice(0, 10)) + ')' : '') + '.'); return; }
         state.destino = null; state.lnkPend = { id: t.lnkIn.id, k: t.lnkIn.k, subido: pk.subido };
         cargarRespaldo(Promise.resolve(pk.d), { name: 'link' }, 'pre');
-      }).catch(function () {});
+      }).catch(function () { if (aviso) { busy(false); toast('No pude buscar datos nuevos. Probá de nuevo más tarde.'); } });
     }
     function pedirCodigo() { var t = prompt('Escribí el código de activación que te mandó el Dr. Mauro Torterolo'); if (t) activarCodigo(t); }
     function leerActivacion(texto) {
@@ -3533,6 +3540,7 @@
       else if (a === 'tambos') tambosSheet();
       else if (a === 'inicio') irInicio();
       else if (a === 'toroal') { state.toroAb = !state.toroAb; render(); }
+      else if (a === 'lnkbuscar') { closeSheet(); actualizarDesdeLink(true); }
       else if (a === 'simlista') { state.simLista = !state.simLista; render(); }
       else if (a === 'repti') { state.repTI = !state.repTI; render(); }
       else if (a === 'ini21def') ini21Default();
