@@ -1425,6 +1425,25 @@
       });
       return out.sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : numRp(x.a, y.a); });
     }
+    // control: cuántas vacas salieron en los mismos meses de años anteriores (descartes = ventas y bajas; muertes aparte)
+    function histDescarte(desde, hasta, nSim) {
+      var B = (DB.bajas || []).filter(function (b) { return b.bFecha && (b.cat === 'vaca' || b.cat === 'seca' || !b.cat); });
+      if (!B.length) return '';
+      var prim = B.reduce(function (m, b) { return b.bFecha < m ? b.bFecha : m; }, '9999'), anios = [], sd = 0, sm = 0;
+      var corre = function (f, n) { return (+f.slice(0, 4) - n) + f.slice(4); };
+      for (var n = 1; n <= 2; n++) {
+        var d = corre(desde, n), h = corre(hasta, n); if (d < prim) continue;
+        var nd = 0, nm = 0; B.forEach(function (b) { if (b.bFecha >= d && b.bFecha <= h) { if (b.bTipo === 'muerte') nm++; else nd++; } });
+        anios.push({ d: d, nd: nd, nm: nm }); sd += nd; sm += nm;
+      }
+      if (!anios.length) return '';
+      var pd = Math.round(sd / anios.length), pm = Math.round(sm / anios.length), dif = pd - nSim;
+      var det = anios.map(function (a) { return a.d.slice(0, 4) + '/' + String(+a.d.slice(0, 4) + 1).slice(2) + ': ' + a.nd + ' descartes, ' + a.nm + ' muertas'; }).join(' · ');
+      return '<div class="simcmp' + (dif > Math.max(3, nSim * 0.15) ? ' falta' : '') + '"><b>Comparación con años anteriores</b>' +
+        '<p>En los mismos meses salían en promedio <b>' + pd + '</b> vacas por descarte' + (pm ? ' y morían ' + pm : '') + '. La simulación saca <b>' + nSim + '</b>.' +
+        (dif > Math.max(3, nSim * 0.15) ? ' Faltan unas ' + dif + ' vacas para llegar al nivel de otros años: puede haber vacas para descarte todavía sin marcar.' : -dif > Math.max(3, pd * 0.15) ? ' Es más que otros años: puede que no todas salgan tan rápido como dice la curva.' : '') + '</p>' +
+        '<small>' + det + (anios.length < 2 ? ' (solo hay datos de un año)' : '') + '</small></div>';
+    }
     function proyHTML() {
       if (state.simDesc === undefined) state.simDesc = getP('simdesc') === '1';
       var lim = limReal(), sim = !!state.simDesc, M = sim ? modeloDescarte() : null, SL = null, sal = null;
@@ -1432,13 +1451,11 @@
       var P0 = A.proyeccion(DB.animales, today(), 10, lim).filter(function (r) { return r.okPre; });
       var P = sal ? A.proyeccion(DB.animales, today(), 10, lim, sal).filter(function (r) { return r.okPre; }) : P0, N = P.length;
       if (!N) return '';
-      var max = Math.max.apply(null, P0.map(function (r) { return r.okSec ? r.ord + r.sec + r.pre : 0; })); if (!max) return '';
+      var max = Math.max.apply(null, P.map(function (r) { return r.okSec ? r.ord + r.sec + r.pre : 0; })); if (!max) return '';
       var W = 320, H = 150, padx = 6, gap = 12, bw = (W - padx * 2 - gap * (N - 1)) / N, s = '', k = (H - 48) / max;
       P.forEach(function (r, i) {
         var x = padx + i * (bw + gap), y = H - 26, tot = r.ord + r.sec + r.pre;
         if (r.okSec) [['pord', r.ord], ['psec', r.sec], ['ppre', r.pre - r.preQ], ['pprq', r.preQ]].forEach(function (p) { var h = p[1] * k; if (h) { y -= h; s += '<rect class="' + p[0] + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '"/>'; } });
-        var r0 = P0[i], t0 = r0.ord + r0.sec + r0.pre;
-        if (sal && r.okSec && t0 !== tot) { var y0 = H - 26 - t0 * k; s += '<rect class="psin" x="' + x.toFixed(1) + '" y="' + y0.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (y - y0).toFixed(1) + '"/>'; y = y0; }
         if (r.okSec) s += '<text class="mval" x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle">' + tot + '</text>';
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + r.label + '</text>';
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
@@ -1450,13 +1467,13 @@
       else if (sal) {
         var PU = P[N - 1], fin = PU.anio + '-' + ('0' + (A.MESES.indexOf(PU.label) + 1)).slice(-2) + '-15', nIn = SL.filter(function (x) { return x.f <= fin; }).length;
         var lt = SL.map(function (x) { return '<tr><td>' + esc(x.a.rp) + '</td><td>' + A.MESES[+x.f.slice(5, 7) - 1] + ' ' + x.f.slice(2, 4) + '</td><td>' + x.mot + '<small class="psinv">' + esc(x.como) + '</small></td></tr>'; }).join('');
-        simTxt = '<p class="simnota">Salen cuando su curva baja a <b>' + M.L.toFixed(1).replace('.', ',') + ' L</b>: los litros con que se fueron las ' + M.n + ' vacas ' + (M.tipos.baja ? 'vendidas o dadas de baja' : 'vendidas') + ' de los últimos 24 meses (mediana del último control antes de salir). Ninguna pasa de ' + Math.round(M.p90) + ' días en leche (9 de cada 10 vendidas salieron antes). ' + nIn + (nIn === 1 ? ' vaca sale' : ' vacas salen') + ' antes de ' + PU.label + ' ' + String(PU.anio).slice(2) + (SL.length > nIn ? ' (' + (SL.length - nIn) + ' más después)' : '') + '. El recuadro punteado y el número chico de la tabla son el rodeo sin descartes.</p>' +
+        simTxt = '<p class="simnota">Salen cuando su curva baja a <b>' + M.L.toFixed(1).replace('.', ',') + ' L</b>: los litros con que se fueron las ' + M.n + ' vacas ' + (M.tipos.baja ? 'vendidas o dadas de baja' : 'vendidas') + ' de los últimos 24 meses (mediana del último control antes de salir). Ninguna pasa de ' + Math.round(M.p90) + ' días en leche (9 de cada 10 vendidas salieron antes). ' + nIn + (nIn === 1 ? ' vaca sale' : ' vacas salen') + ' antes de ' + PU.label + ' ' + String(PU.anio).slice(2) + (SL.length > nIn ? ' (' + (SL.length - nIn) + ' más después)' : '') + '. El número chico de la tabla es el rodeo sin descartes.</p>' + histDescarte(today(), fin, nIn) +
           (SL.length ? '<button class="despbtn" data-a="simlista" aria-expanded="' + !!state.simLista + '"><span>Vacas que salen (' + SL.length + ')</span><span class="chev">' + (state.simLista ? 'ocultar' : 'ver') + '</span></button>' +
           (state.simLista ? '<table class="tbl simtbl"><thead><tr><th>RP</th><th>Sale</th><th>Motivo</th></tr></thead><tbody>' + lt + '</tbody></table>' : '') : '');
       }
       return '<section class="card"><h2>Proyección del rodeo</h2>' +
         '<label class="simsw"><input type="checkbox" id="simDesc"' + (sim ? ' checked' : '') + '><span>Simular descartes</span></label>' +
-        '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span>' + (sal ? '<span><i class="psinl"></i>Sin descartes</span>' : '') + '</div>' +
+        '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
         '<table class="tbl ptbl ptbl6"><thead><tr><th>Mes</th><th>Ordeñe</th><th>DEL</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' + simTxt +
         '<p class="cap">A mitad de cada mes. DEL: días en leche promedio de las vacas en ordeñe. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). ' + (sal ? 'Con descartes simulados; no descuenta muertes.' : 'No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe.') + ' Solo con preñeces confirmadas por tacto: lo que todavía depende de vacas sin diagnóstico queda en blanco.</p></section>';
