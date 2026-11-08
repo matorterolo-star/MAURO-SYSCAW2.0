@@ -147,14 +147,14 @@
     // ID electrónico: se busca por sus últimos 8 números (desde 5 dígitos escritos)
     var qd = q.replace(/\s+/g, ''); if (!/^\d{5,8}$/.test(qd)) qd = null;
     animales.forEach(function (a) {
-      var n = a._n || (a._n = norm(a.nombre)), score = 0;
-      if (a.rp === q) score = 100;
-      else if (a.rp.indexOf(q) === 0) score = 80;
+      var n = a._n || (a._n = norm(a.nombre)), r = norm(a.rp), score = 0; // caravana sin distinguir mayúsculas: TZ0079 se encuentra escribiendo tz0079
+      if (r === q) score = 100;
+      else if (r.indexOf(q) === 0) score = 80;
       else if (qd && a.idElec && a.idElec.slice(-8) === qd) score = 95;
       else if (qd && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) score = 70;
       else if (n.indexOf(q) >= 0) score = 60;
-      else if (tokens.every(function (t) { return n.indexOf(t) >= 0 || a.rp.indexOf(t) === 0; })) score = 50;
-      else if (q.length >= 3 && a.rp.indexOf(q) >= 0) score = 40;
+      else if (tokens.every(function (t) { return n.indexOf(t) >= 0 || r.indexOf(t) === 0; })) score = 50;
+      else if (q.length >= 3 && r.indexOf(q) >= 0) score = 40;
       if (score) out.push([score, a]);
     });
     out.sort(function (x, y) {
@@ -1076,19 +1076,26 @@
       try { if (location.hash) location.hash = ''; } catch (e) {}
       render(); window.scrollTo(0, 0);
     }
+    // caravanas con letras o espacios (p. ej. TZ… de DHM): van codificadas en el #ficha-
+    function rpDeHash() { var m = /^#ficha-(.+)$/.exec(location.hash || ''); if (!m) return null; try { var r = decodeURIComponent(m[1]); return byRp(r) ? r : null; } catch (e) { return null; } }
+    // al volver de la ficha, la lista queda donde estaba
+    function volverALista() { var y = state.volverY || 0; render(); window.scrollTo(0, y); requestAnimationFrame(function () { window.scrollTo(0, y); }); }
     function openFicha(rp) {
+      if (!state.rp) state.volverY = window.scrollY || 0;
       state.rp = rp;
-      try { location.hash = 'ficha-' + rp; } catch (e) {}
+      try { location.hash = 'ficha-' + encodeURIComponent(rp); } catch (e) {}
       render(); window.scrollTo(0, 0);
     }
     function back() {
       state.rp = null;
       try { location.hash = ''; } catch (e) {}
-      render();
+      volverALista();
     }
     window.addEventListener('hashchange', function () {
-      var m = /^#ficha-(b?\d+)$/.exec(location.hash);
-      state.rp = m && byRp(m[1]) ? m[1] : null; render();
+      var tenia = !!state.rp, r = rpDeHash();
+      if (r === state.rp) return;
+      state.rp = r;
+      if (tenia && !r) volverALista(); else render();
     });
 
     /* ----- piezas comunes ----- */
@@ -3636,7 +3643,7 @@
     listo.then(function () { setTimeout(revisarBloqueos, 400); });
     root.addEventListener('online', revisarBloqueos);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisarBloqueos(); });
-    var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
+    var desdeHash = function () { var r = rpDeHash(); if (r) state.rp = r; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
   }
