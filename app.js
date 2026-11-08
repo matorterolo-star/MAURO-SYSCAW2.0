@@ -191,7 +191,8 @@
   // Vaquillonas preñadas entran al preparto 30 días antes del parto y después pasan a ordeñe. No descuenta descartes ni muertes.
   var PREPARTO = 30;
   // lim: última fecha de parto que ya está confirmada por tacto (fecha de los datos + gestación - días hasta el diagnóstico)
-  function proyeccion(animales, hoy, nMeses, lim) {
+  // sal (opcional): { rp: fecha de salida estimada } para simular descartes; desde esa fecha la vaca deja de contar
+  function proyeccion(animales, hoy, nMeses, lim, sal) {
     var y = +hoy.slice(0, 4), m = +hoy.slice(5, 7) - 1, out = [];
     var info = animales.map(function (a) {
       var d = derive(a, hoy), P = a.estado === 'prenada' && d.partoProb && d.partoProb >= hoy ? d.partoProb : null;
@@ -205,6 +206,7 @@
       info.forEach(function (x) {
         var c = x.a.cat || 'vaca';
         if (c === 'ternera') return;
+        if (sal && sal[x.a.rp] && D >= sal[x.a.rp]) { r.des = (r.des || 0) + 1; return; }
         if (c === 'vaquillona') {
           if (!x.P || D < x.R) return;
           if (D < x.P) { r.pre++; r.preQ++; } else { r.ord++; dl(x.P); }
@@ -1019,7 +1021,7 @@
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
-      Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.toggle('abierto', i === 0); });
+      Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
       $('#btnCod').hidden = esVet();
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
@@ -1363,9 +1365,91 @@
     // hasta dónde los datos son reales: preñeces confirmadas por tacto a la fecha de los datos
     function limReal() { var ref = DB.fuente === 'syscaw' ? (DB.fecha || today()) : (DB.cargada || today()); return A.addDays(ref, A.GEST - A.DX_MIN); }
     function mesReal(m) { return !m.key || m.key < limReal().slice(0, 7); }
+    /* ----- simulación de descartes -----
+       Aprende del tambo con qué litros salieron las vacas vendidas en los últimos 24 meses (último control dentro de los 60 días
+       antes de la salida; mediana). Cada vaca en ordeñe con descarte programado o vacía sigue su curva (pendiente de sus últimos
+       controles de la lactancia actual con más de 100 días, o la del rodeo) y sale cuando llega a ese nivel. Tope: los días en leche
+       del 90 % de las vacas vendidas. Las preñadas con descarte programado salen como tarde al secado. Las secas vacías salen ya. */
+    function medianaDe(v) { if (!v.length) return null; v = v.slice().sort(function (a, b) { return a - b; }); var m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; }
+    function pctlDe(v, q) { if (!v.length) return null; v = v.slice().sort(function (a, b) { return a - b; }); return v[Math.min(v.length - 1, Math.floor(q * v.length))]; }
+    function ctLac(a) { var h = DB.hist && DB.hist[a.rp]; if (!h || !h.ct || !a.pFecha) return []; return h.ct.filter(function (c) { return c[0] >= a.pFecha && c[1] > 0; }); }
+    function pendiente(a) {
+      var c = ctLac(a).filter(function (x) { return A.diffDays(x[0], a.pFecha) > 100; }).slice(-5);
+      if (c.length < 3) return null;
+      var n = c.length, mx = 0, my = 0, sxx = 0, sxy = 0, t0 = c[0][0];
+      c.forEach(function (x) { mx += A.diffDays(x[0], t0) / n; my += x[1] / n; });
+      c.forEach(function (x) { var dx = A.diffDays(x[0], t0) - mx; sxx += dx * dx; sxy += dx * (x[1] - my); });
+      return sxx ? sxy / sxx : null;
+    }
+    function modeloDescarte() {
+      if (state.mdesc && state.mdesc.db === DB) return state.mdesc.m;
+      var hoy = today(), desde = A.addDays(DB.fecha || hoy, -730), L = [], DL = [], nV = 0;
+      var tipos = { venta: 1 };
+      var bj = (DB.bajas || []).filter(function (b) { return b.bFecha && b.bFecha >= desde && (b.cat === 'vaca' || b.cat === 'seca' || !b.cat); });
+      if (bj.filter(function (b) { return b.bTipo === 'venta'; }).length < 5) tipos.baja = 1;
+      bj.forEach(function (b) {
+        if (!tipos[b.bTipo]) return; nV++;
+        var h = DB.hist && DB.hist[b.key]; if (!h || !h.ct) return;
+        var u = null; h.ct.forEach(function (c) { if (c[0] <= b.bFecha && A.diffDays(b.bFecha, c[0]) <= 60 && c[1] > 0) u = c; });
+        if (!u) return;
+        var p = null; (h.pa || []).forEach(function (x) { if (x[0] <= u[0]) p = x[0]; });
+        if (p && A.diffDays(u[0], p) < 30) return; // salió recién parida: no es por producción
+        L.push(u[1]); if (p) DL.push(A.diffDays(b.bFecha, p));
+      });
+      var sl = []; DB.animales.forEach(function (a) { if ((a.cat || 'vaca') === 'vaca') { var k = pendiente(a); if (k != null && k < 0 && k > -0.5) sl.push(k); } });
+      var m = L.length >= 5 ? { L: medianaDe(L), n: L.length, nV: nV, del: DL.length ? medianaDe(DL) : 305, p90: DL.length >= 5 ? pctlDe(DL, 0.9) : 500, pend: sl.length >= 5 ? medianaDe(sl) : -0.05, tipos: tipos } : { n: L.length, nV: nV };
+      state.mdesc = { db: DB, m: m };
+      return m;
+    }
+    function salidasDescarte(m) {
+      var hoy = today(), min = A.addDays(hoy, 1), out = [];
+      DB.animales.forEach(function (a) {
+        var c = a.cat || 'vaca', d = A.derive(a, hoy), pren = a.estado === 'prenada';
+        if (c !== 'vaca' && c !== 'seca') return;
+        if (!a.rech && a.estado !== 'vacia') return;
+        if (pren && !a.rech) return;
+        var f, mot = a.rech ? 'Descarte programado' : 'Vacía', como;
+        if (c === 'seca') { if (pren) return; f = min; como = 'seca, sale ya'; }
+        else {
+          var ct = ctLac(a), u = ct[ct.length - 1], k = pendiente(a), kk = k != null && k < 0 ? k : m.pend;
+          if (u) {
+            if (u[1] <= m.L) { f = min; como = u[1].toFixed(1).replace('.', ',') + ' L, ya está en el nivel de salida'; }
+            else { f = A.addDays(u[0], Math.round((u[1] - m.L) / -kk)); como = u[1].toFixed(1).replace('.', ',') + ' L al ' + A.fmt(u[0]).slice(0, 5) + (k != null && k < 0 ? '' : ' (curva del rodeo)'); }
+          } else if (typeof a.pr[0] === 'number' && a.pr[0] <= m.L) { f = min; como = a.pr[0] + ' L'; }
+          else { f = a.pFecha ? A.addDays(a.pFecha, Math.round(m.del)) : min; como = 'sin controles: días en leche de salida'; }
+          if (a.pFecha) { var tope = A.addDays(a.pFecha, m.p90); if (f > tope && tope > min) { f = tope; como += ' · tope ' + Math.round(m.p90) + ' DEL'; } }
+          if (pren && d.partoProb) { var S = A.addDays(d.partoProb, -A.SECADO); if (S < f) { f = S; como += ' · sale al secado'; } }
+        }
+        if (f < min) f = min;
+        out.push({ a: a, f: f, mot: mot + (pren ? ' (preñada)' : ''), como: como });
+      });
+      return out.sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : numRp(x.a, y.a); });
+    }
+    // control: cuántas vacas salieron en los mismos meses de años anteriores (descartes = ventas y bajas; muertes aparte)
+    function histDescarte(desde, hasta, nSim) {
+      var B = (DB.bajas || []).filter(function (b) { return b.bFecha && (b.cat === 'vaca' || b.cat === 'seca' || !b.cat); });
+      if (!B.length) return '';
+      var prim = B.reduce(function (m, b) { return b.bFecha < m ? b.bFecha : m; }, '9999'), anios = [], sd = 0, sm = 0;
+      var corre = function (f, n) { return (+f.slice(0, 4) - n) + f.slice(4); };
+      for (var n = 1; n <= 2; n++) {
+        var d = corre(desde, n), h = corre(hasta, n); if (d < prim) continue;
+        var nd = 0, nm = 0; B.forEach(function (b) { if (b.bFecha >= d && b.bFecha <= h) { if (b.bTipo === 'muerte') nm++; else nd++; } });
+        anios.push({ d: d, nd: nd, nm: nm }); sd += nd; sm += nm;
+      }
+      if (!anios.length) return '';
+      var pd = Math.round(sd / anios.length), pm = Math.round(sm / anios.length), dif = pd - nSim;
+      var det = anios.map(function (a) { return a.d.slice(0, 4) + '/' + String(+a.d.slice(0, 4) + 1).slice(2) + ': ' + a.nd + ' descartes, ' + a.nm + ' muertas'; }).join(' · ');
+      return '<div class="simcmp' + (dif > Math.max(3, nSim * 0.15) ? ' falta' : '') + '"><b>Comparación con años anteriores</b>' +
+        '<p>En los mismos meses salían en promedio <b>' + pd + '</b> vacas por descarte' + (pm ? ' y morían ' + pm : '') + '. La simulación saca <b>' + nSim + '</b>.' +
+        (dif > Math.max(3, nSim * 0.15) ? ' Faltan unas ' + dif + ' vacas para llegar al nivel de otros años: puede haber vacas para descarte todavía sin marcar.' : -dif > Math.max(3, pd * 0.15) ? ' Es más que otros años: puede que no todas salgan tan rápido como dice la curva.' : '') + '</p>' +
+        '<small>' + det + (anios.length < 2 ? ' (solo hay datos de un año)' : '') + '</small></div>';
+    }
     function proyHTML() {
-      var lim = limReal();
-      var P = A.proyeccion(DB.animales, today(), 10, lim).filter(function (r) { return r.okPre; }), N = P.length;
+      if (state.simDesc === undefined) state.simDesc = getP('simdesc') === '1';
+      var lim = limReal(), sim = !!state.simDesc, M = sim ? modeloDescarte() : null, SL = null, sal = null;
+      if (M && M.L != null) { SL = salidasDescarte(M); sal = {}; SL.forEach(function (x) { sal[x.a.rp] = x.f; }); }
+      var P0 = A.proyeccion(DB.animales, today(), 10, lim).filter(function (r) { return r.okPre; });
+      var P = sal ? A.proyeccion(DB.animales, today(), 10, lim, sal).filter(function (r) { return r.okPre; }) : P0, N = P.length;
       if (!N) return '';
       var max = Math.max.apply(null, P.map(function (r) { return r.okSec ? r.ord + r.sec + r.pre : 0; })); if (!max) return '';
       var W = 320, H = 150, padx = 6, gap = 12, bw = (W - padx * 2 - gap * (N - 1)) / N, s = '', k = (H - 48) / max;
@@ -1376,12 +1460,23 @@
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + r.label + '</text>';
         if (r.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(r.anio).slice(2) + '</text>';
       });
-      var filas = P.map(function (r, i) { return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? r.ord : '') + '</td><td>' + (r.okSec && r.delN ? Math.round(r.delS / r.delN) : '') + '</td><td>' + (r.okSec ? r.sec : '') + '</td><td>' + (r.pre - r.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
+      var sm = function (v, v0) { return sal && v !== v0 ? v + '<small class="psinv">' + v0 + '</small>' : v; };
+      var filas = P.map(function (r, i) { var r0 = P0[i]; return '<tr><td>' + (i === 0 ? 'Hoy' : r.label + ' ' + String(r.anio).slice(2)) + '</td><td>' + (r.okSec ? sm(r.ord, r0.ord) : '') + '</td><td>' + (r.okSec && r.delN ? Math.round(r.delS / r.delN) : '') + '</td><td>' + (r.okSec ? sm(r.sec, r0.sec) : '') + '</td><td>' + sm(r.pre - r.preQ, r0.pre - r0.preQ) + '</td><td>' + r.preQ + '</td></tr>'; }).join('');
+      var simTxt = '';
+      if (sim && !sal) simTxt = '<p class="simnota">No se puede simular: hacen falta al menos 5 vacas vendidas en los últimos 24 meses con un control en los 60 días antes de salir (hay ' + M.n + (M.nV ? ' de ' + M.nV + ' ventas' : '') + ').</p>';
+      else if (sal) {
+        var PU = P[N - 1], fin = PU.anio + '-' + ('0' + (A.MESES.indexOf(PU.label) + 1)).slice(-2) + '-15', nIn = SL.filter(function (x) { return x.f <= fin; }).length;
+        var lt = SL.map(function (x) { return '<tr><td>' + esc(x.a.rp) + '</td><td>' + A.MESES[+x.f.slice(5, 7) - 1] + ' ' + x.f.slice(2, 4) + '</td><td>' + x.mot + '<small class="psinv">' + esc(x.como) + '</small></td></tr>'; }).join('');
+        simTxt = '<p class="simnota">Salen cuando su curva baja a <b>' + M.L.toFixed(1).replace('.', ',') + ' L</b>: los litros con que se fueron las ' + M.n + ' vacas ' + (M.tipos.baja ? 'vendidas o dadas de baja' : 'vendidas') + ' de los últimos 24 meses (mediana del último control antes de salir). Ninguna pasa de ' + Math.round(M.p90) + ' días en leche (9 de cada 10 vendidas salieron antes). ' + nIn + (nIn === 1 ? ' vaca sale' : ' vacas salen') + ' antes de ' + PU.label + ' ' + String(PU.anio).slice(2) + (SL.length > nIn ? ' (' + (SL.length - nIn) + ' más después)' : '') + '. El número chico de la tabla es el rodeo sin descartes.</p>' + histDescarte(today(), fin, nIn) +
+          (SL.length ? '<button class="despbtn" data-a="simlista" aria-expanded="' + !!state.simLista + '"><span>Vacas que salen (' + SL.length + ')</span><span class="chev">' + (state.simLista ? 'ocultar' : 'ver') + '</span></button>' +
+          (state.simLista ? '<table class="tbl simtbl"><thead><tr><th>RP</th><th>Sale</th><th>Motivo</th></tr></thead><tbody>' + lt + '</tbody></table>' : '') : '');
+      }
       return '<section class="card"><h2>Proyección del rodeo</h2>' +
+        '<label class="simsw"><input type="checkbox" id="simDesc"' + (sim ? ' checked' : '') + '><span>Simular descartes</span></label>' +
         '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span><span><i class="ppre"></i>Preparto vacas</span><span><i class="pprq"></i>Preparto vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Proyección de vacas en ordeñe, secas y preparto por mes">' + s + '</svg>' +
-        '<table class="tbl ptbl ptbl6"><thead><tr><th>Mes</th><th>Ordeñe</th><th>DEL</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">A mitad de cada mes. DEL: días en leche promedio de las vacas en ordeñe. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe. Solo con preñeces confirmadas por tacto: lo que todavía depende de vacas sin diagnóstico queda en blanco.</p></section>';
+        '<table class="tbl ptbl ptbl6"><thead><tr><th>Mes</th><th>Ordeñe</th><th>DEL</th><th>Secas</th><th>Prep. vacas</th><th>Prep. vaq.</th></tr></thead><tbody>' + filas + '</tbody></table>' + simTxt +
+        '<p class="cap">A mitad de cada mes. DEL: días en leche promedio de las vacas en ordeñe. Secado ' + A.SECADO + ' días antes del parto; preparto los últimos ' + A.PREPARTO + ' días (las vaquillonas entran al preparto ' + A.PREPARTO + ' días antes y después pasan a ordeñe). ' + (sal ? 'Con descartes simulados; no descuenta muertes.' : 'No descuenta descartes ni muertes, y las vacas no preñadas siguen en ordeñe.') + ' Solo con preñeces confirmadas por tacto: lo que todavía depende de vacas sin diagnóstico queda en blanco.</p></section>';
     }
     /* ----- reproducción cada 21 días ----- */
     var PEVS = [40, 45, 50, 60];
@@ -3399,6 +3494,7 @@
       else if (a === 'tambos') tambosSheet();
       else if (a === 'inicio') irInicio();
       else if (a === 'toroal') { state.toroAb = !state.toroAb; render(); }
+      else if (a === 'simlista') { state.simLista = !state.simLista; render(); }
       else if (a === 'repti') { state.repTI = !state.repTI; render(); }
       else if (a === 'ini21def') ini21Default();
       else if (a === 'enviaract') enviarActivacion();
@@ -3441,6 +3537,7 @@
     });
     document.addEventListener('change', function (e) {
       if ((e.target.id === 'vomes' || e.target.id === 'pomes') && e.target.value) { state.vomes = e.target.value; render(); return; }
+      if (e.target.id === 'simDesc') { state.simDesc = e.target.checked; setP('simdesc', state.simDesc ? '1' : ''); render(); return; }
       if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
       if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.toro, e.target.checked); state.pobToroAb = true; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }

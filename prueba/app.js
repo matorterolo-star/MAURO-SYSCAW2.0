@@ -1021,7 +1021,7 @@
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
-      Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.toggle('abierto', i === 0); });
+      Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
       $('#btnCod').hidden = esVet();
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
