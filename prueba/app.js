@@ -3414,8 +3414,7 @@
     function render() {
       if (suspendido()) {
         var nv = $('#nav'); if (nv) nv.hidden = true; $('#ubtn').hidden = true; $('#tbtn').hidden = true; $('#meta').textContent = 'Acceso suspendido';
-        $('#main').innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Acceso suspendido</h2>' +
-          '<p>Esta libreta no está habilitada en este momento. Comunicate con el Dr. Mauro Torterolo.</p></section>';
+        $('#main').innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Acceso suspendido</h2></section>';
         return;
       }
       var main = $('#main'), nav = $('#nav'), nombre = PERFIL.nombre || 'Libreta';
