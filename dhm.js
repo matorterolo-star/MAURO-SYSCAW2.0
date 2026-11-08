@@ -49,11 +49,16 @@
 
   // unidades (establecimientos) con hembras activas
   function unidades(D) {
-    var nomE = {}; D.table('DHM_Establecimientos', ['Est_IdEstablecimiento', 'Est_Nombre']).forEach(function (e) { nomE[e.Est_IdEstablecimiento] = nom(e.Est_Nombre); });
+    // número del establecimiento (código de control lechero / remitente) para identificar al productor en los links; si es un relleno (9999, NN, 000…), el id de la base
+    var nomE = {}, nroE = {}; D.table('DHM_Establecimientos', ['Est_IdEstablecimiento', 'Est_Nombre', 'Est_Numero']).forEach(function (e) {
+      nomE[e.Est_IdEstablecimiento] = nom(e.Est_Nombre);
+      var n = String(e.Est_Numero || '').trim().toUpperCase();
+      nroE[e.Est_IdEstablecimiento] = /^[A-Z0-9]{3,12}$/.test(n) && !/^(0+|9+|NAN|NN)$/.test(n) ? 'D' + n : 'DE' + e.Est_IdEstablecimiento;
+    });
     var U = {};
     D.table('DHM_Animales', ['Est_IdEstablecimiento', 'Ani_Sexo', 'Ean_IdEstadoAnimal', 'Tia_IdTipoAnimal', 'Ani_EstadoProductivo']).forEach(function (a) {
       if (a.Ean_IdEstadoAnimal !== 1 || a.Ani_Sexo !== 2) return;
-      var id = a.Est_IdEstablecimiento, u = U[id] || (U[id] = { id: id, nombre: nomE[id] || 'Establecimiento ' + id, total: 0, vaca: 0, seca: 0, vaquillona: 0, ternera: 0 });
+      var id = a.Est_IdEstablecimiento, u = U[id] || (U[id] = { id: id, nombre: nomE[id] || 'Establecimiento ' + id, nro: nroE[id] || 'DE' + id, total: 0, vaca: 0, seca: 0, vaquillona: 0, ternera: 0 });
       u.total++; u[catDe(a, null)]++;
     });
     return Object.keys(U).map(function (k) { return U[k]; }).sort(function (a, b) { return a.id - b.id; });
@@ -305,7 +310,7 @@
     var elegidas = us.filter(function (u) { return sel[u.id]; });
     // nombre del tambo: el de la unidad, o la parte común de los nombres ("El Teson (MFajardo) T1" y "… T2" → "El Teson (MFajardo)")
     var tambo = elegidas.length === 1 ? elegidas[0].nombre : (function () { var ns = elegidas.map(function (u) { return u.nombre; }), p = ns[0] || ''; ns.forEach(function (n) { while (p && n.indexOf(p) !== 0) p = p.slice(0, -1); }); return p.replace(/[\s\-·,]+(T|U)?$/i, '').trim() || null; })();
-    return { idProd: [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'dhm', unidades: elegidas, deducidas: nDed, fantasmas: fantasmas };
+    return { idProd: elegidas.map(function (u) { return u.nro; }), ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'dhm', unidades: elegidas, deducidas: nDed, fantasmas: fantasmas };
   }
 
   // opts.elegir(unidades) -> Promise<[ids]>: se llama si la base trae más de un establecimiento con hembras activas.

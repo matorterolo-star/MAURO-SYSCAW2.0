@@ -106,8 +106,9 @@
       // número de lactancia: en el parto FOSAPP anota la lactancia que termina (0 = vaquillona), así que el parto abre esa + 1.
       // Se cuenta hacia atrás desde la lactancia actual del animal, que es la más confiable (a veces el dato del parto viene en 0)
       var n = g.pa.length, L = 0;
-      g.pa.forEach(function (p) { if (p[1] + 1 > L) L = p[1] + 1; });
-      if (a.vl > 0) L = Math.max(L, a.vl);
+      // (algunas bases traen en el dato de lactancia números sin sentido, como 4841, en partos viejos: se ignoran los mayores de 20)
+      g.pa.forEach(function (p) { if (p[1] <= 20 && p[1] + 1 > L) L = p[1] + 1; });
+      if (a.vl > 0 && a.vl <= 20) L = Math.max(L, a.vl);
       var ok = L - n + 1 >= 1;
       g.pa.forEach(function (p, i) { p[1] = ok ? L - (n - 1 - i) : i + 1; });
       g.pa.forEach(function (p, i) {

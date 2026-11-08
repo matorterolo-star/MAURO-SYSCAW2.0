@@ -147,14 +147,14 @@
     // ID electrónico: se busca por sus últimos 8 números (desde 5 dígitos escritos)
     var qd = q.replace(/\s+/g, ''); if (!/^\d{5,8}$/.test(qd)) qd = null;
     animales.forEach(function (a) {
-      var n = a._n || (a._n = norm(a.nombre)), score = 0;
-      if (a.rp === q) score = 100;
-      else if (a.rp.indexOf(q) === 0) score = 80;
+      var n = a._n || (a._n = norm(a.nombre)), r = norm(a.rp), score = 0; // caravana sin distinguir mayúsculas: TZ0079 se encuentra escribiendo tz0079
+      if (r === q) score = 100;
+      else if (r.indexOf(q) === 0) score = 80;
       else if (qd && a.idElec && a.idElec.slice(-8) === qd) score = 95;
       else if (qd && a.idElec && a.idElec.slice(-8).indexOf(qd) === 0) score = 70;
       else if (n.indexOf(q) >= 0) score = 60;
-      else if (tokens.every(function (t) { return n.indexOf(t) >= 0 || a.rp.indexOf(t) === 0; })) score = 50;
-      else if (q.length >= 3 && a.rp.indexOf(q) >= 0) score = 40;
+      else if (tokens.every(function (t) { return n.indexOf(t) >= 0 || r.indexOf(t) === 0; })) score = 50;
+      else if (q.length >= 3 && r.indexOf(q) >= 0) score = 40;
       if (score) out.push([score, a]);
     });
     out.sort(function (x, y) {
@@ -789,7 +789,7 @@
     function cargarDhm() {
       if (root.Dhm && root.MDBReader) return Promise.resolve(root.Dhm);
       var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
-      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=2'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
+      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=3'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
     }
     // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
     function cargarDelpro() {
@@ -1015,18 +1015,19 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
-      $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP: solo por link (los productores con iPhone no tienen FOSAPP)
+      $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || DB.origen === 'dhm' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP y DHM: solo por link
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       // productor con un tambo de FOSAPP que le llegó por link: no carga archivos ni códigos; los datos le llegan por el link
       var porLink = !esVet() && tamboAct() && tamboAct().lnkIn;
       $('#btnLnkBuscar').hidden = !porLink;
+      $('#btnCambiar').hidden = !esVet() && DB.origen === 'dhm'; // la base de DHM trae otros tambos: solo la carga el veterinario
       $('#btnCambiar').textContent = DB.origen === 'fosapp' && !esVet() ? 'Actualizar este tambo (cargar la base de FOSAPP)' : 'Actualizar este tambo (cargar respaldo o libreta)';
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
-      $('#btnCod').hidden = esVet() || (!!porLink && DB.origen === 'fosapp');
+      $('#btnCod').hidden = esVet() || (!!porLink && (DB.origen === 'fosapp' || DB.origen === 'dhm'));
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
@@ -1075,19 +1076,26 @@
       try { if (location.hash) location.hash = ''; } catch (e) {}
       render(); window.scrollTo(0, 0);
     }
+    // caravanas con letras o espacios (p. ej. TZ… de DHM): van codificadas en el #ficha-
+    function rpDeHash() { var m = /^#ficha-(.+)$/.exec(location.hash || ''); if (!m) return null; try { var r = decodeURIComponent(m[1]); return byRp(r) ? r : null; } catch (e) { return null; } }
+    // al volver de la ficha, la lista queda donde estaba
+    function volverALista() { var y = state.volverY || 0; render(); window.scrollTo(0, y); requestAnimationFrame(function () { window.scrollTo(0, y); }); }
     function openFicha(rp) {
+      if (!state.rp) state.volverY = window.scrollY || 0;
       state.rp = rp;
-      try { location.hash = 'ficha-' + rp; } catch (e) {}
+      try { location.hash = 'ficha-' + encodeURIComponent(rp); } catch (e) {}
       render(); window.scrollTo(0, 0);
     }
     function back() {
       state.rp = null;
       try { location.hash = ''; } catch (e) {}
-      render();
+      volverALista();
     }
     window.addEventListener('hashchange', function () {
-      var m = /^#ficha-(b?\d+)$/.exec(location.hash);
-      state.rp = m && byRp(m[1]) ? m[1] : null; render();
+      var tenia = !!state.rp, r = rpDeHash();
+      if (r === state.rp) return;
+      state.rp = r;
+      if (tenia && !r) volverALista(); else render();
     });
 
     /* ----- piezas comunes ----- */
@@ -2659,7 +2667,7 @@
       });
     }
     function linkDatos() {
-      var fos = DB.origen === 'fosapp';
+      var fos = DB.origen === 'fosapp' || DB.origen === 'dhm';
       if (externo(DB.origen) && !fos) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
       if (!fos && (!DB.idProd || !DB.idProd.length)) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
       if (!root.CompressionStream || !crypto.subtle) { toast('Este navegador no puede armar el link. Usá Chrome.'); return; }
@@ -2667,7 +2675,7 @@
       closeSheet();
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' ? ' Número para bloquearlo: <b>' + esc(String(idsLink(m)[0])) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' || DB.origen === 'dhm' ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
@@ -3635,7 +3643,7 @@
     listo.then(function () { setTimeout(revisarBloqueos, 400); });
     root.addEventListener('online', revisarBloqueos);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisarBloqueos(); });
-    var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
+    var desdeHash = function () { var r = rpDeHash(); if (r) state.rp = r; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
   }
