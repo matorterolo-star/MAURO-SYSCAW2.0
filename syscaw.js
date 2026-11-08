@@ -73,7 +73,8 @@
     T.ident.forEach(function (r) { byId[r[0]] = r; if (!r[9] && CAT[r[6]] && (!sel || sel[r[11]])) act[r[0]] = r; });
     // dados de baja (vendidos / muertos): no cuentan en la libreta, pero se pueden buscar por caravana
     var bj = {}, refB = (infoFromName(opts.nombreArchivo).fecha || '9999');
-    var desdeHist = refB === '9999' ? '0000' : addDays(refB, -730);
+    // historial de bajas de 3 años: el Panel compara las vacas preñadas con la foto de hace 2 años, que necesita un año de historia antes
+    var desdeHist = refB === '9999' ? '0000' : addDays(refB, -1100);
     T.ident.forEach(function (r) { if ((r[9] || r[13]) && (!sel || sel[r[11]])) bj[r[0]] = r; });
     var G = {}; Object.keys(act).forEach(function (id) { G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [] }; });
     // historial completo solo para las bajas de los últimos 2 años (para no agrandar la libreta)

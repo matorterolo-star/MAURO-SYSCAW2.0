@@ -1015,7 +1015,7 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
-      $('#btnLnk').hidden = $('#btnAct').hidden;
+      $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP: solo por link (los productores con iPhone no tienen FOSAPP)
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
@@ -1565,7 +1565,11 @@
       var L = infLista();
       R.pr = rodeoPren(pev, ref);
       var refA = (+ref.slice(0, 4) - 1) + ref.slice(4);
-      if (refA >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) R.prA = rodeoPrenHist(L, refA, pev);
+      // contra el promedio de los 2 años anteriores (mismo día); si el historial no llega a 2 años, contra hace un año
+      // (la foto de hace 2 años necesita historial completo desde un año antes: las bajas viejas traen solo sus últimos partos)
+      var refB = (+ref.slice(0, 4) - 2) + ref.slice(4), dH = DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730), vA = [];
+      [refA, refB].forEach(function (d, i) { if (i === 0 ? d >= dH : (dH === '0000' || d >= A.addDays(dH, 365))) { var v = rodeoPrenHist(L, d, pev); if (v != null) vA.push(v); } });
+      if (vA.length) { R.prA = vA.reduce(function (a, b) { return a + b; }, 0) / vA.length; R.prAn = vA.length; R.prAv = vA; }
       // 3) último diagnóstico de gestación (tacto) cargado, y vacas y vaquillonas pendientes de tacto
       var ut = null; DB.animales.forEach(function (a) { var h = DB.hist[a.rp]; if (h && h.ta) h.ta.forEach(function (t) { if (t[0] <= ref && (!ut || t[0] > ut)) ut = t[0]; }); });
       R.ultTacto = ut;
@@ -1616,9 +1620,10 @@
       if (P.P + P.PP === 0) t3 = tile('g', 'ptvac', 'Vacas preñadas', '–', 'Sin vacas para contar', '');
       else {
         var d2 = R.prA != null && P.pct != null ? P.pct - R.prA : null, s2 = d2 == null ? 'g' : d2 <= -10 ? 'r' : d2 <= -5 ? 'a' : 'v';
-        if (s2 === 'r') avisos.push(['mal', 'Vacas preñadas: ' + nf(Math.abs(Math.round(d2))) + ' puntos menos que hace un año']);
+        var cA = R.prAn === 2 ? 'el promedio de los 2 años anteriores' : 'hace un año';
+        if (s2 === 'r') avisos.push(['mal', 'Vacas preñadas: ' + nf(Math.abs(Math.round(d2))) + ' puntos menos que ' + cA]);
         t3 = tile(s2, 'ptvac', 'Vacas preñadas', p0(P.pct), n0(P.P) + ' preñadas · ' + n0(P.PP) + ' por preñar',
-          d2 == null ? '' : flecha(d2) + nf(Math.round(d2)) + ' pts vs hace un año');
+          d2 == null ? '' : flecha(d2) + nf(Math.round(d2)) + (R.prAn === 2 ? ' pts vs prom. 2 años' : ' pts vs hace un año'));
       }
       // 4) último diagnóstico: amarillo desde 21 días, rojo con más de 30
       var t4;
@@ -1634,7 +1639,7 @@
         ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
         : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
       return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' +
-        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra hace un año (amarillo 5 puntos menos, rojo 10). Último tacto: amarillo desde 21 días, rojo con más de 30.</p>';
+        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: amarillo desde 21 días, rojo con más de 30.</p>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
@@ -2496,13 +2501,38 @@
     var PUBKEY = {"kty":"EC","crv":"P-256","x":"-zikzRKxDR2Iml5AuWh6PgDIipwqr1fpHjwct7moAoQ","y":"eWwwwoCwgfWupZrAebMISU7Yx3aUlhEYOoAJ79GFda0"};
     var ACT = []; try { ACT = JSON.parse(localStorage.getItem('libreta:act')) || []; } catch (e) { ACT = []; }
     function esVet() { try { return !!localStorage.getItem('libreta:vet'); } catch (e) { return false; } }
+    /* productores bloqueados: lista en bloqueos.json (raíz del sitio, sirve para la oficial y la de prueba). Se revisa al abrir la
+       app y al volver la conexión; la última lista leída queda guardada, así que un productor bloqueado sigue bloqueado sin internet.
+       No borra nada: si se lo saca de la lista, vuelve a ver todo con su misma activación. */
+    var BLOQ = []; try { BLOQ = JSON.parse(localStorage.getItem('libreta:bloq')) || []; } catch (e) { BLOQ = []; }
+    function esBloq(p) { return BLOQ.indexOf(String(p)) >= 0; }
+    BLOQ = BLOQ.map(String);
+    function actOK(x) { return !(x.p || []).some(esBloq); }
+    function suspendido() {
+      if (esVet()) return false;
+      if (DB && DB.idProd && DB.idProd.some(esBloq)) return true;
+      return ACT.length > 0 && !ACT.some(actOK);
+    }
+    function revisarBloqueos() {
+      if (esVet() || !root.fetch) return;
+      fetch(baseApp().replace(/prueba\/$/, '') + 'bloqueos.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (o) {
+          var L = ((o && o.productores) || []).map(function (x) { return String(x && typeof x === 'object' ? x.p : x).trim(); }).filter(function (n) { return n && n !== 'undefined' && n !== 'null'; }).sort();
+          if (JSON.stringify(L) === JSON.stringify(BLOQ)) return;
+          BLOQ = L; try { localStorage.setItem('libreta:bloq', JSON.stringify(BLOQ)); } catch (e) {}
+          render();
+        }).catch(function () {});
+    }
     function habilitado(ids) {
       if (esVet()) return true;
       ids = ids || [];
-      if (!ids.length) return ACT.length > 0;
-      return ACT.some(function (x) { return (x.p || []).some(function (q) { return ids.indexOf(q) >= 0; }); });
+      if (ids.some(esBloq)) return false;
+      if (!ids.length) return ACT.some(actOK);
+      return ACT.some(function (x) { return actOK(x) && (x.p || []).some(function (q) { return ids.indexOf(q) >= 0; }); });
     }
     function bloqueado(nombre) {
+      if (suspendido()) { render(); return; }
       state.error = 'Este tambo' + (nombre ? ' (' + nombre + ')' : '') + ' no está activado en este teléfono. Pedile el link de activación al Dr. Mauro Torterolo.';
       render(); toast('Tambo sin activar');
     }
@@ -2590,18 +2620,20 @@
     }
     function b64std(u) { var s = '', i, n = 0x8000; for (i = 0; i < u.length; i += n) s += String.fromCharCode.apply(null, u.subarray(i, i + n)); return btoa(s); }
     // el tambo activo, completo (todas las unidades), con el formato de un respaldo recién leído
-    function paqueteTambo() {
+    // FOSAPP: el número de productor de la base no es seguro que sea único entre tambos, así que el link se identifica por su propio código
+    function idsLink(meta) { return DB.origen !== 'fosapp' && DB.idProd && DB.idProd.length ? DB.idProd : ['L' + meta.id]; }
+    function paqueteTambo(meta) {
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd || [], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.origen !== 'fosapp' && o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
       var tok = ghToken(), meta = lnkMeta(TAMBOS.activo), nuevo = !meta;
       if (nuevo) { var r = crypto.getRandomValues(new Uint8Array(8)), k = crypto.getRandomValues(new Uint8Array(32)); meta = { id: Array.prototype.map.call(r, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''), k: b64u(k) }; }
       var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/' + dirDatos() + meta.id + '.bin', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
-      return paqueteTambo().then(function (d) {
+      return paqueteTambo(meta).then(function (d) {
         var json = JSON.stringify({ v: 1, subido: new Date().toISOString(), d: d });
         return new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
       }).then(function (gz) {
@@ -2622,14 +2654,15 @@
       });
     }
     function linkDatos() {
-      if (externo(DB.origen)) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
-      if (!DB.idProd || !DB.idProd.length) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
+      var fos = DB.origen === 'fosapp';
+      if (externo(DB.origen) && !fos) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
+      if (!fos && (!DB.idProd || !DB.idProd.length)) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
       if (!root.CompressionStream || !crypto.subtle) { toast('Este navegador no puede armar el link. Usá Chrome.'); return; }
       if (!ghToken()) { if (confirm('Para mandar links con los datos, primero hay que cargar el permiso de GitHub (se hace una sola vez). ¿Cargarlo ahora?')) { closeSheet(); pedirToken(); } return; }
       closeSheet();
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' ? ' Código para bloquearlo: <b>L' + m.id + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
@@ -2639,7 +2672,7 @@
       var nombre = PERFIL.nombre || 'tu tambo';
       subirDatos().then(function (meta) {
         if (rol === 'act') { busy(false); toast('Datos actualizados: en 1 o 2 minutos les llegan a quienes tienen el link.'); return; }
-        var pl = { p: DB.idProd, n: nombre, f: today() }; if (rol === 'op') pl.r = 'op';
+        var pl = { p: idsLink(meta), n: nombre, f: today() }; if (rol === 'op') pl.r = 'op';
         return firmar(pl).then(function (tok) {
           busy(false);
           var link = baseApp() + '#libreta=' + meta.id + '.' + meta.k + '.' + tok;
@@ -2690,6 +2723,7 @@
     }
     // al abrir la app con internet: si el tambo vino por link y hay datos más nuevos, se actualiza solo
     function actualizarDesdeLink() {
+      if (suspendido()) return;
       var t = tamboAct(); if (!t || !t.lnkIn || navigator.onLine === false || !root.DecompressionStream) return;
       bajarLibreta(t.lnkIn.id, t.lnkIn.k).then(function (pk) {
         if (!pk.subido || pk.subido <= (t.lnkIn.subido || '')) return;
@@ -3382,6 +3416,11 @@
       ['rodeo', 'Rodeo', '<path d="M5 20V11M12 20V4M19 20v-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>']
     ];
     function render() {
+      if (suspendido()) {
+        var nv = $('#nav'); if (nv) nv.hidden = true; $('#ubtn').hidden = true; $('#tbtn').hidden = true; $('#meta').textContent = 'Acceso suspendido';
+        $('#main').innerHTML = '<section class="empty"><div class="emptytag">' + LOGO_LIBRETA.replace('width="34" height="34"', 'width="72" height="72"') + '</div><h2>Acceso suspendido</h2></section>';
+        return;
+      }
       var main = $('#main'), nav = $('#nav'), nombre = PERFIL.nombre || 'Libreta';
       $('#nombre').textContent = nombre;
       document.title = PERFIL.nombre ? 'Libreta ' + PERFIL.nombre : 'Libreta de vacas';
@@ -3579,6 +3618,9 @@
       if (cambio) { saveTambos(); savePerfil(); render(); }
     });
     if (!leerLibreta()) { leerActivacion(); leerPrecarga(); listo.then(function () { setTimeout(actualizarDesdeLink, 800); }); }
+    listo.then(function () { setTimeout(revisarBloqueos, 400); });
+    root.addEventListener('online', revisarBloqueos);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) revisarBloqueos(); });
     var desdeHash = function () { var m = /^#ficha-(b?\d+)$/.exec(location.hash); if (m && byRp(m[1])) state.rp = m[1]; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
