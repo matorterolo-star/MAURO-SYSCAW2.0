@@ -1332,26 +1332,29 @@
     function insSel() { var s = state.insSel || ''; return s && insLista().indexOf(s) < 0 ? '' : s; }
     function insItemsSel() { var s = insSel(), R = state.insR || { items: [] }; return s ? R.items.filter(function (it) { return it.ins === s; }) : R.items; }
     function pesos(n) { return '$ ' + Math.round(n || 0).toLocaleString('es-UY'); }
+    function insCSS() { if (document.getElementById('insCss')) return; var st = document.createElement('style'); st.id = 'insCss'; st.textContent = '.inscard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 12px}.inscard h4{margin:0 0 8px;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}.insper{display:grid;grid-template-columns:1fr 1fr;gap:10px}.insper label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}.insper input{width:100%;box-sizing:border-box;min-height:46px;font:inherit;font-size:16px;font-weight:700;color:var(--ink);padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);-webkit-appearance:none;appearance:none}.inspr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line)}.inspr:first-of-type{border-top:0}.inspr span{font-size:15.5px;font-weight:600;color:var(--ink)}.inspr .pin{display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:700}.inspr input{width:110px;box-sizing:border-box;min-height:44px;font:inherit;font-size:17px;font-weight:700;text-align:right;color:var(--ink);padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);-webkit-appearance:none;appearance:none}.insper input:focus,.inspr input:focus{border-color:var(--gold);outline:none}.inscalc{width:100%;margin:0 0 14px}.instot{display:flex;align-items:baseline;justify-content:space-between;gap:10px;background:var(--navy);color:#fff;border-radius:14px;padding:14px 16px;margin:10px 0 4px}.instot small{display:block;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);font-weight:700}.instot b{font-size:28px;font-variant-numeric:tabular-nums}.instot span{font-size:15px;opacity:.9;text-align:right}.instbl{margin:6px 0 12px}.instbl tr.tot td{font-size:16px}.insdet tr[data-rp]{cursor:pointer}.insbtns{display:grid;grid-template-columns:1fr;gap:8px;margin:4px 0 12px}.insses{margin:6px 0 10px;font-size:13.5px;color:var(--muted)}@media (prefers-color-scheme:dark){.insper input,.inspr input{color-scheme:dark}.instot{border:1px solid var(--gold)}}'; document.head.appendChild(st); }
     function insHTML() {
+      insCSS();
       var key = 'insem', desp = !!(state.desp && state.desp[key]);
       var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>Inseminadores</h2><span class="count">$</span>' +
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       if (!DB.hist) return h + '<p class="hint">Para liquidar a los inseminadores hace falta cargar el respaldo con el historial de servicios y tactos.</p></section>';
       var F = insFechas(), P = insPrecios();
-      h += '<p class="secnote">Se paga cada preñez confirmada por tacto en el período, según el número de servicio en que quedó preñada. Cada preñez se cuenta una sola vez (el primer tacto positivo).</p>' +
-        '<div class="insfechas"><label>Tactos del <input type="date" id="insd0" value="' + F[0] + '"></label><label>al <input type="date" id="insd1" value="' + F[1] + '"></label></div>' +
-        '<p class="secnote insprech">Precio por preñez</p><div class="insprec">' + INS_B.map(function (b) {
-          return '<label><span>' + b[1] + '</span><input type="number" inputmode="decimal" min="0" data-ip="' + b[0] + '" value="' + (P[b[0]] != null ? P[b[0]] : '') + '" placeholder="$"></label>';
+      h += '<p class="secnote">Se paga cada preñez confirmada en los tactos del período, según el número de servicio en que quedó preñada. Cada preñez se paga una sola vez.</p>' +
+        '<div class="inscard"><h4>Período de tactos</h4><div class="insper"><label>Desde<input type="date" id="insd0" value="' + F[0] + '"></label><label>Hasta<input type="date" id="insd1" value="' + F[1] + '"></label></div></div>' +
+        '<div class="inscard"><h4>Precio por preñez</h4>' + INS_B.map(function (b) {
+          return '<label class="inspr"><span>' + b[1] + '</span><span class="pin">$<input type="number" inputmode="decimal" min="0" data-ip="' + b[0] + '" value="' + (P[b[0]] != null ? P[b[0]] : '') + '" placeholder="0"></span></label>';
         }).join('') + '</div>' +
-        '<button class="btn primary big" data-a="inscalc">Calcular</button>';
+        '<button class="btn primary big inscalc" data-a="inscalc">Calcular</button>';
       var R = state.insR;
       if (R && R.d0 === F[0] && R.d1 === F[1]) {
         var tk = Object.keys(R.tactos).sort();
-        h += '<p class="cap">Tactos en el período: ' + (tk.length ? tk.map(function (d) { return A.fmt(d).slice(0, 5) + ' (' + R.tactos[d] + ' preñ.)'; }).join(' · ') : 'ninguno con preñeces') + '</p>';
+        h += '<p class="insses">Tactos que entran: ' + (tk.length ? tk.map(function (d) { return A.fmt(d).slice(0, 5) + ' (' + R.tactos[d] + ' preñ.)'; }).join(' · ') : 'ninguno con preñeces') + '</p>';
         var I = insLista(), s = insSel();
         if (I.length > 1) h += '<div class="filters" role="group" aria-label="Inseminador"><button class="fchip plain" data-insel="" aria-pressed="' + !s + '">Todos</button>' + I.map(function (k) { return '<button class="fchip plain" data-insel="' + esc(k) + '" aria-pressed="' + (s === k) + '">' + esc(k) + '</button>'; }).join('') + '</div>';
         var its = insItemsSel(), r = insResumen(its, P);
+        h += '<div class="instot"><div><small>Total' + (s ? ' · ' + esc(s) : '') + '</small><b>' + pesos(r.tot) + '</b></div><span>' + r.n + (r.n === 1 ? ' preñez' : ' preñeces') + '</span></div>';
         h += '<table class="tbl instbl"><thead><tr><th>Servicio</th><th>Preñadas</th><th>$ c/u</th><th>$</th></tr></thead><tbody>' +
           INS_B.filter(function (b) { return b[0] !== 'T' || !s; }).map(function (b) { return '<tr><td>' + b[1] + '</td><td>' + r.c[b[0]] + '</td><td>' + (P[b[0]] != null && P[b[0]] !== '' ? nf(+P[b[0]]) : '–') + '</td><td>' + nf(r.m[b[0]]) + '</td></tr>'; }).join('') +
           '<tr class="sep tot"><td><b>Total' + (s ? ' ' + esc(s) : '') + '</b></td><td><b>' + r.n + '</b></td><td></td><td><b>' + pesos(r.tot) + '</b></td></tr></tbody></table>';
