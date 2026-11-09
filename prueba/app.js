@@ -615,7 +615,7 @@
       PERFIL = { nombre: t.nombre || '', logo: t.logo || '' };
       DB = { animales: [], cargada: null, archivo: '' };
       state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'panel';
-      state.ini21 = null; state.fsec = null; state.pev = null; state.abiertas = {};
+      state.ini21 = null; state.fsec = null; state.pev = null; state.insD0 = state.insD1 = state.insR = null; state.insSel = ''; state.abiertas = {};
       state.cat = 'todas';
       try { if (location.hash) location.hash = ''; } catch (e) {}
       return leerDB(id).then(function (o) { if (o && TAMBOS.activo === id) { DB = o; aplicarUnidad(); } return true; });
@@ -672,7 +672,7 @@
       state.destino = null;
       var t2 = tamboAct();
       PERFIL = { nombre: t2.nombre || nombre || '', logo: t2.logo || '' };
-      state.ini21 = null; state.fsec = null; state.pev = null;
+      state.ini21 = null; state.fsec = null; state.pev = null; state.insD0 = state.insD1 = state.insR = null; state.insSel = '';
       return cambio;
     }
     function quitarTambo(id) {
@@ -1282,6 +1282,146 @@
       }
       return h + '</section>';
     }
+    /* ----- Inseminadores: liquidación por número de servicio de las preñeces confirmadas en los tactos del período ----- */
+    var INS_B = [['1', '1er servicio'], ['2', '2º servicio'], ['3', '3er servicio'], ['4', '4º o más'], ['T', 'Toro']];
+    function insPrecios() { var p = null; try { p = JSON.parse(getP('insprec')); } catch (e) {} return p || { '1': null, '2': null, '3': null, '4': null, 'T': 0 }; }
+    function insTactosSesiones() {
+      var c = {}; Object.keys(DB.hist || {}).forEach(function (k) { (DB.hist[k].ta || []).forEach(function (t) { c[t[0]] = (c[t[0]] || 0) + 1; }); });
+      return Object.keys(c).filter(function (d) { return c[d] >= 3; }).sort();
+    }
+    function insFechas() {
+      if (!state.insD1) state.insD1 = getP('insd1');
+      if (!state.insD0) state.insD0 = getP('insd0');
+      if (!state.insD1 || !state.insD0) {
+        var S = insTactosSesiones(), last = S.length ? S[S.length - 1] : (DB.fecha || today());
+        state.insD1 = state.insD1 || last; state.insD0 = state.insD0 || A.addDays(state.insD1, -30);
+      }
+      return [state.insD0, state.insD1];
+    }
+    // cada preñez se paga una sola vez: en el primer tacto positivo posterior al servicio que la originó
+    function insCalc(d0, d1) {
+      var R = { items: [], tactos: {} }, L = [];
+      DB.animales.forEach(function (a) { if (DB.hist[a.rp]) L.push({ rp: a.rp, a: a, h: DB.hist[a.rp] }); });
+      (DB.bajas || []).forEach(function (b) { if (DB.hist[b.key]) L.push({ rp: b.rp, a: b, h: DB.hist[b.key], baja: true }); });
+      L.forEach(function (x) {
+        var h = x.h, ta = h.ta || [], ev = h.ev || [], pa = h.pa || [];
+        ta.forEach(function (t) {
+          if (t[0] < d0 || t[0] > d1 || !esPren(t[1])) return;
+          var lpf = '0000'; pa.forEach(function (p) { if (p[0] < t[0]) lpf = p[0]; });
+          var sv = ev.filter(function (e) { return e[1] === 'S' && e[0] > lpf && e[0] < t[0]; });
+          var ok = sv.filter(function (e) { return A.diffDays(t[0], e[0]) >= 25; }), conc = ok.length ? ok[ok.length - 1] : null;
+          var desde = conc ? conc[0] : lpf;
+          if (ta.some(function (u) { return u[0] > desde && u[0] < t[0] && esPren(u[1]); })) return; // reconfirmación: ya se pagó
+          var toro = !conc || /^(toro|monta|natural)\b/i.test(String(conc[2] || '').trim());
+          var n = conc ? sv.indexOf(conc) + 1 : null;
+          R.items.push({ rp: x.rp, a: x.a, baja: !!x.baja, t: t[0], s: conc ? conc[0] : null, n: n, toro: conc ? conc[2] || '' : '', ins: toro ? null : (String(conc[3] || '').trim() || 'Sin dato de inseminador'), b: toro ? 'T' : n >= 4 ? '4' : String(n) });
+          R.tactos[t[0]] = (R.tactos[t[0]] || 0) + 1;
+        });
+      });
+      R.items.sort(function (p, q) { return p.t < q.t ? -1 : p.t > q.t ? 1 : p.rp.localeCompare(q.rp, 'es', { numeric: true }); });
+      return R;
+    }
+    function insResumen(items, P) {
+      var r = { c: {}, m: {}, n: 0, tot: 0 };
+      INS_B.forEach(function (b) { r.c[b[0]] = 0; r.m[b[0]] = 0; });
+      items.forEach(function (it) { r.c[it.b]++; r.n++; });
+      INS_B.forEach(function (b) { r.m[b[0]] = r.c[b[0]] * (+P[b[0]] || 0); r.tot += r.m[b[0]]; });
+      return r;
+    }
+    function insLista() { return Object.keys((state.insR || { items: [] }).items.reduce(function (o, it) { if (it.ins) o[it.ins] = 1; return o; }, {})).sort(); }
+    function insSel() { var s = state.insSel || ''; return s && insLista().indexOf(s) < 0 ? '' : s; }
+    function insItemsSel() { var s = insSel(), R = state.insR || { items: [] }; return s ? R.items.filter(function (it) { return it.ins === s; }) : R.items; }
+    function pesos(n) { return '$ ' + Math.round(n || 0).toLocaleString('es-UY'); }
+    function insHTML() {
+      var key = 'insem', desp = !!(state.desp && state.desp[key]);
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>Inseminadores</h2><span class="count">$</span>' +
+        '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+      if (!desp) return h + '</section>';
+      if (!DB.hist) return h + '<p class="hint">Para liquidar a los inseminadores hace falta cargar el respaldo con el historial de servicios y tactos.</p></section>';
+      var F = insFechas(), P = insPrecios();
+      h += '<p class="secnote">Se paga cada preñez confirmada por tacto en el período, según el número de servicio en que quedó preñada. Cada preñez se cuenta una sola vez (el primer tacto positivo).</p>' +
+        '<div class="insfechas"><label>Tactos del <input type="date" id="insd0" value="' + F[0] + '"></label><label>al <input type="date" id="insd1" value="' + F[1] + '"></label></div>' +
+        '<p class="secnote insprech">Precio por preñez</p><div class="insprec">' + INS_B.map(function (b) {
+          return '<label><span>' + b[1] + '</span><input type="number" inputmode="decimal" min="0" data-ip="' + b[0] + '" value="' + (P[b[0]] != null ? P[b[0]] : '') + '" placeholder="$"></label>';
+        }).join('') + '</div>' +
+        '<button class="btn primary big" data-a="inscalc">Calcular</button>';
+      var R = state.insR;
+      if (R && R.d0 === F[0] && R.d1 === F[1]) {
+        var tk = Object.keys(R.tactos).sort();
+        h += '<p class="cap">Tactos en el período: ' + (tk.length ? tk.map(function (d) { return A.fmt(d).slice(0, 5) + ' (' + R.tactos[d] + ' preñ.)'; }).join(' · ') : 'ninguno con preñeces') + '</p>';
+        var I = insLista(), s = insSel();
+        if (I.length > 1) h += '<div class="filters" role="group" aria-label="Inseminador"><button class="fchip plain" data-insel="" aria-pressed="' + !s + '">Todos</button>' + I.map(function (k) { return '<button class="fchip plain" data-insel="' + esc(k) + '" aria-pressed="' + (s === k) + '">' + esc(k) + '</button>'; }).join('') + '</div>';
+        var its = insItemsSel(), r = insResumen(its, P);
+        h += '<table class="tbl instbl"><thead><tr><th>Servicio</th><th>Preñadas</th><th>$ c/u</th><th>$</th></tr></thead><tbody>' +
+          INS_B.filter(function (b) { return b[0] !== 'T' || !s; }).map(function (b) { return '<tr><td>' + b[1] + '</td><td>' + r.c[b[0]] + '</td><td>' + (P[b[0]] != null && P[b[0]] !== '' ? nf(+P[b[0]]) : '–') + '</td><td>' + nf(r.m[b[0]]) + '</td></tr>'; }).join('') +
+          '<tr class="sep tot"><td><b>Total' + (s ? ' ' + esc(s) : '') + '</b></td><td><b>' + r.n + '</b></td><td></td><td><b>' + pesos(r.tot) + '</b></td></tr></tbody></table>';
+        if (!s && I.length > 1) {
+          h += '<h3 class="vh3">Por inseminador</h3><table class="tbl instbl"><thead><tr><th>Inseminador</th><th>Preñadas</th><th>$</th></tr></thead><tbody>' +
+            I.map(function (k) { var q = insResumen(R.items.filter(function (it) { return it.ins === k; }), P); return '<tr><td><b>' + esc(k) + '</b></td><td>' + q.n + '</td><td>' + nf(q.tot) + '</td></tr>'; }).join('') + '</tbody></table>';
+        }
+        if (INS_B.some(function (b) { return b[0] !== 'T' && (P[b[0]] == null || P[b[0]] === ''); })) h += '<p class="hint">Faltan precios: cargalos arriba y tocá Calcular.</p>';
+        h += '<div class="insbtns"><button class="btn share" data-a="inswa"' + (r.n ? '' : ' disabled') + '>Enviar comprobante por WhatsApp</button><button class="btn share" data-a="instk"' + (r.n ? '' : ' disabled') + '>Ticket (imagen)</button></div>';
+        var ab = !!state.insVer;
+        h += '<button class="despbtn" data-a="insver" aria-expanded="' + ab + '"><span>Ver las ' + its.length + ' vacas</span><span class="chev">' + (ab ? 'ocultar' : 'ver') + '</span></button>';
+        if (ab) h += '<table class="tbl instbl insdet"><thead><tr><th>Caravana</th><th>Serv.</th><th>Fecha serv.</th><th>Tacto</th></tr></thead><tbody>' + its.map(function (it) {
+          return '<tr' + (it.baja ? '' : ' data-rp="' + esc(it.rp) + '"') + '><td><b>' + esc(it.rp) + '</b>' + (it.baja ? ' <small>baja</small>' : '') + (!s && it.ins ? '<br><small>' + esc(it.ins) + '</small>' : '') + '</td><td>' + (it.b === 'T' ? 'Toro' : it.n) + '</td><td>' + (it.s ? A.fmt(it.s).slice(0, 5) : '–') + (it.toro && it.b !== 'T' ? '<br><small>' + esc(it.toro) + '</small>' : '') + '</td><td>' + A.fmt(it.t).slice(0, 5) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      }
+      return h + '</section>';
+    }
+    function insTitulo() { var s = insSel(); return 'Liquidación inseminación' + (s ? ' — ' + s : ''); }
+    function insComprobanteWA() {
+      var R = state.insR; if (!R) return;
+      var P = insPrecios(), s = insSel(), its = insItemsSel(), r = insResumen(its, P);
+      var txt = '*' + insTitulo() + '*\n' + (PERFIL.nombre ? PERFIL.nombre + '\n' : '') + 'Tactos del ' + A.fmt(R.d0) + ' al ' + A.fmt(R.d1) + '\n\n' +
+        INS_B.filter(function (b) { return (b[0] !== 'T' || !s) && r.c[b[0]]; }).map(function (b) { return b[1] + ': ' + r.c[b[0]] + ' × ' + pesos(+P[b[0]] || 0) + ' = ' + pesos(r.m[b[0]]); }).join('\n') +
+        '\n\n*Total: ' + r.n + (r.n === 1 ? ' preñez' : ' preñeces') + ' · ' + pesos(r.tot) + '*';
+      if (!s) { var I = insLista(); if (I.length > 1) txt += '\n\n' + I.map(function (k) { var q = insResumen(R.items.filter(function (it) { return it.ins === k; }), P); return k + ': ' + q.n + ' · ' + pesos(q.tot); }).join('\n'); }
+      txt += '\n\nEmitido ' + A.fmt(today()) + ' · Libreta de vacas';
+      if (navigator.share) navigator.share({ text: txt }).catch(function () {});
+      else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+    }
+    // ticket: imagen tipo recibo (PNG) para compartir o guardar
+    function insTicket() {
+      var R = state.insR; if (!R) return;
+      var P = insPrecios(), s = insSel(), its = insItemsSel(), r = insResumen(its, P), I = s ? [] : insLista();
+      var filas = INS_B.filter(function (b) { return (b[0] !== 'T' || !s); });
+      var W = 720, pad = 48, lh = 46, H = 470 + filas.length * lh + (I.length > 1 ? 80 + I.length * lh : 0);
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      var g = cv.getContext('2d'), navy = '#1B2A4A', gold = '#B8963E', mut = '#5f6b7a';
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+      g.fillStyle = navy; g.fillRect(0, 0, W, 10);
+      var y = 70, txt = function (t, x, al, font, col) { g.font = font; g.fillStyle = col || navy; g.textAlign = al; g.fillText(t, x, y); };
+      var linea = function (dash) { g.strokeStyle = '#c9ced6'; g.lineWidth = 2; g.setLineDash(dash ? [8, 8] : []); g.beginPath(); g.moveTo(pad, y); g.lineTo(W - pad, y); g.stroke(); g.setLineDash([]); };
+      txt('LIQUIDACIÓN INSEMINACIÓN', W / 2, 'center', 'bold 32px system-ui,sans-serif'); y += 42;
+      if (PERFIL.nombre) { txt(PERFIL.nombre, W / 2, 'center', '600 26px system-ui,sans-serif', gold); y += 38; }
+      if (s) { txt('Inseminador: ' + s, W / 2, 'center', 'bold 26px system-ui,sans-serif'); y += 38; }
+      txt('Tactos del ' + A.fmt(R.d0) + ' al ' + A.fmt(R.d1), W / 2, 'center', '24px system-ui,sans-serif', mut); y += 30;
+      linea(true); y += 44;
+      txt('Servicio', pad, 'left', 'bold 22px system-ui,sans-serif', mut); txt('Cant.', 360, 'right', 'bold 22px system-ui,sans-serif', mut); txt('$ c/u', 500, 'right', 'bold 22px system-ui,sans-serif', mut); txt('$', W - pad, 'right', 'bold 22px system-ui,sans-serif', mut); y += lh;
+      filas.forEach(function (b) {
+        txt(b[1], pad, 'left', '26px system-ui,sans-serif'); txt(String(r.c[b[0]]), 360, 'right', '26px system-ui,sans-serif'); txt(nf(+P[b[0]] || 0), 500, 'right', '26px system-ui,sans-serif', mut); txt(nf(r.m[b[0]]), W - pad, 'right', '26px system-ui,sans-serif'); y += lh;
+      });
+      y -= 18; linea(false); y += 50;
+      txt('TOTAL', pad, 'left', 'bold 32px system-ui,sans-serif'); txt(String(r.n), 360, 'right', 'bold 30px system-ui,sans-serif'); txt(pesos(r.tot), W - pad, 'right', 'bold 34px system-ui,sans-serif'); y += 30;
+      if (I.length > 1) {
+        linea(true); y += 44; txt('Por inseminador', pad, 'left', 'bold 22px system-ui,sans-serif', mut); y += lh;
+        I.forEach(function (k) { var q = insResumen(R.items.filter(function (it) { return it.ins === k; }), P); txt(k, pad, 'left', '26px system-ui,sans-serif'); txt(String(q.n), 360, 'right', '26px system-ui,sans-serif'); txt(pesos(q.tot), W - pad, 'right', '26px system-ui,sans-serif'); y += lh; });
+        y -= 16;
+      }
+      y += 30; linea(true); y += 40;
+      txt('Emitido ' + A.fmt(today()), W / 2, 'center', '20px system-ui,sans-serif', mut); y += 30;
+      txt('Libreta de vacas · Dr. Mauro Torterolo', W / 2, 'center', '20px system-ui,sans-serif', mut);
+      g.fillStyle = gold; g.fillRect(0, H - 10, W, 10);
+      var nombre = ('Ticket inseminacion ' + (s ? s + ' ' : '') + (PERFIL.nombre || '') + ' ' + R.d1).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
+      cv.toBlob(function (bl) {
+        if (!bl) { toast('No se pudo armar el ticket.'); return; }
+        var file = null; try { file = new File([bl], nombre, { type: 'image/png' }); } catch (e) {}
+        var guardar = function () { var u = URL.createObjectURL(bl), el = document.createElement('a'); el.href = u; el.download = nombre; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Ticket guardado en Descargas'); };
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
+        else guardar();
+      }, 'image/png');
+    }
     function tareasHTML() {
       var t = A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), state.ventana), vtxt = (VENT.filter(function (v) { return v[0] === state.ventana; })[0] || [0, ''])[1];
       var fs = fechaSecado(), sec = listaSecado(fs);
@@ -1306,7 +1446,7 @@
         }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
         secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca cumple el criterio de venta.');
+        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML();
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -3528,6 +3668,7 @@
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
+      if ((el = e.target.closest('[data-insel]'))) { state.insSel = el.dataset.insel; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; return; }
       if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; render(); return; }
@@ -3593,6 +3734,10 @@
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
+      else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
+      else if (a === 'inswa') insComprobanteWA();
+      else if (a === 'instk') insTicket();
+      else if (a === 'insver') { state.insVer = !state.insVer; render(); }
       else if (a === 'uok') cerrarUnidad(idsMarcados());
       else if (a === 'ucancel') cerrarUnidad(null);
     });
@@ -3602,6 +3747,8 @@
       if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
       if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.toro, e.target.checked); state.pobToroAb = true; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
+      if ((e.target.id === 'insd0' || e.target.id === 'insd1') && e.target.value) { var k = e.target.id === 'insd0' ? 'insD0' : 'insD1'; state[k] = e.target.value; setP(k.toLowerCase(), e.target.value); render(); return; }
+      if (e.target.dataset && e.target.dataset.ip) { var Pp = insPrecios(), v = parseFloat(String(e.target.value).replace(',', '.')); Pp[e.target.dataset.ip] = isFinite(v) && v >= 0 ? v : null; setP('insprec', JSON.stringify(Pp)); if (state.insR) render(); return; }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
     document.addEventListener('input', function (e) {
