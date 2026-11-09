@@ -2766,7 +2766,7 @@
     function leerPrecarga(texto) {
       var m = texto != null ? /#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)/.exec(texto) : /^#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/.exec(location.hash || '');
       if (!m) { if (texto != null) toast('No encontré un link de tambo en lo que pegaste.'); return; }
-      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (texto == null) { try { localStorage.setItem('libreta:ultLink', location.href); } catch (e) {} try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       if (!esVet()) { toast('Este link es solo para el modo veterinario.'); return; }
       state.inicio = false;
       if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el tambo precargado.'); return; }
@@ -2881,7 +2881,7 @@
       var re = /#libreta=([a-f0-9]+)\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/;
       var m = re.exec(texto != null ? texto : (location.hash || ''));
       if (!m) { if (texto != null) toast('No encontré un link de libreta en lo que pegaste.'); return false; }
-      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (texto == null) { try { localStorage.setItem('libreta:ultLink', location.href); } catch (e) {} try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el link. Probá con Chrome o actualizá el teléfono.'); return true; }
       state.inicio = false;
       busy(true, 'Abriendo la libreta…');
@@ -2930,7 +2930,7 @@
     function leerActivacion(texto) {
       var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
       if (!m) { if (texto != null) toast('No encontré un link de activación en lo que pegaste.'); return Promise.resolve(false); }
-      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (texto == null) { try { localStorage.setItem('libreta:ultLink', location.href); } catch (e) {} try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       return verificar(m[1]).then(function (pl) {
         if (!pl || !pl.p) { toast('El link de activación no es válido.'); return false; }
         ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]);
@@ -2944,6 +2944,21 @@
       return '<input id="actCod" class="actcod" type="text" inputmode="numeric" autocomplete="off" placeholder="Código" aria-label="Código de activación">' +
         '<button class="btn primary big" data-a="actcod">Activar</button>' +
         '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Te mandaron un link? Pegalo acá</button>';
+    }
+    /* iPhone: la app anclada al inicio no comparte datos con Safari; se ofrece copiar el link para pegarlo en la app anclada */
+    function esIOS() { return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+    function esAnclada() { try { return !!navigator.standalone || matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; } }
+    function iosTipHTML() {
+      var l = '', x = ''; try { l = localStorage.getItem('libreta:ultLink') || ''; x = localStorage.getItem('libreta:iostip') || ''; } catch (e) {}
+      if (!l || x === '1' || !esIOS() || esAnclada()) return '';
+      return '<style>.iostip{background:var(--surface);border:2px solid var(--gold);border-radius:14px;padding:12px 14px;margin:0 0 14px;font-size:15px;line-height:1.4}.iostip p{margin:4px 0}.iostip ol{margin:4px 0 10px;padding-left:22px}.iostip li{margin:2px 0}.iostipb{display:flex;gap:8px}.iostipb .btn{flex:1}</style><div class="iostip"><b>¿La vas a anclar al inicio del iPhone?</b><p>La app anclada no ve lo que abriste en Safari. Hacelo así:</p><ol><li>Tocá <b>Copiar link</b>.</li><li>En Safari: Compartir → <b>Agregar a inicio</b>.</li><li>Abrila desde el ícono y tocá <b>¿Te mandaron un link? Pegalo acá</b>.</li></ol>' +
+        '<div class="iostipb"><button class="btn primary" data-a="ioscopy">Copiar link</button><button class="btn" data-a="iostipx">Listo</button></div></div>';
+    }
+    function iosCopiar() {
+      var l = ''; try { l = localStorage.getItem('libreta:ultLink') || ''; } catch (e) {}
+      if (!l) return;
+      var manual = function () { prompt('Copiá el link (mantené apretado para seleccionarlo):', l); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(l).then(function () { toast('Link copiado. Ahora: Compartir → Agregar a inicio.'); }, manual); else manual();
     }
     function pegarActivacion() {
       var pedir = function (pre) { var t = prompt(esVet() ? 'Pegá acá el link del tambo' : 'Pegá acá el link que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) { if (/#libreta=/.test(t)) leerLibreta(t); else if (/#cargar=/.test(t)) leerPrecarga(t); else leerActivacion(t); } };
@@ -3666,7 +3681,7 @@
         if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); plegarNotas(main); return; }
         state.rp = null;
       }
-      var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
+      var err = iosTipHTML() + (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '');
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
       else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); }
       else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); }
@@ -3746,6 +3761,8 @@
       else if (a === 'actop') enviarActivacionRol('op');
       else if (a === 'vet') modoVet();
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
+      else if (a === 'ioscopy') iosCopiar();
+      else if (a === 'iostipx') { try { localStorage.setItem('libreta:iostip', '1'); } catch (e) {} render(); }
       else if (a === 'actcod') { var ic = $('#actCod'); activarCodigo(ic ? ic.value : ''); }
       else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
