@@ -615,7 +615,7 @@
       PERFIL = { nombre: t.nombre || '', logo: t.logo || '' };
       DB = { animales: [], cargada: null, archivo: '' };
       state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.n = 60; state.tab = 'panel';
-      state.ini21 = null; state.fsec = null; state.pev = null; state.abiertas = {};
+      state.ini21 = null; state.fsec = null; state.pev = null; state.insD0 = state.insD1 = state.insR = null; state.insSel = ''; state.abiertas = {};
       state.cat = 'todas';
       try { if (location.hash) location.hash = ''; } catch (e) {}
       return leerDB(id).then(function (o) { if (o && TAMBOS.activo === id) { DB = o; aplicarUnidad(); } return true; });
@@ -672,7 +672,7 @@
       state.destino = null;
       var t2 = tamboAct();
       PERFIL = { nombre: t2.nombre || nombre || '', logo: t2.logo || '' };
-      state.ini21 = null; state.fsec = null; state.pev = null;
+      state.ini21 = null; state.fsec = null; state.pev = null; state.insD0 = state.insD1 = state.insR = null; state.insSel = '';
       return cambio;
     }
     function quitarTambo(id) {
@@ -1282,6 +1282,169 @@
       }
       return h + '</section>';
     }
+    /* ----- Inseminadores: liquidación por número de servicio de las preñeces confirmadas en los tactos del período ----- */
+    var INS_B = [['1', '1er servicio'], ['2', '2º servicio'], ['3', '3er servicio'], ['4', '4º o más'], ['T', 'Toro']];
+    function insPrecios() { var p = null; try { p = JSON.parse(getP('insprec')); } catch (e) {} return p || { '1': null, '2': null, '3': null, '4': null, 'T': 0 }; }
+    function insTactosSesiones() {
+      var c = {}; Object.keys(DB.hist || {}).forEach(function (k) { (DB.hist[k].ta || []).forEach(function (t) { c[t[0]] = (c[t[0]] || 0) + 1; }); });
+      return Object.keys(c).filter(function (d) { return c[d] >= 3; }).sort();
+    }
+    function insFechas() {
+      if (!state.insD1) state.insD1 = getP('insd1');
+      if (!state.insD0) state.insD0 = getP('insd0');
+      if (!state.insD1 || !state.insD0) {
+        var S = insTactosSesiones(), last = S.length ? S[S.length - 1] : (DB.fecha || today());
+        state.insD1 = state.insD1 || last; state.insD0 = state.insD0 || A.addDays(state.insD1, -30);
+      }
+      return [state.insD0, state.insD1];
+    }
+    // cada preñez se paga una sola vez: en el primer tacto positivo posterior al servicio que la originó
+    function insCalc(d0, d1) {
+      var R = { items: [], tactos: {} }, L = [];
+      DB.animales.forEach(function (a) { if (DB.hist[a.rp]) L.push({ rp: a.rp, a: a, h: DB.hist[a.rp] }); });
+      (DB.bajas || []).forEach(function (b) { if (DB.hist[b.key]) L.push({ rp: b.rp, a: b, h: DB.hist[b.key], baja: true }); });
+      L.forEach(function (x) {
+        var h = x.h, ta = h.ta || [], ev = h.ev || [], pa = h.pa || [];
+        ta.forEach(function (t) {
+          if (t[0] < d0 || t[0] > d1 || !esPren(t[1])) return;
+          var lpf = '0000'; pa.forEach(function (p) { if (p[0] < t[0]) lpf = p[0]; });
+          var sv = ev.filter(function (e) { return e[1] === 'S' && e[0] > lpf && e[0] < t[0]; });
+          var ok = sv.filter(function (e) { return A.diffDays(t[0], e[0]) >= 25; }), conc = ok.length ? ok[ok.length - 1] : null;
+          var desde = conc ? conc[0] : lpf;
+          if (ta.some(function (u) { return u[0] > desde && u[0] < t[0] && esPren(u[1]); })) return; // reconfirmación: ya se pagó
+          var toro = !conc || /^(toro|monta|natural)\b/i.test(String(conc[2] || '').trim());
+          var n = conc ? sv.indexOf(conc) + 1 : null;
+          R.items.push({ rp: x.rp, a: x.a, baja: !!x.baja, t: t[0], s: conc ? conc[0] : null, n: n, toro: conc ? conc[2] || '' : '', ins: toro ? null : (String(conc[3] || '').trim() || 'Sin dato de inseminador'), b: toro ? 'T' : n >= 4 ? '4' : String(n) });
+          R.tactos[t[0]] = (R.tactos[t[0]] || 0) + 1;
+        });
+      });
+      R.items.sort(function (p, q) { return p.t < q.t ? -1 : p.t > q.t ? 1 : p.rp.localeCompare(q.rp, 'es', { numeric: true }); });
+      return R;
+    }
+    function insResumen(items, P) {
+      var r = { c: {}, m: {}, n: 0, tot: 0 };
+      INS_B.forEach(function (b) { r.c[b[0]] = 0; r.m[b[0]] = 0; });
+      items.forEach(function (it) { r.c[it.b]++; r.n++; });
+      INS_B.forEach(function (b) { r.m[b[0]] = r.c[b[0]] * (+P[b[0]] || 0); r.tot += r.m[b[0]]; });
+      return r;
+    }
+    function insLista() { return Object.keys((state.insR || { items: [] }).items.reduce(function (o, it) { if (it.ins) o[it.ins] = 1; return o; }, {})).sort(); }
+    function insSel() { var s = state.insSel || ''; return s && insLista().indexOf(s) < 0 ? '' : s; }
+    function insItemsSel() { var s = insSel(), R = state.insR || { items: [] }; return s ? R.items.filter(function (it) { return it.ins === s; }) : R.items; }
+    function pesos(n) { return '$ ' + Math.round(n || 0).toLocaleString('es-UY'); }
+    function insCSS() { if (document.getElementById('insCss')) return; var st = document.createElement('style'); st.id = 'insCss'; st.textContent = '.inscard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 12px}.inscard h4{margin:0 0 8px;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}.insper{display:grid;grid-template-columns:1fr 1fr;gap:10px}.insper label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}.insper input{width:100%;box-sizing:border-box;min-height:46px;font:inherit;font-size:16px;font-weight:700;color:var(--ink);padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);-webkit-appearance:none;appearance:none}.inspr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line)}.inspr:first-of-type{border-top:0}.inspr span{font-size:15.5px;font-weight:600;color:var(--ink)}.inspr .pin{display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:700}.inspr input{width:110px;box-sizing:border-box;min-height:44px;font:inherit;font-size:17px;font-weight:700;text-align:right;color:var(--ink);padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);-webkit-appearance:none;appearance:none}.insper input:focus,.inspr input:focus{border-color:var(--gold);outline:none}.inscalc{width:100%;margin:0 0 14px}.instot{display:flex;align-items:baseline;justify-content:space-between;gap:10px;background:var(--navy);color:#fff;border-radius:14px;padding:14px 16px;margin:10px 0 4px}.instot small{display:block;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);font-weight:700}.instot b{font-size:28px;font-variant-numeric:tabular-nums}.instot span{font-size:15px;opacity:.9;text-align:right}.instbl{margin:6px 0 12px}.instbl tr.tot td{font-size:16px}.insdet tr[data-rp]{cursor:pointer}.insbtns{display:grid;grid-template-columns:1fr;gap:8px;margin:4px 0 12px}.insses{margin:6px 0 10px;font-size:13.5px;color:var(--muted)}.insfb{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:56px;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;cursor:pointer;text-align:left}.insfb small{font-size:12.5px;font-weight:600;color:var(--muted)}.insfb b{font-size:17px;font-variant-numeric:tabular-nums}.insfb.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}.inscal{margin-top:12px}.ichead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}.ichead b{font-size:16px;text-transform:capitalize}.ichead button{width:44px;height:40px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:22px;cursor:pointer}.icgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.icw{text-align:center;font-size:12px;font-weight:700;color:var(--muted);padding:2px 0}.icd{position:relative;height:44px;border:0;border-radius:10px;background:transparent;color:var(--ink);font:inherit;font-size:15px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;font-variant-numeric:tabular-nums}.icd small{font-size:10px;font-weight:700;opacity:.85}.icd.icin{background:color-mix(in srgb,var(--gold) 14%,transparent)}.icd.ict{background:var(--gold);color:#14233F;font-weight:800}.icd.icend{box-shadow:0 0 0 2.5px var(--navy) inset}.icd.icsel{background:var(--navy);color:#fff}.icd.ict.icsel{box-shadow:0 0 0 3px var(--gold) inset}.icley{display:flex;align-items:center;gap:6px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.icdot{width:12px;height:12px;border-radius:4px;background:var(--gold);display:inline-block}@media (prefers-color-scheme:dark){.insper input,.inspr input{color-scheme:dark}.instot{border:1px solid var(--gold)}.icd.icend{box-shadow:0 0 0 2.5px var(--ink) inset}.icd.icsel{background:var(--ink);color:var(--bg)}}'; document.head.appendChild(st); }
+    // calendario propio: marca los días con tacto (con cuántos animales se tactaron) para elegir el período
+    function insTactosDias() { var c = {}; Object.keys(DB.hist || {}).forEach(function (k) { (DB.hist[k].ta || []).forEach(function (t) { c[t[0]] = (c[t[0]] || 0) + 1; }); }); return c; }
+    function insCalHTML(F) {
+      var k = state.insCal; if (!k) return '';
+      var sel = k === 'd0' ? F[0] : F[1], m = state.insCalM || sel.slice(0, 7), y = +m.slice(0, 4), mo = +m.slice(5, 7);
+      var C = insTactosDias(), MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+      var first = new Date(y, mo - 1, 1, 12), off = (first.getDay() + 6) % 7, dim = new Date(y, mo, 0).getDate();
+      var h = '<div class="inscal"><div class="ichead"><button data-icm="-1" aria-label="Mes anterior">‹</button><b>' + MES[mo - 1] + ' ' + y + '</b><button data-icm="1" aria-label="Mes siguiente">›</button></div>' +
+        '<div class="icgrid">' + ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(function (d) { return '<span class="icw">' + d + '</span>'; }).join('');
+      for (var i = 0; i < off; i++) h += '<span></span>';
+      for (var d = 1; d <= dim; d++) {
+        var f = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0'), n = C[f] || 0;
+        var cls = (n ? ' ict' : '') + (f === sel ? ' icsel' : '') + (f > F[0] && f < F[1] ? ' icin' : '') + (f === F[0] || f === F[1] ? ' icend' : '');
+        h += '<button class="icd' + cls + '" data-icd="' + f + '"' + (n ? ' aria-label="' + d + ', tacto de ' + n + ' animales"' : '') + '>' + d + (n ? '<small>' + n + '</small>' : '') + '</button>';
+      }
+      var meses = {}; Object.keys(C).forEach(function (f) { if (f.slice(0, 7) === m) meses[f] = C[f]; });
+      return h + '</div><p class="icley"><span class="icdot"></span> Día con tacto (número: animales tactados)</p></div>';
+    }
+    function insHTML() {
+      insCSS();
+      var key = 'insem', desp = !!(state.desp && state.desp[key]);
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>Inseminadores</h2><span class="count">$</span>' +
+        '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+      if (!desp) return h + '</section>';
+      if (!DB.hist) return h + '<p class="hint">Para liquidar a los inseminadores hace falta cargar el respaldo con el historial de servicios y tactos.</p></section>';
+      var F = insFechas(), P = insPrecios();
+      h += '<p class="secnote">Se paga cada preñez confirmada en los tactos del período, según el número de servicio en que quedó preñada. Cada preñez se paga una sola vez.</p>' +
+        '<div class="inscard"><h4>Período de tactos</h4><div class="insper">' + [['d0', 'Desde', F[0]], ['d1', 'Hasta', F[1]]].map(function (q) { return '<button class="insfb' + (state.insCal === q[0] ? ' on' : '') + '" data-icf="' + q[0] + '" aria-expanded="' + (state.insCal === q[0]) + '"><small>' + q[1] + '</small><b>' + A.fmt(q[2]) + '</b></button>'; }).join('') + '</div>' + insCalHTML(F) + '</div>' +
+        '<div class="inscard"><h4>Precio por preñez</h4>' + INS_B.map(function (b) {
+          return '<label class="inspr"><span>' + b[1] + '</span><span class="pin">$<input type="number" inputmode="decimal" min="0" data-ip="' + b[0] + '" value="' + (P[b[0]] != null ? P[b[0]] : '') + '" placeholder="0"></span></label>';
+        }).join('') + '</div>' +
+        '<button class="btn primary big inscalc" data-a="inscalc">Calcular</button>';
+      var R = state.insR;
+      if (R && R.d0 === F[0] && R.d1 === F[1]) {
+        var tk = Object.keys(R.tactos).sort();
+        h += '<p class="insses">Tactos que entran: ' + (tk.length ? tk.map(function (d) { return A.fmt(d).slice(0, 5) + ' (' + R.tactos[d] + ' preñ.)'; }).join(' · ') : 'ninguno con preñeces') + '</p>';
+        var I = insLista(), s = insSel();
+        if (I.length > 1) h += '<div class="filters" role="group" aria-label="Inseminador"><button class="fchip plain" data-insel="" aria-pressed="' + !s + '">Todos</button>' + I.map(function (k) { return '<button class="fchip plain" data-insel="' + esc(k) + '" aria-pressed="' + (s === k) + '">' + esc(k) + '</button>'; }).join('') + '</div>';
+        var its = insItemsSel(), r = insResumen(its, P);
+        h += '<div class="instot"><div><small>Total' + (s ? ' · ' + esc(s) : '') + '</small><b>' + pesos(r.tot) + '</b></div><span>' + r.n + (r.n === 1 ? ' preñez' : ' preñeces') + '</span></div>';
+        h += '<table class="tbl instbl"><thead><tr><th>Servicio</th><th>Preñadas</th><th>$ c/u</th><th>$</th></tr></thead><tbody>' +
+          INS_B.filter(function (b) { return b[0] !== 'T' || !s; }).map(function (b) { return '<tr><td>' + b[1] + '</td><td>' + r.c[b[0]] + '</td><td>' + (P[b[0]] != null && P[b[0]] !== '' ? nf(+P[b[0]]) : '–') + '</td><td>' + nf(r.m[b[0]]) + '</td></tr>'; }).join('') +
+          '<tr class="sep tot"><td><b>Total' + (s ? ' ' + esc(s) : '') + '</b></td><td><b>' + r.n + '</b></td><td></td><td><b>' + pesos(r.tot) + '</b></td></tr></tbody></table>';
+        if (!s && I.length > 1) {
+          h += '<h3 class="vh3">Por inseminador</h3><table class="tbl instbl"><thead><tr><th>Inseminador</th><th>Preñadas</th><th>$</th></tr></thead><tbody>' +
+            I.map(function (k) { var q = insResumen(R.items.filter(function (it) { return it.ins === k; }), P); return '<tr><td><b>' + esc(k) + '</b></td><td>' + q.n + '</td><td>' + nf(q.tot) + '</td></tr>'; }).join('') + '</tbody></table>';
+        }
+        if (INS_B.some(function (b) { return b[0] !== 'T' && (P[b[0]] == null || P[b[0]] === ''); })) h += '<p class="hint">Faltan precios: cargalos arriba y tocá Calcular.</p>';
+        h += '<div class="insbtns"><button class="btn share" data-a="inswa"' + (r.n ? '' : ' disabled') + '>Enviar comprobante por WhatsApp</button><button class="btn share" data-a="instk"' + (r.n ? '' : ' disabled') + '>Ticket (imagen)</button></div>';
+        var ab = !!state.insVer;
+        h += '<button class="despbtn" data-a="insver" aria-expanded="' + ab + '"><span>Ver las ' + its.length + ' vacas</span><span class="chev">' + (ab ? 'ocultar' : 'ver') + '</span></button>';
+        if (ab) h += '<table class="tbl instbl insdet"><thead><tr><th>Caravana</th><th>Serv.</th><th>Fecha serv.</th><th>Tacto</th></tr></thead><tbody>' + its.map(function (it) {
+          return '<tr' + (it.baja ? '' : ' data-rp="' + esc(it.rp) + '"') + '><td><b>' + esc(it.rp) + '</b>' + (it.baja ? ' <small>baja</small>' : '') + (!s && it.ins ? '<br><small>' + esc(it.ins) + '</small>' : '') + '</td><td>' + (it.b === 'T' ? 'Toro' : it.n) + '</td><td>' + (it.s ? A.fmt(it.s).slice(0, 5) : '–') + (it.toro && it.b !== 'T' ? '<br><small>' + esc(it.toro) + '</small>' : '') + '</td><td>' + A.fmt(it.t).slice(0, 5) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      }
+      return h + '</section>';
+    }
+    function insTitulo() { var s = insSel(); return 'Liquidación inseminación' + (s ? ' — ' + s : ''); }
+    function insComprobanteWA() {
+      var R = state.insR; if (!R) return;
+      var P = insPrecios(), s = insSel(), its = insItemsSel(), r = insResumen(its, P);
+      var txt = '*' + insTitulo() + '*\n' + (PERFIL.nombre ? PERFIL.nombre + '\n' : '') + 'Tactos del ' + A.fmt(R.d0) + ' al ' + A.fmt(R.d1) + '\n\n' +
+        INS_B.filter(function (b) { return (b[0] !== 'T' || !s) && r.c[b[0]]; }).map(function (b) { return b[1] + ': ' + r.c[b[0]] + ' × ' + pesos(+P[b[0]] || 0) + ' = ' + pesos(r.m[b[0]]); }).join('\n') +
+        '\n\n*Total: ' + r.n + (r.n === 1 ? ' preñez' : ' preñeces') + ' · ' + pesos(r.tot) + '*';
+      if (!s) { var I = insLista(); if (I.length > 1) txt += '\n\n' + I.map(function (k) { var q = insResumen(R.items.filter(function (it) { return it.ins === k; }), P); return k + ': ' + q.n + ' · ' + pesos(q.tot); }).join('\n'); }
+      txt += '\n\nEmitido ' + A.fmt(today()) + ' · Libreta de vacas';
+      if (navigator.share) navigator.share({ text: txt }).catch(function () {});
+      else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+    }
+    // ticket: imagen tipo recibo (PNG) para compartir o guardar
+    function insTicket() {
+      var R = state.insR; if (!R) return;
+      var P = insPrecios(), s = insSel(), its = insItemsSel(), r = insResumen(its, P), I = s ? [] : insLista();
+      var filas = INS_B.filter(function (b) { return (b[0] !== 'T' || !s); });
+      var W = 720, pad = 48, lh = 46, H = 2400;
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      var g = cv.getContext('2d'), navy = '#1B2A4A', gold = '#B8963E', mut = '#5f6b7a';
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+      g.fillStyle = navy; g.fillRect(0, 0, W, 10);
+      var y = 70, txt = function (t, x, al, font, col) { g.font = font; g.fillStyle = col || navy; g.textAlign = al; g.fillText(t, x, y); };
+      var linea = function (dash) { g.strokeStyle = '#c9ced6'; g.lineWidth = 2; g.setLineDash(dash ? [8, 8] : []); g.beginPath(); g.moveTo(pad, y); g.lineTo(W - pad, y); g.stroke(); g.setLineDash([]); };
+      txt('LIQUIDACIÓN INSEMINACIÓN', W / 2, 'center', 'bold 32px system-ui,sans-serif'); y += 42;
+      if (PERFIL.nombre) { txt(PERFIL.nombre, W / 2, 'center', '600 26px system-ui,sans-serif', gold); y += 38; }
+      if (s) { txt('Inseminador: ' + s, W / 2, 'center', 'bold 26px system-ui,sans-serif'); y += 38; }
+      txt('Tactos del ' + A.fmt(R.d0) + ' al ' + A.fmt(R.d1), W / 2, 'center', '24px system-ui,sans-serif', mut); y += 30;
+      linea(true); y += 44;
+      txt('Servicio', pad, 'left', 'bold 22px system-ui,sans-serif', mut); txt('Cant.', 360, 'right', 'bold 22px system-ui,sans-serif', mut); txt('$ c/u', 500, 'right', 'bold 22px system-ui,sans-serif', mut); txt('$', W - pad, 'right', 'bold 22px system-ui,sans-serif', mut); y += lh;
+      filas.forEach(function (b) {
+        txt(b[1], pad, 'left', '26px system-ui,sans-serif'); txt(String(r.c[b[0]]), 360, 'right', '26px system-ui,sans-serif'); txt(nf(+P[b[0]] || 0), 500, 'right', '26px system-ui,sans-serif', mut); txt(nf(r.m[b[0]]), W - pad, 'right', '26px system-ui,sans-serif'); y += lh;
+      });
+      y -= 18; linea(false); y += 50;
+      txt('TOTAL', pad, 'left', 'bold 32px system-ui,sans-serif'); txt(String(r.n), 360, 'right', 'bold 30px system-ui,sans-serif'); txt(pesos(r.tot), W - pad, 'right', 'bold 34px system-ui,sans-serif'); y += 30;
+      if (I.length > 1) {
+        linea(true); y += 44; txt('Por inseminador', pad, 'left', 'bold 22px system-ui,sans-serif', mut); y += lh;
+        I.forEach(function (k) { var q = insResumen(R.items.filter(function (it) { return it.ins === k; }), P); txt(k, pad, 'left', '26px system-ui,sans-serif'); txt(String(q.n), 360, 'right', '26px system-ui,sans-serif'); txt(pesos(q.tot), W - pad, 'right', '26px system-ui,sans-serif'); y += lh; });
+        y -= 16;
+      }
+      y += 30; linea(true); y += 40;
+      txt('Emitido ' + A.fmt(today()), W / 2, 'center', '20px system-ui,sans-serif', mut); y += 30;
+      txt('Libreta de vacas · Dr. Mauro Torterolo', W / 2, 'center', '20px system-ui,sans-serif', mut);
+      // se recorta a lo dibujado (el alto depende de cuántas líneas lleva el encabezado y de cuántos inseminadores hay)
+      var Hf = Math.ceil(y + 36), cf = document.createElement('canvas'); cf.width = W; cf.height = Hf;
+      var gf = cf.getContext('2d'); gf.drawImage(cv, 0, 0); gf.fillStyle = gold; gf.fillRect(0, Hf - 10, W, 10); cv = cf;
+      var nombre = ('Ticket inseminacion ' + (s ? s + ' ' : '') + (PERFIL.nombre || '') + ' ' + R.d1).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
+      cv.toBlob(function (bl) {
+        if (!bl) { toast('No se pudo armar el ticket.'); return; }
+        var file = null; try { file = new File([bl], nombre, { type: 'image/png' }); } catch (e) {}
+        var guardar = function () { var u = URL.createObjectURL(bl), el = document.createElement('a'); el.href = u; el.download = nombre; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Ticket guardado en Descargas'); };
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
+        else guardar();
+      }, 'image/png');
+    }
     function tareasHTML() {
       var t = A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), state.ventana), vtxt = (VENT.filter(function (v) { return v[0] === state.ventana; })[0] || [0, ''])[1];
       var fs = fechaSecado(), sec = listaSecado(fs);
@@ -1306,7 +1469,7 @@
         }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
         secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca cumple el criterio de venta.');
+        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML();
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -3528,6 +3691,10 @@
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
+      if ((el = e.target.closest('[data-icf]'))) { var kf = el.dataset.icf; state.insCal = state.insCal === kf ? null : kf; var Fq = insFechas(); state.insCalM = (kf === 'd0' ? Fq[0] : Fq[1]).slice(0, 7); render(); return; }
+      if ((el = e.target.closest('[data-icm]'))) { var mm = (state.insCalM || insFechas()[1].slice(0, 7)).split('-').map(Number), dt = new Date(mm[0], mm[1] - 1 + (+el.dataset.icm), 1, 12); state.insCalM = A.ymd(dt).slice(0, 7); render(); return; }
+      if ((el = e.target.closest('[data-icd]'))) { var kd = state.insCal === 'd0' ? 'insD0' : 'insD1'; state[kd] = el.dataset.icd; setP(kd.toLowerCase(), el.dataset.icd); if (state.insCal === 'd0') { state.insCal = 'd1'; state.insCalM = insFechas()[1].slice(0, 7); } else state.insCal = null; render(); return; }
+      if ((el = e.target.closest('[data-insel]'))) { state.insSel = el.dataset.insel; render(); return; }
       if ((el = e.target.closest('[data-sec]'))) { A.setSecado(+el.dataset.sec); try { localStorage.setItem('libreta:secado', el.dataset.sec); } catch (x) {} render(); return; }
       if ((el = e.target.closest('[data-plg]'))) { var sec = el.parentNode, ab = !sec.classList.contains('open'); sec.classList.toggle('open', ab); el.setAttribute('aria-expanded', ab); if (ab) FICHA_AB[el.dataset.plg] = 1; else delete FICHA_AB[el.dataset.plg]; return; }
       if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; render(); return; }
@@ -3593,6 +3760,10 @@
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
+      else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
+      else if (a === 'inswa') insComprobanteWA();
+      else if (a === 'instk') insTicket();
+      else if (a === 'insver') { state.insVer = !state.insVer; render(); }
       else if (a === 'uok') cerrarUnidad(idsMarcados());
       else if (a === 'ucancel') cerrarUnidad(null);
     });
@@ -3602,6 +3773,8 @@
       if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
       if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.toro, e.target.checked); state.pobToroAb = true; render(); return; }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
+      if ((e.target.id === 'insd0' || e.target.id === 'insd1') && e.target.value) { var k = e.target.id === 'insd0' ? 'insD0' : 'insD1'; state[k] = e.target.value; setP(k.toLowerCase(), e.target.value); render(); return; }
+      if (e.target.dataset && e.target.dataset.ip) { var Pp = insPrecios(), v = parseFloat(String(e.target.value).replace(',', '.')); Pp[e.target.dataset.ip] = isFinite(v) && v >= 0 ? v : null; setP('insprec', JSON.stringify(Pp)); if (state.insR) render(); return; }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
     document.addEventListener('input', function (e) {
