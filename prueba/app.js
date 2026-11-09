@@ -1407,7 +1407,7 @@
       var R = state.insR; if (!R) return;
       var P = insPrecios(), s = insSel(), its = insItemsSel(), r = insResumen(its, P), I = s ? [] : insLista();
       var filas = INS_B.filter(function (b) { return (b[0] !== 'T' || !s); });
-      var W = 720, pad = 48, lh = 46, H = 470 + filas.length * lh + (I.length > 1 ? 80 + I.length * lh : 0);
+      var W = 720, pad = 48, lh = 46, H = 2400;
       var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
       var g = cv.getContext('2d'), navy = '#1B2A4A', gold = '#B8963E', mut = '#5f6b7a';
       g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
@@ -1433,7 +1433,9 @@
       y += 30; linea(true); y += 40;
       txt('Emitido ' + A.fmt(today()), W / 2, 'center', '20px system-ui,sans-serif', mut); y += 30;
       txt('Libreta de vacas · Dr. Mauro Torterolo', W / 2, 'center', '20px system-ui,sans-serif', mut);
-      g.fillStyle = gold; g.fillRect(0, H - 10, W, 10);
+      // se recorta a lo dibujado (el alto depende de cuántas líneas lleva el encabezado y de cuántos inseminadores hay)
+      var Hf = Math.ceil(y + 36), cf = document.createElement('canvas'); cf.width = W; cf.height = Hf;
+      var gf = cf.getContext('2d'); gf.drawImage(cv, 0, 0); gf.fillStyle = gold; gf.fillRect(0, Hf - 10, W, 10); cv = cf;
       var nombre = ('Ticket inseminacion ' + (s ? s + ' ' : '') + (PERFIL.nombre || '') + ' ' + R.d1).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
       cv.toBlob(function (bl) {
         if (!bl) { toast('No se pudo armar el ticket.'); return; }
