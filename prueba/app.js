@@ -1763,7 +1763,20 @@
       [refA, refB].forEach(function (d, i) { if (i === 0 ? d >= dH : (dH === '0000' || d >= A.addDays(dH, 365))) { var v = rodeoPrenHist(L, d, pev); if (v != null) vA.push(v); } });
       if (vA.length) { R.prA = vA.reduce(function (a, b) { return a + b; }, 0) / vA.length; R.prAn = vA.length; R.prAv = vA; }
       // 3) último diagnóstico de gestación (tacto) cargado, y vacas y vaquillonas pendientes de tacto
-      var ut = null; DB.animales.forEach(function (a) { var h = DB.hist[a.rp]; if (h && h.ta) h.ta.forEach(function (t) { if (t[0] <= ref && (!ut || t[0] > ut)) ut = t[0]; }); });
+      // último día de tacto real: al menos 5 vacas en ordeñe tactadas ese día (no cuentan vaquillonas, secas ni diagnósticos sueltos
+      // como un aborto cargado en la tabla de tactos)
+      var TMIN = 5, porDia = {}, ut = null;
+      DB.animales.forEach(function (a) {
+        var h = DB.hist[a.rp]; if (!h || !h.ta) return;
+        h.ta.forEach(function (t) {
+          if (t[0] > ref) return;
+          var lp = null; (h.pa || []).forEach(function (p) { if (p[0] < t[0]) lp = p; });
+          if (!lp || (lp[5] && lp[5] <= t[0])) return; // sin parto (vaquillona) o ya secada
+          porDia[t[0]] = (porDia[t[0]] || 0) + 1;
+        });
+      });
+      Object.keys(porDia).forEach(function (d) { if (porDia[d] >= TMIN && (!ut || d > ut)) ut = d; });
+      R.ultTactoN = ut ? porDia[ut] : null;
       R.ultTacto = ut;
       try { R.nTactar = A.tareas(DB.animales.filter(function (a) { return a.cat !== 'ternera'; }), today(), 30).tactar.length; } catch (e) { R.nTactar = null; }
       // 4) leche: litros por vaca del último mes con control, contra el mismo mes del año anterior
@@ -1819,11 +1832,11 @@
       }
       // 4) último diagnóstico: amarillo desde 21 días, rojo con más de 30
       var t4;
-      if (!R.ultTacto) t4 = tile('g', 'tactar', 'Último tacto', '–', 'Sin tactos cargados', '');
+      if (!R.ultTacto) t4 = tile('g', 'tactar', 'Último tacto', '–', 'Sin tactos de vacas en ordeñe', '');
       else {
         var dt = A.diffDays(today(), R.ultTacto), s3 = dt > 30 ? 'r' : dt >= 21 ? 'a' : 'v';
         if (dt >= 21) avisos.push([s3 === 'r' ? 'mal' : 'at', 'Pasaron ' + dt + ' días desde el último tacto: coordiná la visita para el diagnóstico']);
-        t4 = tile(s3, 'tactar', 'Último tacto', dt + '<small> ' + (dt === 1 ? 'día' : 'días') + '</small>', 'Desde el ' + A.fmt(R.ultTacto).slice(0, 5),
+        t4 = tile(s3, 'tactar', 'Último tacto', dt + '<small> ' + (dt === 1 ? 'día' : 'días') + '</small>', 'Desde el ' + A.fmt(R.ultTacto).slice(0, 5) + (R.ultTactoN ? ' · ' + R.ultTactoN + ' vacas' : ''),
           R.nTactar != null ? n0(R.nTactar) + ' para tactar' : '');
       }
       var hayMal = avisos.some(function (x) { return x[0] === 'mal'; });
@@ -1831,7 +1844,7 @@
         ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
         : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
       return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' +
-        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: amarillo desde 21 días, rojo con más de 30.</p>';
+        '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: último día en que se tactaron 5 vacas en ordeñe o más (no cuentan vaquillonas, secas ni registros sueltos, como un aborto cargado como tacto); amarillo desde 21 días, rojo con más de 30.</p>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
