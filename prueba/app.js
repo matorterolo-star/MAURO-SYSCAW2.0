@@ -2616,7 +2616,7 @@
     function shLimpio(sec) {
       var c = sec.cloneNode(true);
       c.classList.add('open'); c.style.cssText = 'border:0;padding:0;margin:0;background:transparent;box-shadow:none';
-      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2'), function (x) { x.remove(); });
+      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2,.clclave'), function (x) { x.remove(); });
       Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
       return c;
     }
@@ -2860,7 +2860,7 @@
     }
     var CL_PER = [['12', '12 meses'], ['24', '24 meses'], ['h', 'Histórico']];
     function curvasHTML() {
-      if (!document.getElementById('clCss')) { var st = document.createElement('style'); st.id = 'clCss'; st.textContent = ':root{--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86}@media (prefers-color-scheme:dark){:root{--cl1:#E3B84A;--cl2:#7FA8EE;--clm:#5FD0D8}}.clp{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.cltbl{font-size:14px}.cltbl th,.cltbl td{padding-left:4px;padding-right:4px}.cltbl td small{color:var(--muted);font-weight:600}.cltbl tr[data-clmes]{cursor:pointer}.cltbl tr.on td{background:color-mix(in srgb,var(--clm) 16%,transparent)}.cltbl tr.clvac td{color:var(--muted)}'; document.head.appendChild(st); }
+      if (!document.getElementById('clCss')) { var st = document.createElement('style'); st.id = 'clCss'; st.textContent = ':root{--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86}@media (prefers-color-scheme:dark){:root{--cl1:#E3B84A;--cl2:#7FA8EE;--clm:#5FD0D8}}.clp{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.cltbl{font-size:14px}.cltbl th,.cltbl td{padding-left:4px;padding-right:4px}.cltbl td small{color:var(--muted);font-weight:600}.cltbl tr[data-clmes]{cursor:pointer}.cltbl tr.on td{background:color-mix(in srgb,var(--clm) 16%,transparent)}.clclave{margin:6px 0 0;font-size:14px;color:var(--ink);line-height:1.45}.cltbl tr.clvac td,.cltbl tr.clpoco td{color:var(--muted)}.cltbl tr.clpoco td b{color:var(--muted)}.cltbl th small{font-weight:600}'; document.head.appendChild(st); }
       var T = curvasTambo(); if (!T.L.length) return '';
       var per = state.clPer || '12', g = state.clG || 2, ref = (DB.fecha || today()).slice(0, 7);
       var mesesAtras = function (n) { var y = +ref.slice(0, 4), m = +ref.slice(5, 7) - n; while (m < 1) { m += 12; y--; } return y + '-' + pad2(m); };
@@ -2880,27 +2880,27 @@
       var h = '<section class="card"><h2>Curva de lactancia</h2>' +
         '<div class="filters" role="group" aria-label="Período de partos">' + CL_PER.map(function (c) { return '<button class="fchip" data-clper="' + c[0] + '" aria-pressed="' + (per === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
         '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
-        clChart(ser);
-      var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') + '<br><small>' + nf(r.pd / r.pn, 0) + ' d</small>' : '–'; };
+        clChart(ser) + (CLAVE['Curva de lactancia'] ? '<p class="clclave">' + CLAVE['Curva de lactancia'].split('\n').map(esc).join('<br>') + '</p>' : '');
+      var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') : '–'; };
       var tot = clSuma(Lg), est = per === '12';
       // sólidos: solo si la mayoría de las lactancias con total tienen análisis regulares (4 controles o más con grasa y proteína)
       var conSol = est ? tot.tn + tot.en >= 5 && (tot.gn + tot.esn) / (tot.tn + tot.en) >= 0.5 : tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
-      var litros = function (r) {
-        var n = r.tn + (est ? r.en : 0); if (!n) return '–';
-        return nf((r.t + (est ? r.e : 0)) / n) + '<br><small>' + (est && r.en ? 'est. · ' : '') + n + ' lact.</small>';
-      };
-      var solidos = function (r) { var n = r.gn + (est ? r.esn : 0); return n >= 3 ? nf((r.gs + (est ? r.es : 0)) / n) + '<br><small>' + (est && r.esn ? 'est. · ' : '') + n + ' lact.</small>' : '–'; };
+      // Lact. = lactancias con las que se calculan litros y sólidos; con menos de 10 la fila va en gris
+      var nL = function (r) { return r.tn + (est ? r.en : 0); };
+      var litros = function (r) { var n = nL(r); return n ? nf((r.t + (est ? r.e : 0)) / n) : '–'; };
+      var solidos = function (r) { var n = r.gn + (est ? r.esn : 0); return n >= 3 ? nf((r.gs + (est ? r.es : 0)) / n) : '–'; };
       h += '<h3 class="vh3">Por mes de parto</h3><div class="filters" role="group" aria-label="Lactancia">' + [[2, 'Multíparas'], [1, 'Primíparas']].map(function (c) { return '<button class="fchip" data-clg="' + c[0] + '" aria-pressed="' + (g === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
-        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d</th>' + (conSol ? '<th>Kg sólidos</th>' : '') + '</tr></thead><tbody>' +
+        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d' + (est ? ' <small>(est.)</small>' : '') + '</th>' + (conSol ? '<th>Kg sólidos' + (est ? ' <small>(est.)</small>' : '') + '</th>' : '') + '</tr></thead><tbody>' +
         filasMes.map(function (x) {
           var nomM = A.MESES[x.m - 1] + (x.y ? ' <small>' + x.y + '</small>' : '');
           if (!x.r.n) return '<tr class="clvac"><td>' + nomM + '</td><td>0</td><td colspan="' + (conSol ? 3 : 2) + '"></td></tr>';
-          return '<tr data-clmes="' + x.m + '"' + (mesSel === x.m ? ' class="on"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(x.r.n) + '</td><td>' + pico(x.r) + '</td><td>' + litros(x.r) + '</td>' + (conSol ? '<td>' + solidos(x.r) + '</td>' : '') + '</tr>';
+          var cls = [mesSel === x.m ? 'on' : '', nL(x.r) < 10 ? 'clpoco' : ''].filter(Boolean).join(' ');
+          return '<tr data-clmes="' + x.m + '"' + (cls ? ' class="' + cls + '"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(nL(x.r)) + '</td><td>' + pico(x.r) + '</td><td>' + litros(x.r) + '</td>' + (conSol ? '<td>' + solidos(x.r) + '</td>' : '') + '</tr>';
         }).join('') +
-        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(tot.n) + '</b></td><td>' + pico(tot) + '</td><td><b>' + litros(tot) + '</b></td>' + (conSol ? '<td><b>' + solidos(tot) + '</b></td>' : '') + '</tr></tbody></table>';
+        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(nL(tot)) + '</b></td><td>' + pico(tot) + '</td><td><b>' + litros(tot) + '</b></td>' + (conSol ? '<td><b>' + solidos(tot) + '</b></td>' : '') + '</tr></tbody></table>';
       h += '<p class="cap">Lactancias de las vacas que parieron ' + (per === 'h' ? 'desde ' + A.MESES[+T.desde.slice(5, 7) - 1] + ' ' + T.desde.slice(0, 4) : 'en los últimos ' + per + ' meses (hasta ' + A.MESES[+ref.slice(5, 7) - 1] + ' ' + ref.slice(0, 4) + ')') +
-        ', con al menos un control lechero (Lact. = lactancias evaluadas). Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
-        'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
+        ', con al menos un control lechero. Lact.: las lactancias con las que se calculan los litros y los sólidos (las que llegaron a 305 días o se secaron antes' + (est ? ', y las que están en curso, estimadas' : '') + '); en gris, los meses con menos de 10. Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
+        'Pico: el control más alto hasta los 120 días (los días al pico están debajo del gráfico), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
         'Litros 305 d: como en el control lechero (ICAR), los primeros 305 días según ' + SRC() + ', o el total real si la vaca se secó antes' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
         (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias terminaron antes de los 305 días por venta o muerte</b>, con ' + nf(tot.cs / tot.cn) + ' L de promedio: no entran en la columna, porque reflejan el descarte y no la producción. ' : '') +
         'Kg sólidos: litros a 305 días × el % de grasa + proteína de los controles de cada vaca, en lactancias con 4 análisis o más' + (est ? ' (las en curso, con los que ya tienen)' : '') + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
