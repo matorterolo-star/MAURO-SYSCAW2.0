@@ -833,7 +833,7 @@
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
           if ((!d.tambo || externo(d.origen)) && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
-          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
+          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], curvas: d.curvas || null, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
           if (!r) return;
@@ -2068,13 +2068,28 @@
     }
     function selMesHTML(G, id) { return '<label class="secfecha">Hasta el mes <input type="month" id="' + id + '" value="' + G.fin + '"' + (G.minMes ? ' min="' + G.minMes + '"' : '') + ' max="' + G.maxMes + '"></label>'; }
     // Partos ocurridos en los 12 meses: vacas y vaquillonas (sin abortos), en % de la vaca masa promedio
+    // resumen de las crías de Partos ocurridos: hembras y machos de vacas y de vaquillonas
+    function sexoHTML(SX) {
+      var T = { m: SX.v.m + SX.q.m, h: SX.v.h + SX.q.h, sd: SX.v.sd + SX.q.sd, mel: SX.v.mel + SX.q.mel };
+      if (!T.m && !T.h) return '';
+      var pH = function (x) { var n = x.m + x.h; return n ? nf(x.h / n * 100, 0) + '%' : '–'; };
+      var fila = function (nom, x, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + nom + '</td><td>' + nf(x.h) + '</td><td>' + nf(x.m) + '</td><td><b>' + pH(x) + '</b></td></tr>'; };
+      return '<h3 class="vh3">Crías: hembras y machos</h3><table class="tbl"><thead><tr><th></th><th>Hembras</th><th>Machos</th><th>% hembras</th></tr></thead><tbody>' +
+        fila('Partos de vacas', SX.v) + fila('Partos de vaquillonas', SX.q) + fila('<b>Total</b>', T, 'sep tot') + '</tbody></table>' +
+        '<p class="cap">Cuenta cada cría' + (T.mel ? ' (hubo ' + T.mel + (T.mel === 1 ? ' parto de mellizos' : ' partos de mellizos') + ')' : '') + (T.sd ? '; ' + T.sd + (T.sd === 1 ? ' cría sin sexo anotado' : ' crías sin sexo anotado') : '') + '. El % de hembras es sobre las crías con sexo anotado.</p>';
+    }
     function partosOcHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var G = rangoVO(), M = G.M, keys = M.map(function (x) { return x.key; }), pv = M.map(function () { return 0; }), pq = pv.slice(), ab = 0;
+      var SX = { v: { m: 0, h: 0, sd: 0, mel: 0 }, q: { m: 0, h: 0, sd: 0, mel: 0 } };
       infLista().forEach(function (x) { x.h.pa.forEach(function (p) {
         var k = keys.indexOf(p[0].slice(0, 7)); if (k < 0 || !enSel(unidadEn(x, p[0]))) return;
         if (/^A/.test(p[2] || '')) { ab++; return; }
         if (p[1] === 1) pq[k]++; else pv[k]++;
+        // sexo de las crías (mellizos: cuenta cada cría)
+        var cs = SX[p[1] === 1 ? 'q' : 'v'], cr = String(p[2] || '').split('/').filter(Boolean);
+        if (cr.length > 1) cs.mel++;
+        if (!cr.length) cs.sd++; cr.forEach(function (c) { if (c === 'M') cs.m++; else if (c === 'H') cs.h++; else cs.sd++; });
       }); });
       var tv = pv.reduce(function (a, b) { return a + b; }, 0), tq = pq.reduce(function (a, b) { return a + b; }, 0);
       var vms = G.R.vm.filter(function (v) { return v != null; }), vm = vms.length ? vms.reduce(function (a, b) { return a + b; }, 0) / vms.length : null;
@@ -2095,6 +2110,7 @@
         '<div class="kpis kpis2"><div><b>' + nf(tv) + '</b><span>Partos de vacas · ' + pc(tv) + '</span></div><div><b>' + nf(tq) + '</b><span>Partos de vaquillonas · ' + pc(tq) + '</span></div></div>' +
         '<div class="mleg"><span><i class="v"></i>Vacas</span><span><i class="q"></i>Vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos ocurridos por mes, vacas y vaquillonas">' + s + '</svg>' +
+        sexoHTML(SX) +
         '<p class="cap">Partos de los 12 meses que terminan en ' + A.MESES[G.m - 1] + ' ' + G.y + ', sin abortos' + (ab ? ' (hubo ' + ab + ')' : '') + '. Los % son sobre la vaca masa promedio de esos meses (ordeñe + secas: ' + (vm != null ? nf(vm) : '–') + '). El mes del respaldo puede estar incompleto.</p></section>';
     }
     function vovsHTML() {
@@ -2536,6 +2552,57 @@
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
     var FICHA_AB = {};
+    /* ----- modo veterinario: compartir una tarjeta como imagen (para mandar por WhatsApp) ----- */
+    function vetCompartir(main) {
+      if (!esVet()) return;
+      if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}'; document.head.appendChild(st); }
+      Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
+        if (!sec.querySelector('h2') || sec.querySelector('.shbtn')) return;
+        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Compartir como imagen</button>');
+      });
+    }
+    function cargarH2C() {
+      if (root.html2canvas) return Promise.resolve(root.html2canvas);
+      return new Promise(function (ok, mal) { var sc = document.createElement('script'); sc.src = 'html2canvas.min.js?v=1'; sc.onload = function () { ok(root.html2canvas); }; sc.onerror = function () { mal(new Error('sin conexión')); }; document.head.appendChild(sc); });
+    }
+    function compartirPNG(bl, nombre) {
+      var file = null; try { file = new File([bl], nombre, { type: 'image/png' }); } catch (e) {}
+      var guardar = function () { var u = URL.createObjectURL(bl), el = document.createElement('a'); el.href = u; el.download = nombre; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Imagen guardada en Descargas'); };
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
+      else guardar();
+    }
+    function compartirCard(sec) {
+      var titulo = (sec.querySelector('h2') || {}).textContent || 'Libreta';
+      busy(true, 'Armando la imagen…');
+      cargarH2C().then(function (h2c) {
+        var w = document.createElement('div');
+        w.className = 'shot';
+        w.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;padding:14px;background:#EEF2F7;color-scheme:light;font-family:var(--sans);' +
+          '--bg:#EEF2F7;--surface:#FFFFFF;--ink:#0D1A33;--muted:#53627B;--line:#D3DBE7;--navy:#12274A;--on-navy:#FFFFFF;--gold:#C9A227;--link:#1F4FA3;--prenada:#16794A;--servida:#6B3FA0;--vacia:#B3261E;--ciclando:#2457A6;--apta:#8A6510;--sin:#53627B;--descarte:#B3261E;--bar:#9FB0CC;--bar-last:#12274A;--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86';
+        var c = sec.cloneNode(true);
+        c.classList.add('open');
+        Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns'), function (x) { x.remove(); });
+        Array.prototype.forEach.call(c.querySelectorAll('input,select'), function (x) {
+          var v = x.value || '', b = document.createElement('b');
+          if (x.type === 'month' && /^\d{4}-\d{2}$/.test(v)) v = A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4);
+          else if (x.type === 'date' && v) v = A.fmt(v);
+          else if (x.tagName === 'SELECT' && x.selectedOptions[0]) v = x.selectedOptions[0].textContent;
+          b.textContent = v; b.style.cssText = 'font-size:16px;color:#0D1A33'; x.replaceWith(b);
+        });
+        w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:20px;font-weight:800">' + esc(PERFIL.nombre || 'Libreta de vacas') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>';
+        w.appendChild(c);
+        w.insertAdjacentHTML('beforeend', '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>');
+        document.body.appendChild(w);
+        var fin = function () { w.remove(); };
+        return h2c(w, { scale: 2, backgroundColor: '#EEF2F7', logging: false, useCORS: true,
+          // la imagen sale siempre en colores claros: en la copia que dibuja html2canvas se apagan las reglas del modo oscuro
+          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } }).then(function (cv) {
+          fin();
+          var nombre = (titulo + ' ' + (PERFIL.nombre || '') + ' ' + (DB.fecha || today())).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
+          cv.toBlob(function (bl) { busy(false); if (!bl) { toast('No se pudo armar la imagen.'); return; } compartirPNG(bl, nombre); }, 'image/png');
+        }, function (e) { fin(); throw e; });
+      }).catch(function (e) { busy(false); toast(e && e.message === 'sin conexión' ? 'Para armar la imagen la primera vez hace falta internet.' : 'No se pudo armar la imagen.'); });
+    }
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
@@ -2647,15 +2714,116 @@
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
       var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = (a - b) / b * 100; return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 0) + '%</small>'; };
       var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td><td>' + d(m.prev) + '</td><td>' + d(m.hist) + '</td></tr>'; }).join('');
-      return '<section class="card fijo"><h2>Últimos 12 meses</h2>' + chips +
+      return '<section class="card"><h2>Últimos 12 meses</h2>' + chips +
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
         '<p class="cap">' + nombre[med] + (DB.origen === 'delpro' ? ' según la producción diaria de cada vaca en DelPro (medidores), resumida por semana; el mes es el promedio de sus semanas.' : ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian.') + ' El % compara con el mismo mes del año anterior.</p></section>';
     }
+    /* ----- curvas de lactancia por mes de parto (primíparas y multíparas) ----- */
+    var CLC = { k: null, r: null };
+    // SysCaw trae los promedios armados con todo el historial; las otras bases (o respaldos viejos) se arman con los controles de la libreta
+    function curvasTambo() {
+      var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '');
+      if (CLC.k === k) return CLC.r;
+      var C = DB.curvas, desdeLib = false;
+      if (!C || !Object.keys(C).length) {
+        C = {}; desdeLib = true;
+        if (root.SysCaw && root.SysCaw.curvaLact) {
+          var pend = [], ref = DB.fecha || today();
+          infLista().forEach(function (x) {
+            var la = {}; (x.h.la || []).forEach(function (l) { la[l[0]] = l; });
+            var pa = x.h.pa.filter(function (p) { return p[1] > 0; }).map(function (p) {
+              var l = la[p[1]], L = l && l[1] > 0 ? l[1] : null, ok = l && l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
+              return { f: p[0], n: p[1], cierre: p[5] || null, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
+            });
+            var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], c[2] > 0 && c[3] > 0 ? 1 : 0]; });
+            if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; }, ref, pend);
+          });
+          root.SysCaw.curvaProy(C, pend);
+        }
+      }
+      var L = Object.keys(C).filter(function (key) { var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
+      CLC = { k: k, r: { L: L, desdeLib: desdeLib, desde: L.reduce(function (a, x) { return !a || x.m < a ? x.m : a; }, '') } };
+      return CLC.r;
+    }
+    function clSuma(lista) {
+      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, cs: 0, cn: 0 };
+      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; ['t', 'tn', 'gs', 'gn', 'e', 'en', 'cs', 'cn'].forEach(function (q) { r[q] += d[q] || 0; }); for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
+      return r;
+    }
+    function clTramo(r, b0, b1) { var s = 0, c = 0; for (var b = b0; b <= b1; b++) { if (r.c[b]) { s += r.s[b]; c += r.c[b]; } } return c >= 5 ? s / c : null; }
+    function clChart(series) {
+      var W = 340, H = 200, ml = 30, mr = 8, mt = 10, mb = 28, all = [];
+      series.forEach(function (S) { for (var b = 0; b < 12; b++) if (S.r.c[b] >= 5) all.push(S.r.s[b] / S.r.c[b]); });
+      if (!all.length) return '';
+      var lo = Math.max(0, Math.floor(Math.min.apply(null, all) / 5) * 5), hi = Math.ceil(Math.max.apply(null, all) / 5) * 5; if (hi - lo < 10) lo = Math.max(0, hi - 10);
+      var paso = hi - lo > 30 ? 10 : 5;
+      var X = function (b) { return ml + b * (W - ml - mr) / 11; }, Y = function (v) { return H - mb - (v - lo) / (hi - lo) * (H - mt - mb); }, s = '';
+      for (var v = lo; v <= hi; v += paso) s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 5) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+      for (var b = 1; b < 12; b += 2) s += '<text class="mlbl" x="' + X(b).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="middle">' + ((b + 1) * 25) + '</text>';
+      s += '<text class="myear" x="' + (W - mr) + '" y="' + (H - 2) + '" text-anchor="end">días en leche</text>';
+      series.forEach(function (S) {
+        var seg = [], segs = [];
+        for (var b = 0; b < 12; b++) { if (S.r.c[b] >= 5) seg.push([X(b), Y(S.r.s[b] / S.r.c[b]), S.r.s[b] / S.r.c[b], S.r.c[b], b]); else if (seg.length) { segs.push(seg); seg = []; } }
+        if (seg.length) segs.push(seg);
+        segs.forEach(function (sg) {
+          if (sg.length > 1) s += '<polyline class="clp" style="stroke:' + S.col + (S.dash ? ';stroke-dasharray:5 4' : '') + '" points="' + sg.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+          sg.forEach(function (p) { s += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="' + (S.dash ? 2.5 : 3) + '" style="fill:' + S.col + '"><title>' + S.nom + ', ' + (p[4] * 25 + 1) + ' a ' + ((p[4] + 1) * 25) + ' días: ' + nf(p[2], 1) + ' L (' + p[3] + ' lact.)</title></circle>'; });
+        });
+      });
+      return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Curva de lactancia: litros por día según días en leche">' + s + '</svg>';
+    }
+    var CL_PER = [['12', '12 meses'], ['24', '24 meses'], ['h', 'Histórico']];
+    function curvasHTML() {
+      if (!document.getElementById('clCss')) { var st = document.createElement('style'); st.id = 'clCss'; st.textContent = ':root{--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86}@media (prefers-color-scheme:dark){:root{--cl1:#E3B84A;--cl2:#7FA8EE;--clm:#5FD0D8}}.clp{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.cltbl{font-size:14px}.cltbl th,.cltbl td{padding-left:4px;padding-right:4px}.cltbl td small{color:var(--muted);font-weight:600}.cltbl tr[data-clmes]{cursor:pointer}.cltbl tr.on td{background:color-mix(in srgb,var(--clm) 16%,transparent)}.cltbl tr.clvac td{color:var(--muted)}'; document.head.appendChild(st); }
+      var T = curvasTambo(); if (!T.L.length) return '';
+      var per = state.clPer || '12', g = state.clG || 2, ref = (DB.fecha || today()).slice(0, 7);
+      var mesesAtras = function (n) { var y = +ref.slice(0, 4), m = +ref.slice(5, 7) - n; while (m < 1) { m += 12; y--; } return y + '-' + pad2(m); };
+      var desde = per === 'h' ? '0000' : mesesAtras(+per - 1);
+      var L = T.L.filter(function (x) { return x.m >= desde && x.m <= ref; });
+      var P1 = clSuma(L.filter(function (x) { return x.g === 1; })), P2 = clSuma(L.filter(function (x) { return x.g === 2; }));
+      var col1 = 'var(--cl1)', col2 = 'var(--cl2)', colM = 'var(--clm)';
+      var ser = [{ r: P2, col: col2, nom: 'Multíparas' }, { r: P1, col: col1, nom: 'Primíparas' }], mesSel = state.clMes || null;
+      var Lg = L.filter(function (x) { return x.g === g; });
+      var porMes = []; for (var m = 1; m <= 12; m++) { var mm = pad2(m); porMes.push({ m: m, r: clSuma(Lg.filter(function (x) { return x.m.slice(5, 7) === mm; })) }); }
+      // 12 meses: en orden, del mes más viejo al más nuevo, con el año
+      var filasMes = porMes;
+      if (per === '12') { filasMes = []; for (var q = 11; q >= 0; q--) { var km = mesesAtras(q); filasMes.push({ m: +km.slice(5, 7), y: km.slice(2, 4), r: porMes[+km.slice(5, 7) - 1].r }); } }
+      if (mesSel) { var rs = porMes[mesSel - 1].r; if (rs.n) ser.push({ r: rs, col: colM, nom: 'Partos de ' + A.MESES[mesSel - 1] + ' (' + (g === 1 ? 'prim.' : 'mult.') + ')', dash: true }); }
+      var h = '<section class="card"><h2>Curva de lactancia</h2>' +
+        '<div class="filters" role="group" aria-label="Período de partos">' + CL_PER.map(function (c) { return '<button class="fchip" data-clper="' + c[0] + '" aria-pressed="' + (per === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+        '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
+        clChart(ser);
+      var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') + '<br><small>' + nf(r.pd / r.pn, 0) + ' d</small>' : '–'; };
+      var tot = clSuma(Lg), est = per === '12';
+      // sólidos: solo si la mayoría de las lactancias con total tienen análisis regulares (4 controles o más con grasa y proteína)
+      var conSol = tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
+      var litros = function (r) {
+        var n = r.tn + (est ? r.en : 0); if (!n) return '–';
+        return nf((r.t + (est ? r.e : 0)) / n) + '<br><small>' + (est && r.en ? 'est. · ' : '') + n + ' lact.</small>';
+      };
+      var solidos = function (r) { return r.gn >= 3 ? nf(r.gs / r.gn) + '<br><small>' + r.gn + ' lact.</small>' : '–'; };
+      h += '<h3 class="vh3">Por mes de parto</h3><div class="filters" role="group" aria-label="Lactancia">' + [[2, 'Multíparas'], [1, 'Primíparas']].map(function (c) { return '<button class="fchip" data-clg="' + c[0] + '" aria-pressed="' + (g === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d</th>' + (conSol ? '<th>Kg sólidos</th>' : '') + '</tr></thead><tbody>' +
+        filasMes.map(function (x) {
+          var nomM = A.MESES[x.m - 1] + (x.y ? ' <small>' + x.y + '</small>' : '');
+          if (!x.r.n) return '<tr class="clvac"><td>' + nomM + '</td><td>0</td><td colspan="' + (conSol ? 3 : 2) + '"></td></tr>';
+          return '<tr data-clmes="' + x.m + '"' + (mesSel === x.m ? ' class="on"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(x.r.n) + '</td><td>' + pico(x.r) + '</td><td>' + litros(x.r) + '</td>' + (conSol ? '<td>' + solidos(x.r) + '</td>' : '') + '</tr>';
+        }).join('') +
+        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(tot.n) + '</b></td><td>' + pico(tot) + '</td><td><b>' + litros(tot) + '</b></td>' + (conSol ? '<td><b>' + solidos(tot) + '</b></td>' : '') + '</tr></tbody></table>';
+      h += '<p class="cap">Lactancias de las vacas que parieron ' + (per === 'h' ? 'desde ' + A.MESES[+T.desde.slice(5, 7) - 1] + ' ' + T.desde.slice(0, 4) : 'en los últimos ' + per + ' meses (hasta ' + A.MESES[+ref.slice(5, 7) - 1] + ' ' + ref.slice(0, 4) + ')') +
+        ', con al menos un control lechero (Lact. = lactancias evaluadas). Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
+        'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
+        'Litros 305 d: promedio de la producción a 305 días de ' + SRC() + ', solo de las lactancias que llegaron a 305 días' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
+        (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias cerraron antes de los 305 días</b> (secado o baja), con un promedio de ' + nf(tot.cs / tot.cn) + ' L en toda la lactancia: no entran en la columna. ' : '') +
+        'Kg sólidos: grasa + proteína a 305 días, solo con lactancias de 4 o más análisis' + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
+        (T.desdeLib && DB.fuente === 'syscaw' ? ' <b>Para el histórico completo, volvé a cargar el respaldo de SysCaw</b>: ahora solo están los controles de la lactancia actual y la anterior de cada vaca.' : T.desdeLib ? ' Con esta base solo están los controles de la lactancia actual y la anterior de cada vaca.' : '') + '</p>';
+      return h + '</section>';
+    }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
-      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
+      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + curvasHTML() + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
       var lt = prom(V, function (v) { return v.lt; }), sol = prom(V, function (v) { return v.sol; });
       var conPrev = V.filter(function (v) { return v.prev && v.prev[1] > 0; });
       var dif = conPrev.length ? prom(conPrev, function (v) { return v.lt - v.prev[1]; }) : null;
@@ -2680,7 +2848,7 @@
           return rowHTML(v.a, { right: '<span class="when ' + (d != null && d < 0 ? 'late' : 'ok') + '">' + nf(v.lt, 1) + ' L</span>',
             sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
         }).join('') + '</section>';
-      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + top5 + tabla + caida;
+      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + curvasHTML() + top5 + tabla + caida;
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
@@ -2766,7 +2934,7 @@
     function leerPrecarga(texto) {
       var m = texto != null ? /#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)/.exec(texto) : /^#cargar=([a-z0-9]+)\.([A-Za-z0-9_\-]+)$/.exec(location.hash || '');
       if (!m) { if (texto != null) toast('No encontré un link de tambo en lo que pegaste.'); return; }
-      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (texto == null) { try { localStorage.setItem('libreta:ultLink', location.href); } catch (e) {} try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       if (!esVet()) { toast('Este link es solo para el modo veterinario.'); return; }
       state.inicio = false;
       if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el tambo precargado.'); return; }
@@ -2813,7 +2981,7 @@
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], curvas: o.curvas || null, config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
@@ -2881,7 +3049,7 @@
       var re = /#libreta=([a-f0-9]+)\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/;
       var m = re.exec(texto != null ? texto : (location.hash || ''));
       if (!m) { if (texto != null) toast('No encontré un link de libreta en lo que pegaste.'); return false; }
-      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (texto == null) { try { localStorage.setItem('libreta:ultLink', location.href); } catch (e) {} try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       if (!root.crypto || !crypto.subtle || !root.DecompressionStream) { toast('Este teléfono no puede abrir el link. Probá con Chrome o actualizá el teléfono.'); return true; }
       state.inicio = false;
       busy(true, 'Abriendo la libreta…');
@@ -2930,7 +3098,7 @@
     function leerActivacion(texto) {
       var m = texto != null ? (/#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(texto) || /([A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{40,})/.exec(texto)) : /^#act=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)$/.exec(location.hash || '');
       if (!m) { if (texto != null) toast('No encontré un link de activación en lo que pegaste.'); return Promise.resolve(false); }
-      if (texto == null) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
+      if (texto == null) { try { localStorage.setItem('libreta:ultLink', location.href); } catch (e) {} try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; } }
       return verificar(m[1]).then(function (pl) {
         if (!pl || !pl.p) { toast('El link de activación no es válido.'); return false; }
         ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]);
@@ -2944,6 +3112,22 @@
       return '<input id="actCod" class="actcod" type="text" inputmode="numeric" autocomplete="off" placeholder="Código" aria-label="Código de activación">' +
         '<button class="btn primary big" data-a="actcod">Activar</button>' +
         '<button class="lnk" data-a="pegaract" style="display:block;margin:14px auto 0">¿Te mandaron un link? Pegalo acá</button>';
+    }
+    /* iPhone: la app anclada al inicio no comparte datos con Safari; se ofrece copiar el link para pegarlo en la app anclada */
+    function esIOS() { return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+    function esAnclada() { try { return !!navigator.standalone || matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; } }
+    function iosTipHTML() {
+      return ''; // aviso de iPhone: por ahora solo en la versión de prueba
+      var l = '', x = ''; try { l = localStorage.getItem('libreta:ultLink') || ''; x = localStorage.getItem('libreta:iostip') || ''; } catch (e) {}
+      if (!l || x === '1' || !esIOS() || esAnclada()) return '';
+      return '<style>.iostip{background:var(--surface);border:2px solid var(--gold);border-radius:14px;padding:12px 14px;margin:0 0 14px;font-size:15px;line-height:1.4}.iostip p{margin:4px 0}.iostip ol{margin:4px 0 10px;padding-left:22px}.iostip li{margin:2px 0}.iostipb{display:flex;gap:8px}.iostipb .btn{flex:1}</style><div class="iostip"><b>¿La vas a anclar al inicio del iPhone?</b><p>La app anclada no ve lo que abriste en Safari. Hacelo así:</p><ol><li>Tocá <b>Copiar link</b>.</li><li>En Safari: Compartir → <b>Agregar a inicio</b>.</li><li>Abrila desde el ícono y tocá <b>¿Te mandaron un link? Pegalo acá</b>.</li></ol>' +
+        '<div class="iostipb"><button class="btn primary" data-a="ioscopy">Copiar link</button><button class="btn" data-a="iostipx">Listo</button></div></div>';
+    }
+    function iosCopiar() {
+      var l = ''; try { l = localStorage.getItem('libreta:ultLink') || ''; } catch (e) {}
+      if (!l) return;
+      var manual = function () { prompt('Copiá el link (mantené apretado para seleccionarlo):', l); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(l).then(function () { toast('Link copiado. Ahora: Compartir → Agregar a inicio.'); }, manual); else manual();
     }
     function pegarActivacion() {
       var pedir = function (pre) { var t = prompt(esVet() ? 'Pegá acá el link del tambo' : 'Pegá acá el link que te mandó el Dr. Mauro Torterolo', pre || ''); if (t) { if (/#libreta=/.test(t)) leerLibreta(t); else if (/#cargar=/.test(t)) leerPrecarga(t); else leerActivacion(t); } };
@@ -3666,10 +3850,10 @@
         if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); plegarNotas(main); return; }
         state.rp = null;
       }
-      var err = state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '';
+      var err = iosTipHTML() + (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '');
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
-      else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); }
-      else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); }
+      else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); vetCompartir(main); }
+      else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); vetCompartir(main); }
       else if (state.tab === 'panel' && panelOK()) main.innerHTML = err + panelHTML();
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
       plegarNotas(main);
@@ -3702,6 +3886,9 @@
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
+      if ((el = e.target.closest('[data-clper]'))) { state.clPer = el.dataset.clper; render(); return; }
+      if ((el = e.target.closest('[data-clg]'))) { state.clG = +el.dataset.clg; render(); return; }
+      if ((el = e.target.closest('[data-clmes]'))) { var cm = +el.dataset.clmes; state.clMes = state.clMes === cm ? null : cm; render(); return; }
       if ((el = e.target.closest('[data-icf]'))) { var kf = el.dataset.icf; state.insCal = state.insCal === kf ? null : kf; var Fq = insFechas(); state.insCalM = (kf === 'd0' ? Fq[0] : Fq[1]).slice(0, 7); render(); return; }
       if ((el = e.target.closest('[data-icm]'))) { var mm = (state.insCalM || insFechas()[1].slice(0, 7)).split('-').map(Number), dt = new Date(mm[0], mm[1] - 1 + (+el.dataset.icm), 1, 12); state.insCalM = A.ymd(dt).slice(0, 7); render(); return; }
       if ((el = e.target.closest('[data-icd]'))) { var kd = state.insCal === 'd0' ? 'insD0' : 'insD1'; state[kd] = el.dataset.icd; setP(kd.toLowerCase(), el.dataset.icd); if (state.insCal === 'd0') { state.insCal = 'd1'; state.insCalM = insFechas()[1].slice(0, 7); } else state.insCal = null; render(); return; }
@@ -3746,6 +3933,8 @@
       else if (a === 'actop') enviarActivacionRol('op');
       else if (a === 'vet') modoVet();
       else if (a === 'pegaract') { closeSheet(); pegarActivacion(); }
+      else if (a === 'ioscopy') iosCopiar();
+      else if (a === 'iostipx') { try { localStorage.setItem('libreta:iostip', '1'); } catch (e) {} render(); }
       else if (a === 'actcod') { var ic = $('#actCod'); activarCodigo(ic ? ic.value : ''); }
       else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
@@ -3771,6 +3960,7 @@
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
+      else if (a === 'cardimg') { var scd = b.closest('section.card'); if (scd) compartirCard(scd); }
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
       else if (a === 'instk') insTicket();

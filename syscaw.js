@@ -39,6 +39,53 @@
     return { tambo: tambo || null, fecha: fecha };
   }
 
+  // suma una vaca a las curvas. pa = [{ f: fecha parto, n: nº lactancia, cierre: fecha de secado o null, L: litros totales, L305, sol: kg grasa + proteína }]
+  // ordenado por fecha; ct = [[fecha, litros, 1 si tiene análisis de grasa y proteína], ...]; ref = fecha del respaldo
+  // tramos de 25 días en leche (12 tramos = 300 días); pico = control más alto hasta 120 días, en vacas con control antes de los 60 y
+  // después de los 90 (ya pasó el pico). Total: litros a 305 días, solo de las que llegaron; las que cerraron antes van aparte (cs, cn). Las lactancias en curso van a pend para proyectarlas
+  var CB = 12, CW = 25;
+  function curvaLact(out, pa, ct, unidad, ref, pend) {
+    pa.forEach(function (p, i) {
+      var hasta = pa[i + 1] ? pa[i + 1].f : '9999', B = {}, pk = null, pkd = null, temprano = false, tarde = false, hay = false, nAn = 0;
+      ct.forEach(function (c) {
+        if (c[0] <= p.f || c[0] >= hasta || !(c[1] > 0)) return;
+        if (c[2]) nAn++;
+        var d = diffDays(c[0], p.f); if (d < 1 || d > CB * CW) return;
+        var b = Math.floor((d - 1) / CW); (B[b] = B[b] || []).push(c[1]); hay = true;
+        if (d <= 60) temprano = true; if (d >= 90) tarde = true;
+        if (d <= 120 && (pk == null || c[1] > pk)) { pk = c[1]; pkd = d; }
+      });
+      if (!hay) return;
+      var g = p.n === 1 ? 1 : 2, k = p.f.slice(0, 7) + '|' + g + '|' + unidad(p.f);
+      var C = out[k] || (out[k] = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, cs: 0, cn: 0 });
+      C.n++;
+      if (temprano && tarde && pk != null) { C.pk = Math.round((C.pk + pk) * 10) / 10; C.pn++; C.pd += pkd; }
+      var med = {};
+      Object.keys(B).forEach(function (b) { var v = B[b], m = v.reduce(function (x, y) { return x + y; }, 0) / v.length; med[b] = m; C.s[b] = Math.round(((C.s[b] || 0) + m) * 10) / 10; C.c[b] = (C.c[b] || 0) + 1; });
+      // a 305 días: solo las que llegaron (las que cerraron antes, por secado o baja, se cuentan aparte: mezclarlas bajaría el promedio)
+      var cerrada = !!pa[i + 1] || !!(p.cierre && p.cierre <= ref), tot = p.L305 > 0 ? p.L305 : null;
+      if (tot) {
+        C.t += Math.round(tot); C.tn++;
+        if (p.sol > 0 && p.L > 0 && nAn >= 4) { C.gs = Math.round((C.gs + p.sol * tot / p.L) * 10) / 10; C.gn++; }
+      } else if (cerrada) { if (p.L > 0) { C.cs = (C.cs || 0) + Math.round(p.L); C.cn = (C.cn || 0) + 1; } }
+      else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) pend.push({ k: k, g: g, m: med });
+    });
+  }
+  // lactancias en curso: se proyectan a 305 días con la curva del tambo (su nivel respecto del promedio en los tramos que ya tiene)
+  function curvaProy(out, pend) {
+    var H = { 1: { s: [], c: [] }, 2: { s: [], c: [] } };
+    Object.keys(out).forEach(function (k) { var g = +k.split('|')[1], C = out[k]; for (var b = 0; b < CB; b++) if (C.c[b]) { H[g].s[b] = (H[g].s[b] || 0) + C.s[b]; H[g].c[b] = (H[g].c[b] || 0) + C.c[b]; } });
+    pend.forEach(function (x) {
+      var h = H[x.g], own = 0, her = 0, ok = true, tot = 0;
+      Object.keys(x.m).forEach(function (b) { if (h.c[b]) { own += x.m[b]; her += h.s[b] / h.c[b]; } });
+      if (!her) return;
+      var r = own / her;
+      for (var b = 0; b < CB; b++) { var v = x.m[b] != null ? x.m[b] : h.c[b] ? h.s[b] / h.c[b] * r : null; if (v == null) { ok = false; break; } tot += v * CW; }
+      if (!ok) return;
+      var C = out[x.k]; C.e += Math.round(tot * 305 / (CB * CW)); C.en++;
+    });
+  }
+
   // files: { 'Identificación.DB': Uint8Array, ... }
   function build(files, opts) {
     opts = opts || {};
@@ -114,6 +161,25 @@
       g.ct.push([f, Math.round(lt * 10) / 10, r[5] || null, r[6] || null, r[7] || null]); if (f > maxF) maxF = f;
     });
     Object.keys(G).forEach(function (id) { G[id].ct.sort(cmp); });
+    // curvas de lactancia: con TODOS los controles y partos del respaldo (también vacas dadas de baja hace años), pero se guardan
+    // solo promedios por mes de parto, lactancia (1 = primípara, 2 = multípara) y unidad: no agranda la libreta
+    var curvas = {};
+    try {
+      var PA = {}, CT = {}, LA = {}, pend = [], refC = infoFromName(opts.nombreArchivo).fecha || maxF;
+      T.lact.forEach(function (r) { if (r[1] > 0) LA[r[0] + '|' + r[1]] = r; });
+      T.partos.forEach(function (r) {
+        var f = okDate(r[1]), a = byId[r[0]]; if (!f || !a || !(r[4] > 0) || (sel && !sel[a[11]])) return;
+        var l = LA[r[0] + '|' + r[4]], L = l && l[3] > 0 ? l[3] : null, gr = l && L ? l[5] / L * 100 : null, pr = l && L ? l[6] / L * 100 : null;
+        var sol = gr >= 2 && gr <= 7 && pr >= 2 && pr <= 5.5 ? l[5] + l[6] : null;
+        (PA[r[0]] = PA[r[0]] || []).push({ f: f, n: r[4], cierre: okDate(r[7]), L: L, L305: l && l[4] > 0 ? l[4] : null, sol: sol });
+      });
+      T.ctrl.forEach(function (r) { var f = okDate(r[1]); if (!f || !PA[r[0]]) return; var lt = (r[2] || 0) + (r[3] || 0) + (r[4] || 0); if (lt > 0 && lt < 90) (CT[r[0]] = CT[r[0]] || []).push([f, lt, r[5] > 0 && r[6] > 0 ? 1 : 0]); });
+      Object.keys(CT).forEach(function (id) {
+        var u = byId[id][11] == null ? 0 : byId[id][11];
+        curvaLact(curvas, PA[id].sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : 0; }), CT[id], function () { return u; }, refC, pend);
+      });
+      curvaProy(curvas, pend);
+    } catch (e) { curvas = {}; }
 
     var info = infoFromName(opts.nombreArchivo);
     var ref = info.fecha || maxF;
@@ -195,7 +261,7 @@
     // número de productor de SysCaw: identifica al tambo para la activación
     var idProd = [];
     try { if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: ['IdProd'], array: true }).rows.forEach(function (r) { if (r[0] != null && idProd.indexOf(r[0]) < 0) idProd.push(r[0]); }); } catch (e) { idProd = []; }
-    return { idProd: idProd, ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
+    return { idProd: idProd, ctrls: ctrls, curvas: curvas, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una
@@ -236,6 +302,6 @@
     return d;
   }
 
-  var api = { build: build, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
+  var api = { build: build, curvaLact: curvaLact, curvaProy: curvaProy, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SysCaw = api;
 })(typeof window !== 'undefined' ? window : this);
