@@ -2106,6 +2106,8 @@
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + mo.label + '</text>';
         if (mo.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(mo.anio).slice(2) + '</text>';
       });
+      var hT = SX.v.h + SX.q.h, mT = SX.v.m + SX.q.m;
+      CLAVE['Partos ocurridos'] = nf(tv + tq) + ' partos en 12 meses: ' + nf(tv) + ' de vacas y ' + nf(tq) + ' de vaquillonas' + (hT + mT ? '. ' + Math.round(hT / (hT + mT) * 100) + '% de hembras' + (SX.q.h + SX.q.m ? ' (' + Math.round(SX.q.h / (SX.q.h + SX.q.m) * 100) + '% en vaquillonas)' : '') : '') + '.';
       return '<section class="card"><h2>Partos ocurridos</h2>' + selMesHTML(G, 'pomes') +
         '<div class="kpis kpis2"><div><b>' + nf(tv) + '</b><span>Partos de vacas · ' + pc(tv) + '</span></div><div><b>' + nf(tq) + '</b><span>Partos de vaquillonas · ' + pc(tq) + '</span></div></div>' +
         '<div class="mleg"><span><i class="v"></i>Vacas</span><span><i class="q"></i>Vaquillonas</span></div>' +
@@ -2553,55 +2555,123 @@
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
     var FICHA_AB = {};
     /* ----- modo veterinario: compartir una tarjeta como imagen (para mandar por WhatsApp) ----- */
+    /* ----- modo veterinario: compartir como imagen (WhatsApp). Cada tarjeta se puede mandar como Gráfico, Tabla o las dos;
+       formato vertical, encabezado con el tambo (o anónimo), línea con lo elegido, "dato clave" y firma ----- */
+    var CLAVE = {}; // dato clave de cada tarjeta, por título; lo escriben las tarjetas al dibujarse
     function vetCompartir(main) {
       if (!esVet()) return;
-      if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}'; document.head.appendChild(st); }
+      if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}.shopt{display:flex;align-items:center;gap:10px;font-weight:600;margin:4px 0 12px}.shopt input{width:22px;height:22px}'; document.head.appendChild(st); }
+      var ico = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (!sec.querySelector('h2') || sec.querySelector('.shbtn')) return;
-        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Compartir como imagen</button>');
+        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg">' + ico + 'Compartir</button>');
       });
+      var pan = main.querySelector('.panel');
+      if (pan && !main.querySelector('.shbtn')) pan.insertAdjacentHTML('afterend', '<button class="shbtn" data-a="panelimg">' + ico + 'Compartir resumen de visita</button>');
     }
     function cargarH2C() {
       if (root.html2canvas) return Promise.resolve(root.html2canvas);
       return new Promise(function (ok, mal) { var sc = document.createElement('script'); sc.src = 'html2canvas.min.js?v=1'; sc.onload = function () { ok(root.html2canvas); }; sc.onerror = function () { mal(new Error('sin conexión')); }; document.head.appendChild(sc); });
     }
-    function compartirPNG(bl, nombre) {
-      var file = null; try { file = new File([bl], nombre, { type: 'image/png' }); } catch (e) {}
-      var guardar = function () { var u = URL.createObjectURL(bl), el = document.createElement('a'); el.href = u; el.download = nombre; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Imagen guardada en Descargas'); };
-      if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
-      else guardar();
+    function shNombre() { var v = null; try { v = localStorage.getItem('libreta:shnom'); } catch (e) {} return v !== '0'; }
+    // lo que está elegido en la tarjeta (botones marcados, mes), dicho en una línea
+    function shContexto(sec) {
+      var t = [];
+      Array.prototype.forEach.call(sec.querySelectorAll('.fchip[aria-pressed="true"]'), function (b) { var x = b.textContent.trim(); if (/^\d+ meses$/.test(x)) x = 'Últimos ' + x; t.push(x); });
+      Array.prototype.forEach.call(sec.querySelectorAll('input[type=month],input[type=date]'), function (x) { var v = x.value || ''; if (/^\d{4}-\d{2}$/.test(v)) t.push('Hasta ' + A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4)); else if (v) t.push(A.fmt(v)); });
+      return t.join(' · ');
     }
+    function shPartes(sec) { return { g: !!sec.querySelector('svg.mchart'), t: !!sec.querySelector('table') }; }
     function compartirCard(sec) {
-      var titulo = (sec.querySelector('h2') || {}).textContent || 'Libreta';
-      busy(true, 'Armando la imagen…');
-      cargarH2C().then(function (h2c) {
-        var w = document.createElement('div');
-        w.className = 'shot';
-        w.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;padding:14px;background:#EEF2F7;color-scheme:light;font-family:var(--sans);' +
-          '--bg:#EEF2F7;--surface:#FFFFFF;--ink:#0D1A33;--muted:#53627B;--line:#D3DBE7;--navy:#12274A;--on-navy:#FFFFFF;--gold:#C9A227;--link:#1F4FA3;--prenada:#16794A;--servida:#6B3FA0;--vacia:#B3261E;--ciclando:#2457A6;--apta:#8A6510;--sin:#53627B;--descarte:#B3261E;--bar:#9FB0CC;--bar-last:#12274A;--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86';
-        var c = sec.cloneNode(true);
-        c.classList.add('open');
-        Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns'), function (x) { x.remove(); });
-        Array.prototype.forEach.call(c.querySelectorAll('input,select'), function (x) {
-          var v = x.value || '', b = document.createElement('b');
-          if (x.type === 'month' && /^\d{4}-\d{2}$/.test(v)) v = A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4);
-          else if (x.type === 'date' && v) v = A.fmt(v);
-          else if (x.tagName === 'SELECT' && x.selectedOptions[0]) v = x.selectedOptions[0].textContent;
-          b.textContent = v; b.style.cssText = 'font-size:16px;color:#0D1A33'; x.replaceWith(b);
-        });
-        w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:20px;font-weight:800">' + esc(PERFIL.nombre || 'Libreta de vacas') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>';
-        w.appendChild(c);
-        w.insertAdjacentHTML('beforeend', '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>');
-        document.body.appendChild(w);
-        var fin = function () { w.remove(); };
-        return h2c(w, { scale: 2, backgroundColor: '#EEF2F7', logging: false, useCORS: true,
-          // la imagen sale siempre en colores claros: en la copia que dibuja html2canvas se apagan las reglas del modo oscuro
-          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } }).then(function (cv) {
-          fin();
-          var nombre = (titulo + ' ' + (PERFIL.nombre || '') + ' ' + (DB.fecha || today())).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
-          cv.toBlob(function (bl) { busy(false); if (!bl) { toast('No se pudo armar la imagen.'); return; } compartirPNG(bl, nombre); }, 'image/png');
-        }, function (e) { fin(); throw e; });
+      state.shSec = sec;
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim(), P = shPartes(sec);
+      $('#sheetXTitle').textContent = 'Compartir · ' + tit;
+      $('#xopts').innerHTML = '<label class="shopt"><input type="checkbox" id="shNom"' + (shNombre() ? ' checked' : '') + '> Con el nombre del tambo</label>' +
+        '<p class="cap" style="margin:0 0 6px">Sin nombre sale como "Tambo" (para mandar a colegas).</p>';
+      $('#xbtns').innerHTML = (P.g && P.t ? '<button class="btn primary big" data-a="shdos">Las dos imágenes</button><button class="btn big" data-a="shgraf">Solo el gráfico</button><button class="btn big" data-a="shtab">Solo la tabla</button>'
+        : '<button class="btn primary big" data-a="shtodo">Compartir imagen</button>') + '<button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    // arma una "hoja" para la imagen: encabezado, título, contexto, dato clave, contenido y firma
+    function shHoja(titulo, ctx, clave, nodo, alto) {
+      var conNom = shNombre(), w = document.createElement('div');
+      w.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;' + (alto ? 'min-height:' + alto + 'px;' : '') + 'box-sizing:border-box;padding:14px;background:#EEF2F7;color-scheme:light;font-family:var(--sans);display:flex;flex-direction:column;' +
+        '--bg:#EEF2F7;--surface:#FFFFFF;--ink:#0D1A33;--muted:#53627B;--line:#D3DBE7;--navy:#12274A;--on-navy:#FFFFFF;--gold:#C9A227;--link:#1F4FA3;--prenada:#16794A;--servida:#6B3FA0;--vacia:#B3261E;--ciclando:#2457A6;--apta:#8A6510;--sin:#53627B;--descarte:#B3261E;--bar:#9FB0CC;--bar-last:#12274A;--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86';
+      w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:21px;font-weight:800;line-height:1.2">' + esc(conNom ? (PERFIL.nombre || 'Tambo') : 'Tambo') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>' +
+        '<div class="shcard" style="background:#fff;border:1px solid #D3DBE7;border-radius:16px;padding:14px 16px;flex:1"><div style="font-size:20px;font-weight:800;color:#0D1A33">' + esc(titulo) + '</div>' +
+        (ctx ? '<div style="font-size:14px;color:#53627B;font-weight:600;margin-top:2px">' + esc(ctx) + '</div>' : '') +
+        (clave ? '<div style="margin:10px 0 4px;padding:9px 12px;border-radius:10px;background:#FBF4DF;border-left:4px solid #C9A227;font-size:15px;font-weight:700;color:#0D1A33;line-height:1.35">' + esc(clave) + '</div>' : '') +
+        '<div class="shbody" style="margin-top:8px"></div></div>' +
+        '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>';
+      w.querySelector('.shbody').appendChild(nodo);
+      return w;
+    }
+    function shLimpio(sec) {
+      var c = sec.cloneNode(true);
+      c.classList.add('open'); c.style.cssText = 'border:0;padding:0;margin:0;background:transparent;box-shadow:none';
+      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2'), function (x) { x.remove(); });
+      Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
+      return c;
+    }
+    function shImagen(w) {
+      document.body.appendChild(w);
+      return cargarH2C().then(function (h2c) {
+        return h2c(w, { scale: 2.7, backgroundColor: '#EEF2F7', logging: false,
+          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } });
+      }).then(function (cv) { w.remove(); return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); }, function (e) { w.remove(); throw e; });
+    }
+    // que: 'g' gráfico, 't' tabla, 'gt' las dos, 'todo' la tarjeta entera
+    function shArmar(sec, que) {
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim(), ctx = shContexto(sec), clave = CLAVE[tit] || '', hojas = [];
+      if (que.indexOf('g') >= 0 || que === 'todo') {
+        var g = shLimpio(sec);
+        if (que !== 'todo') Array.prototype.forEach.call(g.querySelectorAll('table,h3'), function (x) { x.remove(); });
+        hojas.push(shHoja(tit, ctx, clave, g, que === 'todo' ? 0 : 500));
+      }
+      if (que.indexOf('t') >= 0 && que !== 'todo') {
+        var t = shLimpio(sec);
+        Array.prototype.forEach.call(t.querySelectorAll('svg.mchart,.mleg,.kpis,.panel,.vlinea'), function (x) { x.remove(); });
+        // tablas largas: se parten en hojas de 13 filas (el encabezado se repite y el total va en la última)
+        var tbs = t.querySelectorAll('table'), largo = tbs.length === 1 ? tbs[0].querySelectorAll('tbody tr') : [];
+        if (largo.length > 14) {
+          var filas = Array.prototype.slice.call(largo), pags = [];
+          for (var q = 0; q < filas.length; q += 13) pags.push(filas.slice(q, q + 13));
+          if (pags.length > 1 && pags[pags.length - 1].length === 1) { pags[pags.length - 2] = pags[pags.length - 2].concat(pags.pop()); }
+          pags.forEach(function (pg, ix) {
+            var tt = t.cloneNode(true), tb = tt.querySelector('tbody'), idx = filas.indexOf(pg[0]);
+            Array.prototype.slice.call(tb.querySelectorAll('tr')).forEach(function (tr, k) { if (k < idx || k >= idx + pg.length) tr.remove(); });
+            hojas.push(shHoja(tit + (pags.length > 1 ? ' (' + (ix + 1) + '/' + pags.length + ')' : ''), ctx, ix === 0 && que === 't' ? clave : '', tt, 0));
+          });
+        } else hojas.push(shHoja(tit, ctx, que === 't' ? clave : '', t, 0));
+      }
+      return hojas;
+    }
+    function shMandar(hojas, base) {
+      busy(true, hojas.length > 1 ? 'Armando las ' + hojas.length + ' imágenes…' : 'Armando la imagen…');
+      var blobs = [];
+      return hojas.reduce(function (pr, w) { return pr.then(function () { return shImagen(w).then(function (b) { blobs.push(b); }); }); }, Promise.resolve()).then(function () {
+        busy(false);
+        var nom = (base + ' ' + (shNombre() ? (PERFIL.nombre || '') : '') + ' ' + (DB.fecha || today())).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
+        var files = []; try { files = blobs.map(function (b, i) { return new File([b], nom + (blobs.length > 1 ? ' ' + (i + 1) : '') + '.png', { type: 'image/png' }); }); } catch (e) { files = []; }
+        var guardar = function () { blobs.forEach(function (b, i) { var u = URL.createObjectURL(b), el = document.createElement('a'); el.href = u; el.download = nom + (blobs.length > 1 ? ' ' + (i + 1) : '') + '.png'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }); toast(blobs.length > 1 ? 'Imágenes guardadas en Descargas' : 'Imagen guardada en Descargas'); };
+        if (files.length && navigator.canShare && navigator.canShare({ files: files })) navigator.share({ files: files }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
+        else guardar();
       }).catch(function (e) { busy(false); toast(e && e.message === 'sin conexión' ? 'Para armar la imagen la primera vez hace falta internet.' : 'No se pudo armar la imagen.'); });
+    }
+    function shDesdeSheet(que) {
+      var ck = $('#shNom'); if (ck) try { localStorage.setItem('libreta:shnom', ck.checked ? '1' : '0'); } catch (e) {}
+      $('#sheetX').hidden = true;
+      var sec = state.shSec; if (!sec || !document.body.contains(sec)) { toast('Volvé a tocar Compartir.'); return; }
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim();
+      shMandar(shArmar(sec, que), tit);
+    }
+    // resumen de visita: los cuatro cuadros del Panel con su semáforo y los avisos
+    function compartirPanel() {
+      var main = $('#main') || document.querySelector('main'), pan = main && main.querySelector('.panel'); if (!pan) return;
+      var d = document.createElement('div'), pres = main.querySelector('.pres');
+      if (pres) d.appendChild(pres.cloneNode(true));
+      var pc = pan.cloneNode(true); pc.style.marginTop = '10px'; d.appendChild(pc);
+      shMandar([shHoja('Resumen de visita', 'Visita del ' + A.fmt(today()), '', d, 500)], 'Resumen de visita');
     }
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
@@ -2714,6 +2784,12 @@
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
       var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = (a - b) / b * 100; return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 0) + '%</small>'; };
       var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td><td>' + d(m.prev) + '</td><td>' + d(m.hist) + '</td></tr>'; }).join('');
+      (function () {
+        var uu = null; E.meses.forEach(function (m) { if (m.cur != null) uu = m; });
+        if (!uu) { CLAVE['Últimos 12 meses'] = ''; return; }
+        var pp = uu.prev != null && uu.prev ? (uu.cur - uu.prev) / uu.prev * 100 : null;
+        CLAVE['Últimos 12 meses'] = nombre[med] + ' en ' + uu.label + ' ' + uu.anio + ': ' + d(uu.cur) + (med === 'lv' ? ' L' : '') + (pp != null ? ' (' + (pp >= 0 ? '+' : '−') + nf(Math.abs(pp), 0) + '% contra el año anterior)' : '') + '.';
+      })();
       return '<section class="card"><h2>Últimos 12 meses</h2>' + chips +
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
@@ -2791,6 +2867,12 @@
       var filasMes = porMes;
       if (per === '12') { filasMes = []; for (var q = 11; q >= 0; q--) { var km = mesesAtras(q); filasMes.push({ m: +km.slice(5, 7), y: km.slice(2, 4), r: porMes[+km.slice(5, 7) - 1].r }); } }
       if (mesSel) { var rs = porMes[mesSel - 1].r; if (rs.n) ser.push({ r: rs, col: colM, nom: 'Partos de ' + A.MESES[mesSel - 1] + ' (' + (g === 1 ? 'prim.' : 'mult.') + ')', dash: true }); }
+      var clG = function (nom, r) {
+        if (!r.n) return '';
+        var n305 = r.tn + (per === '12' ? r.en : 0), l305 = n305 ? (r.t + (per === '12' ? r.e : 0)) / n305 : null;
+        return nom + ': ' + (r.pn >= 3 ? 'pico ' + (r.pk / r.pn).toFixed(1).replace('.', ',') + ' L a los ' + nf(r.pd / r.pn, 0) + ' días' : nf(r.n) + ' lactancias') + (l305 ? ', ' + nf(l305) + ' L a 305 días' + (per === '12' && r.en ? ' (est.)' : '') : '') + '.';
+      };
+      CLAVE['Curva de lactancia'] = [clG('Multíparas', P2), clG('Primíparas', P1)].filter(Boolean).join(' ');
       var h = '<section class="card"><h2>Curva de lactancia</h2>' +
         '<div class="filters" role="group" aria-label="Período de partos">' + CL_PER.map(function (c) { return '<button class="fchip" data-clper="' + c[0] + '" aria-pressed="' + (per === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
         '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
@@ -3909,7 +3991,7 @@
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
       else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); vetCompartir(main); }
       else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); vetCompartir(main); }
-      else if (state.tab === 'panel' && panelOK()) main.innerHTML = err + panelHTML();
+      else if (state.tab === 'panel' && panelOK()) { main.innerHTML = err + panelHTML(); vetCompartir(main); }
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
       plegarNotas(main);
     }
@@ -4019,6 +4101,11 @@
       else if (a === 'lnkbloq') { var lidb = b.dataset.l, ya = (state.bloqLinks || BLOQL).indexOf(lidb) >= 0, xr = linksMandados().filter(function (q) { return q.l === lidb; })[0]; bloquearLink(lidb, !ya, xr ? xr.n + (xr.r === 'op' ? ' (operario)' : '') + (xr.para ? ' · para ' + xr.para : '') + ' · ' + xr.f : ''); }
       else if (a === 'lnkpegbloq') { var tx = prompt('Pegá el link que querés bloquear'); var mt = tx && /#libreta=[a-f0-9]+\.[A-Za-z0-9_\-]+\.([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(tx); if (tx && !mt) toast('Eso no es un link de libreta.'); else if (mt) { var pj = null; try { pj = JSON.parse(new TextDecoder().decode(unb64u(mt[1].split('.')[0]))); } catch (e) {} bloquearLink(linkId(mt[1]), true, (pj && pj.n ? pj.n + (pj.r === 'op' ? ' (operario)' : '') + ' · ' + pj.f : 'pegado')); } }
       else if (a === 'cardimg') { var scd = b.closest('section.card'); if (scd) compartirCard(scd); }
+      else if (a === 'shdos') shDesdeSheet('gt');
+      else if (a === 'shgraf') shDesdeSheet('g');
+      else if (a === 'shtab') shDesdeSheet('t');
+      else if (a === 'shtodo') shDesdeSheet('todo');
+      else if (a === 'panelimg') compartirPanel();
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
       else if (a === 'instk') insTicket();
