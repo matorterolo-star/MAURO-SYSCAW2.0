@@ -2584,7 +2584,7 @@
     function shContexto(sec, soloGraf) {
       var t = [], corte = soloGraf ? sec.querySelector('h3, table') : null;
       var antes = function (el) { return !corte || (corte.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING); };
-      Array.prototype.forEach.call(sec.querySelectorAll('.fchip[aria-pressed="true"]'), function (b) { if (!antes(b)) return; var x = b.textContent.trim(); if (/^\d+ meses$/.test(x)) x = 'Últimos ' + x; t.push(x); });
+      Array.prototype.forEach.call(sec.querySelectorAll('.fchip[aria-pressed="true"]'), function (b) { if (!antes(b)) return; var x = b.dataset.ctx || b.textContent.trim(); if (/^\d+ meses$/.test(x)) x = 'Últimos ' + x; t.push(x); });
       Array.prototype.forEach.call(sec.querySelectorAll('input[type=month],input[type=date]'), function (x) { var v = x.value || ''; if (/^\d{4}-\d{2}$/.test(v)) t.push('Hasta ' + A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4)); else if (v) t.push(A.fmt(v)); });
       return t.join(' · ');
     }
@@ -2750,17 +2750,23 @@
       var porFecha = rondasCtrl(C);
       var mes = {};
       Object.keys(porFecha).forEach(function (f) {
-        var x = porFecha[f], k = f.slice(0, 7), m = mes[k] || (mes[k] = { s: 0, n: 0 });
-        m.s += med === 'lv' ? x.l / x.v : med === 'lt' ? x.l : x.v; m.n++;
+        var x = porFecha[f], k = f.slice(0, 7), m = mes[k] || (mes[k] = { s: 0, n: 0, v: 0, d: 0, nd: 0 });
+        m.s += med === 'lv' ? x.l / x.v : med === 'lt' ? x.l : x.v; m.n++; m.v += x.v; m.d += x.d; m.nd += x.nd;
       });
+      // el primer mes con registros suele estar incompleto: si tiene muchas menos vacas que el siguiente, no se usa
+      var ks = Object.keys(mes).sort();
+      if (ks.length > 1 && mes[ks[0]].v / mes[ks[0]].n < 0.7 * mes[ks[1]].v / mes[ks[1]].n) delete mes[ks[0]];
       var val = function (k) { return mes[k] ? mes[k].s / mes[k].n : null; };
+      var delm = function (k) { return mes[k] && mes[k].nd ? mes[k].d / mes[k].nd : null; };
       var ult = Object.keys(mes).sort().pop(), y = +ult.slice(0, 4), m0 = +ult.slice(5, 7);
       var out = [], primer = null;
       for (var i = 11; i >= 0; i--) {
         var mm = m0 - i, yy = y; while (mm < 1) { mm += 12; yy--; }
         var k = yy + '-' + pad2(mm), ka = (yy - 1) + '-' + pad2(mm);
-        var hs = []; Object.keys(mes).forEach(function (kk) { if (kk.slice(5) === pad2(mm) && kk < ka) { hs.push(val(kk)); if (!primer || kk < primer) primer = kk; } });
-        out.push({ label: A.MESES[mm - 1], anio: yy, cur: val(k), prev: val(ka), hist: hs.length ? hs.reduce(function (s, x) { return s + x; }, 0) / hs.length : null });
+        // histórico: promedio del mismo mes en los años anteriores al año pasado, solo si hay 2 años o más (un año suelto no es un histórico)
+        var hs = [], hk = []; Object.keys(mes).forEach(function (kk) { if (kk.slice(5) === pad2(mm) && kk < ka) { hs.push(val(kk)); hk.push(kk); } });
+        if (hs.length >= 2) hk.forEach(function (kk) { if (!primer || kk < primer) primer = kk; });
+        out.push({ label: A.MESES[mm - 1], anio: yy, cur: val(k), prev: val(ka), del: delm(k), hist: hs.length >= 2 ? hs.reduce(function (s, x) { return s + x; }, 0) / hs.length : null });
       }
       return { meses: out, desde: primer ? primer.slice(0, 4) : null };
     }
@@ -2787,10 +2793,11 @@
       var med = state.evMed || 'lv', E = evolucion(med);
       if (!E) return DB.fuente === 'syscaw' ? '<section class="card"><h2>Últimos 12 meses</h2><p class="cap" style="margin:0">Para ver la evolución, volvé a cargar ' + (DB.origen === 'sigea' ? 'la base de SIGEA' : DB.origen === 'dhm' ? 'la base de DHM' : DB.origen === 'delpro' ? 'la base de DelPro' : DB.origen === 'fosapp' ? 'la base de FOSAPP' : 'el respaldo de SysCaw') + ' (Ajustes → Actualizar este tambo).</p></section>' : '';
       var nombre = { lv: 'Litros por vaca', lt: 'Litros totales del tambo', vo: 'Vacas en ordeñe' };
-      var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
+      var chips = '<div class="filters" role="group" aria-label="Medida">' + [['lv', 'L/vaca'], ['lt', 'Litros totales'], ['vo', 'Vacas']].map(function (c) { return '<button class="fchip" data-ev="' + c[0] + '" data-ctx="' + nombre[c[0]] + '" aria-pressed="' + (med === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
+      var hayH = E.meses.some(function (m) { return m.hist != null; }), hayD = E.meses.some(function (m) { return m.del != null; });
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
-      var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = (a - b) / b * 100; return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 0) + '%</small>'; };
-      var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td><td>' + d(m.prev) + '</td><td>' + d(m.hist) + '</td></tr>'; }).join('');
+      var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = Math.round((a - b) / b * 100); return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p > 0 ? '+' : p < 0 ? '−' : '') + nf(Math.abs(p), 0) + '%</small>'; };
+      var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td>' + (hayD ? '<td>' + (m.del != null ? nf(m.del) : '–') + '</td>' : '') + '<td>' + d(m.prev) + '</td>' + (hayH ? '<td>' + d(m.hist) + '</td>' : '') + '</tr>'; }).join('');
       (function () {
         var uu = null; E.meses.forEach(function (m) { if (m.cur != null) uu = m; });
         if (!uu) { CLAVE['Últimos 12 meses'] = ''; return; }
@@ -2798,10 +2805,10 @@
         CLAVE['Últimos 12 meses'] = uu.label.replace(/^./, function (c) { return c.toUpperCase(); }) + ' ' + uu.anio + ': ' + d(uu.cur) + (med === 'lv' ? ' L' : '') + (pp != null ? ' (' + (pp >= 0 ? '+' : '−') + nf(Math.abs(pp), 0) + '% vs año anterior)' : '');
       })();
       return '<section class="card"><h2>Últimos 12 meses</h2>' + chips +
-        '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
+        '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span>' + (hayH ? '<span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span>' : '') + '</div>' +
         evolChart(E, med) +
-        '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<p class="cap">' + nombre[med] + (DB.origen === 'delpro' ? ' según la producción diaria de cada vaca en DelPro (medidores), resumida por semana; el mes es el promedio de sus semanas.' : ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian.') + ' El % compara con el mismo mes del año anterior.</p></section>';
+        '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th>' + (hayD ? '<th>DEL</th>' : '') + '<th>Año ant.</th>' + (hayH ? '<th>Histórico</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<p class="cap">' + nombre[med] + (DB.origen === 'delpro' ? ' según la producción diaria de cada vaca en DelPro (medidores), resumida por semana; el mes es el promedio de sus semanas.' : ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian.') + ' El % compara con el mismo mes del año anterior.' + (hayD ? ' DEL: días en leche promedio de las vacas en ordeñe en el control de este año.' : '') + ' Histórico: promedio del mismo mes en los años anteriores al año pasado; aparece cuando hay 2 años o más para promediar.</p></section>';
     }
     /* ----- curvas de lactancia por mes de parto (primíparas y multíparas) ----- */
     var CLC = { k: null, r: null };
