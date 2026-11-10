@@ -74,21 +74,28 @@
         C.t += Math.round(tot); C.tn++;
         if (nAn >= 4 && sL > 0) { C.gs = Math.round((C.gs + tot * sS / sL) * 10) / 10; C.gn++; }
       } else if (cerrada || porBaja) { if (p.L > 0) { C.cs = (C.cs || 0) + Math.round(p.L); C.cn = (C.cn || 0) + 1; } }
-      else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) pend.push({ k: k, g: g, m: med, pct: nAn >= 2 && sL > 0 ? sS / sL : null });
+      else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) {
+        // se proyecta hasta el secado probable (preñada: parto probable menos los días de secado), sin pasar de 305 días
+        var fin = 305; if (p.pp) fin = Math.min(305, diffDays(addDays(p.pp, -(p.sec || 60)), p.f));
+        fin = Math.max(fin, Math.min(305, diffDays(ref, p.f)));
+        pend.push({ k: k, g: g, m: med, pct: nAn >= 2 && sL > 0 ? sS / sL : null, fin: fin });
+      }
     });
   }
   // lactancias en curso: se proyectan a 305 días con la curva del tambo (su nivel respecto del promedio en los tramos que ya tiene)
   function curvaProy(out, pend) {
     var H = { 1: { s: [], c: [] }, 2: { s: [], c: [] } };
-    Object.keys(out).forEach(function (k) { var g = +k.split('|')[1], C = out[k]; for (var b = 0; b < CB; b++) if (C.c[b]) { H[g].s[b] = (H[g].s[b] || 0) + C.s[b]; H[g].c[b] = (H[g].c[b] || 0) + C.c[b]; } });
+    Object.keys(out).forEach(function (k) { var g = +k.split('|')[1], C = out[k]; if (!H[g]) return; for (var b = 0; b < CB; b++) if (C.c[b]) { H[g].s[b] = (H[g].s[b] || 0) + C.s[b]; H[g].c[b] = (H[g].c[b] || 0) + C.c[b]; } });
     pend.forEach(function (x) {
       var h = H[x.g], own = 0, her = 0, ok = true, tot = 0;
       Object.keys(x.m).forEach(function (b) { if (h.c[b]) { own += x.m[b]; her += h.s[b] / h.c[b]; } });
       if (!her) return;
       var r = own / her;
-      for (var b = 0; b < CB; b++) { var v = x.m[b] != null ? x.m[b] : h.c[b] ? h.s[b] / h.c[b] * r : null; if (v == null) { ok = false; break; } tot += v * CW; }
+      var fin = x.fin || 305, ult = null;
+      for (var b = 0; b < CB && b * CW < fin; b++) { var v = x.m[b] != null ? x.m[b] : h.c[b] ? h.s[b] / h.c[b] * r : null; if (v == null) { ok = false; break; } tot += v * Math.min(CW, fin - b * CW); ult = v; }
       if (!ok) return;
-      var C = out[x.k], est = tot * 305 / (CB * CW); C.e += Math.round(est); C.en++;
+      if (fin > CB * CW && ult != null) tot += ult * (fin - CB * CW);
+      var C = out[x.k], est = tot; C.e += Math.round(est); C.en++;
       if (x.pct) { C.es = Math.round(((C.es || 0) + est * x.pct) * 10) / 10; C.esn = (C.esn || 0) + 1; }
     });
   }
@@ -174,11 +181,19 @@
     try {
       var PA = {}, CT = {}, LA = {}, pend = [], refC = infoFromName(opts.nombreArchivo).fecha || maxF;
       T.lact.forEach(function (r) { if (r[1] > 0) LA[r[0] + '|' + r[1]] = r; });
+      // parto probable de las vacas preñadas (último tacto positivo después del último parto): para proyectar hasta el secado
+      var PP = {};
+      Object.keys(G).forEach(function (id) {
+        var g = G[id], lpf = g.pa.length ? g.pa[g.pa.length - 1][0] : '0000', ta = g.ta.filter(function (t) { return t[0] > lpf; }), lt = ta[ta.length - 1];
+        if (!lt || !cod[lt[1]] || cod[lt[1]].gest !== '2') return;
+        var sv = g.ev.filter(function (e) { return e[1] === 'S' && e[0] > lpf && e[0] <= lt[0]; });
+        if (sv.length) PP[id] = addDays(sv[sv.length - 1][0], GEST);
+      });
       T.partos.forEach(function (r) {
         var f = okDate(r[1]), a = byId[r[0]]; if (!f || !a || !(r[4] > 0) || (sel && !sel[a[11]])) return;
         var l = LA[r[0] + '|' + r[4]], L = l && l[3] > 0 ? l[3] : null, gr = l && L ? l[5] / L * 100 : null, pr = l && L ? l[6] / L * 100 : null;
         var sol = gr >= 2 && gr <= 7 && pr >= 2 && pr <= 5.5 ? l[5] + l[6] : null;
-        (PA[r[0]] = PA[r[0]] || []).push({ f: f, n: r[4], cierre: okDate(r[7]), baja: okDate(a[9]), L: L, L305: l && l[4] > 0 ? l[4] : null, sol: sol });
+        (PA[r[0]] = PA[r[0]] || []).push({ f: f, n: r[4], cierre: okDate(r[7]), baja: okDate(a[9]), pp: PP[r[0]] && PP[r[0]] > f ? PP[r[0]] : null, L: L, L305: l && l[4] > 0 ? l[4] : null, sol: sol });
       });
       T.ctrl.forEach(function (r) { var f = okDate(r[1]); if (!f || !PA[r[0]]) return; var lt = (r[2] || 0) + (r[3] || 0) + (r[4] || 0); if (lt > 0 && lt < 90) (CT[r[0]] = CT[r[0]] || []).push([f, lt, 0, r[5] || null, r[6] || null]); });
       Object.keys(CT).forEach(function (id) {
@@ -186,7 +201,7 @@
         curvaLact(curvas, PA[id].sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : 0; }), CT[id], function () { return u; }, refC, pend);
       });
       curvaProy(curvas, pend);
-      curvas['v|3'] = 1; // versión de los promedios (3: 305 d o el total si se secó antes; sólidos con los controles)
+      curvas['v|4'] = 1; // versión de los promedios (4: en curso proyectadas hasta el secado probable; 3: 305 d o el total si se secó antes; sólidos con los controles)
     } catch (e) { curvas = {}; }
 
     var info = infoFromName(opts.nombreArchivo);
