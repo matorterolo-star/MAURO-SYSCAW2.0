@@ -59,7 +59,7 @@
       });
       if (!hay) return;
       var g = p.n === 1 ? 1 : 2, k = p.f.slice(0, 7) + '|' + g + '|' + unidad(p.f);
-      var C = out[k] || (out[k] = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, cs: 0, cn: 0 });
+      var C = out[k] || (out[k] = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, es: 0, esn: 0, cs: 0, cn: 0 });
       C.n++;
       if (temprano && tarde && pk != null) { C.pk = Math.round((C.pk + pk) * 10) / 10; C.pn++; C.pd += pkd; }
       var med = {};
@@ -70,7 +70,7 @@
         C.t += Math.round(tot); C.tn++;
         if (nAn >= 4 && sL > 0) { C.gs = Math.round((C.gs + tot * sS / sL) * 10) / 10; C.gn++; }
       } else if (cerrada) { if (p.L > 0) { C.cs = (C.cs || 0) + Math.round(p.L); C.cn = (C.cn || 0) + 1; } }
-      else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) pend.push({ k: k, g: g, m: med });
+      else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) pend.push({ k: k, g: g, m: med, pct: nAn >= 2 && sL > 0 ? sS / sL : null });
     });
   }
   // lactancias en curso: se proyectan a 305 días con la curva del tambo (su nivel respecto del promedio en los tramos que ya tiene)
@@ -84,7 +84,8 @@
       var r = own / her;
       for (var b = 0; b < CB; b++) { var v = x.m[b] != null ? x.m[b] : h.c[b] ? h.s[b] / h.c[b] * r : null; if (v == null) { ok = false; break; } tot += v * CW; }
       if (!ok) return;
-      var C = out[x.k]; C.e += Math.round(tot * 305 / (CB * CW)); C.en++;
+      var C = out[x.k], est = tot * 305 / (CB * CW); C.e += Math.round(est); C.en++;
+      if (x.pct) { C.es = Math.round(((C.es || 0) + est * x.pct) * 10) / 10; C.esn = (C.esn || 0) + 1; }
     });
   }
 
@@ -181,6 +182,7 @@
         curvaLact(curvas, PA[id].sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : 0; }), CT[id], function () { return u; }, refC, pend);
       });
       curvaProy(curvas, pend);
+      curvas['v|2'] = 1; // versión de los promedios (2: sólidos con los controles y estimación en 12 meses)
     } catch (e) { curvas = {}; }
 
     var info = infoFromName(opts.nombreArchivo);

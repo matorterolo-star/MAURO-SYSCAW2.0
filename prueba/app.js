@@ -2809,7 +2809,8 @@
     function curvasTambo() {
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '');
       if (CLC.k === k) return CLC.r;
-      var C = DB.curvas, desdeLib = false;
+      // promedios armados al leer el respaldo; los de una versión anterior (sin 'v|2') no se usan: se vuelve a la libreta
+      var C = DB.curvas && DB.curvas['v|2'] ? DB.curvas : null, desdeLib = false, viejos = !!(DB.curvas && !C);
       if (!C || !Object.keys(C).length) {
         C = {}; desdeLib = true;
         if (root.SysCaw && root.SysCaw.curvaLact) {
@@ -2826,13 +2827,13 @@
           root.SysCaw.curvaProy(C, pend);
         }
       }
-      var L = Object.keys(C).filter(function (key) { var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
+      var L = Object.keys(C).filter(function (key) { if (!/^\d{4}-\d{2}\|/.test(key)) return false; var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
       CLC = { k: k, r: { L: L, desdeLib: desdeLib, desde: L.reduce(function (a, x) { return !a || x.m < a ? x.m : a; }, '') } };
       return CLC.r;
     }
     function clSuma(lista) {
-      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, cs: 0, cn: 0 };
-      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; ['t', 'tn', 'gs', 'gn', 'e', 'en', 'cs', 'cn'].forEach(function (q) { r[q] += d[q] || 0; }); for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
+      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, es: 0, esn: 0, cs: 0, cn: 0 };
+      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; ['t', 'tn', 'gs', 'gn', 'e', 'en', 'es', 'esn', 'cs', 'cn'].forEach(function (q) { r[q] += d[q] || 0; }); for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
       return r;
     }
     function clTramo(r, b0, b1) { var s = 0, c = 0; for (var b = b0; b <= b1; b++) { if (r.c[b]) { s += r.s[b]; c += r.c[b]; } } return c >= 5 ? s / c : null; }
@@ -2883,12 +2884,12 @@
       var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') + '<br><small>' + nf(r.pd / r.pn, 0) + ' d</small>' : '–'; };
       var tot = clSuma(Lg), est = per === '12';
       // sólidos: solo si la mayoría de las lactancias con total tienen análisis regulares (4 controles o más con grasa y proteína)
-      var conSol = tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
+      var conSol = est ? tot.tn + tot.en >= 5 && (tot.gn + tot.esn) / (tot.tn + tot.en) >= 0.5 : tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
       var litros = function (r) {
         var n = r.tn + (est ? r.en : 0); if (!n) return '–';
         return nf((r.t + (est ? r.e : 0)) / n) + '<br><small>' + (est && r.en ? 'est. · ' : '') + n + ' lact.</small>';
       };
-      var solidos = function (r) { return r.gn >= 3 ? nf(r.gs / r.gn) + '<br><small>' + r.gn + ' lact.</small>' : '–'; };
+      var solidos = function (r) { var n = r.gn + (est ? r.esn : 0); return n >= 3 ? nf((r.gs + (est ? r.es : 0)) / n) + '<br><small>' + (est && r.esn ? 'est. · ' : '') + n + ' lact.</small>' : '–'; };
       h += '<h3 class="vh3">Por mes de parto</h3><div class="filters" role="group" aria-label="Lactancia">' + [[2, 'Multíparas'], [1, 'Primíparas']].map(function (c) { return '<button class="fchip" data-clg="' + c[0] + '" aria-pressed="' + (g === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
         '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d</th>' + (conSol ? '<th>Kg sólidos</th>' : '') + '</tr></thead><tbody>' +
         filasMes.map(function (x) {
@@ -2902,7 +2903,7 @@
         'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
         'Litros 305 d: promedio de la producción a 305 días de ' + SRC() + ', solo de las lactancias que llegaron a 305 días' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
         (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias cerraron antes de los 305 días</b> (secado o baja), con un promedio de ' + nf(tot.cs / tot.cn) + ' L en toda la lactancia: no entran en la columna. ' : '') +
-        'Kg sólidos: grasa + proteína a 305 días, solo con lactancias de 4 o más análisis' + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
+        'Kg sólidos: litros a 305 días × el % de grasa + proteína de los controles de cada vaca, en lactancias con 4 análisis o más' + (est ? ' (las en curso, con los que ya tienen)' : '') + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
         (T.desdeLib && DB.fuente === 'syscaw' ? ' <b>Para el histórico completo, volvé a cargar el respaldo de SysCaw</b>: ahora solo están los controles de la lactancia actual y la anterior de cada vaca.' : T.desdeLib ? ' Con esta base solo están los controles de la lactancia actual y la anterior de cada vaca.' : '') + '</p>';
       return h + '</section>';
     }
