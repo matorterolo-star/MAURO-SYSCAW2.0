@@ -2809,8 +2809,8 @@
     function curvasTambo() {
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '');
       if (CLC.k === k) return CLC.r;
-      // promedios armados al leer el respaldo; los de una versión anterior (sin 'v|2') no se usan: se vuelve a la libreta
-      var C = DB.curvas && DB.curvas['v|2'] ? DB.curvas : null, desdeLib = false, viejos = !!(DB.curvas && !C);
+      // promedios armados al leer el respaldo; los de una versión anterior (sin 'v|3') no se usan: se vuelve a la libreta
+      var C = DB.curvas && DB.curvas['v|3'] ? DB.curvas : null, desdeLib = false, viejos = !!(DB.curvas && !C);
       if (!C || !Object.keys(C).length) {
         C = {}; desdeLib = true;
         if (root.SysCaw && root.SysCaw.curvaLact) {
@@ -2819,7 +2819,7 @@
             var la = {}; (x.h.la || []).forEach(function (l) { la[l[0]] = l; });
             var pa = x.h.pa.filter(function (p) { return p[1] > 0; }).map(function (p) {
               var l = la[p[1]], L = l && l[1] > 0 ? l[1] : null, ok = l && l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
-              return { f: p[0], n: p[1], cierre: p[5] || null, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
+              return { f: p[0], n: p[1], cierre: p[5] || null, baja: x.a.bFecha || null, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
             });
             var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], 0, c[2] || null, c[3] || null]; });
             if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; }, ref, pend);
@@ -2901,8 +2901,8 @@
       h += '<p class="cap">Lactancias de las vacas que parieron ' + (per === 'h' ? 'desde ' + A.MESES[+T.desde.slice(5, 7) - 1] + ' ' + T.desde.slice(0, 4) : 'en los últimos ' + per + ' meses (hasta ' + A.MESES[+ref.slice(5, 7) - 1] + ' ' + ref.slice(0, 4) + ')') +
         ', con al menos un control lechero (Lact. = lactancias evaluadas). Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
         'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
-        'Litros 305 d: promedio de la producción a 305 días de ' + SRC() + ', solo de las lactancias que llegaron a 305 días' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
-        (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias cerraron antes de los 305 días</b> (secado o baja), con un promedio de ' + nf(tot.cs / tot.cn) + ' L en toda la lactancia: no entran en la columna. ' : '') +
+        'Litros 305 d: como en el control lechero (ICAR), los primeros 305 días según ' + SRC() + ', o el total real si la vaca se secó antes' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
+        (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias terminaron antes de los 305 días por venta o muerte</b>, con ' + nf(tot.cs / tot.cn) + ' L de promedio: no entran en la columna, porque reflejan el descarte y no la producción. ' : '') +
         'Kg sólidos: litros a 305 días × el % de grasa + proteína de los controles de cada vaca, en lactancias con 4 análisis o más' + (est ? ' (las en curso, con los que ya tienen)' : '') + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
         (T.desdeLib && DB.fuente === 'syscaw' ? ' <b>Para el histórico completo, volvé a cargar el respaldo de SysCaw</b>: ahora solo están los controles de la lactancia actual y la anterior de cada vaca.' : T.desdeLib ? ' Con esta base solo están los controles de la lactancia actual y la anterior de cada vaca.' : '') + '</p>';
       return h + '</section>';

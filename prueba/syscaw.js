@@ -65,11 +65,15 @@
       var med = {};
       Object.keys(B).forEach(function (b) { var v = B[b], m = v.reduce(function (x, y) { return x + y; }, 0) / v.length; med[b] = m; C.s[b] = Math.round(((C.s[b] || 0) + m) * 10) / 10; C.c[b] = (C.c[b] || 0) + 1; });
       // a 305 días: solo las que llegaron (las que cerraron antes, por secado o baja, se cuentan aparte: mezclarlas bajaría el promedio)
-      var cerrada = !!pa[i + 1] || !!(p.cierre && p.cierre <= ref), tot = p.L305 > 0 ? p.L305 : null;
+      // como el control lechero (ICAR / DHIA): los primeros 305 días, o el total real si se secó antes. Las que terminaron por venta o
+      // muerte antes de los 305 días quedan aparte (reflejan el descarte, no la producción)
+      var cerrada = !!pa[i + 1] || !!(p.cierre && p.cierre <= ref);
+      var porBaja = !pa[i + 1] && !!p.baja && (!p.cierre || Math.abs(diffDays(p.baja, p.cierre)) <= 7);
+      var tot = p.L305 > 0 ? p.L305 : cerrada && !porBaja && p.L > 0 ? p.L : null;
       if (tot) {
         C.t += Math.round(tot); C.tn++;
         if (nAn >= 4 && sL > 0) { C.gs = Math.round((C.gs + tot * sS / sL) * 10) / 10; C.gn++; }
-      } else if (cerrada) { if (p.L > 0) { C.cs = (C.cs || 0) + Math.round(p.L); C.cn = (C.cn || 0) + 1; } }
+      } else if (cerrada || porBaja) { if (p.L > 0) { C.cs = (C.cs || 0) + Math.round(p.L); C.cn = (C.cn || 0) + 1; } }
       else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) pend.push({ k: k, g: g, m: med, pct: nAn >= 2 && sL > 0 ? sS / sL : null });
     });
   }
@@ -174,7 +178,7 @@
         var f = okDate(r[1]), a = byId[r[0]]; if (!f || !a || !(r[4] > 0) || (sel && !sel[a[11]])) return;
         var l = LA[r[0] + '|' + r[4]], L = l && l[3] > 0 ? l[3] : null, gr = l && L ? l[5] / L * 100 : null, pr = l && L ? l[6] / L * 100 : null;
         var sol = gr >= 2 && gr <= 7 && pr >= 2 && pr <= 5.5 ? l[5] + l[6] : null;
-        (PA[r[0]] = PA[r[0]] || []).push({ f: f, n: r[4], cierre: okDate(r[7]), L: L, L305: l && l[4] > 0 ? l[4] : null, sol: sol });
+        (PA[r[0]] = PA[r[0]] || []).push({ f: f, n: r[4], cierre: okDate(r[7]), baja: okDate(a[9]), L: L, L305: l && l[4] > 0 ? l[4] : null, sol: sol });
       });
       T.ctrl.forEach(function (r) { var f = okDate(r[1]); if (!f || !PA[r[0]]) return; var lt = (r[2] || 0) + (r[3] || 0) + (r[4] || 0); if (lt > 0 && lt < 90) (CT[r[0]] = CT[r[0]] || []).push([f, lt, 0, r[5] || null, r[6] || null]); });
       Object.keys(CT).forEach(function (id) {
@@ -182,7 +186,7 @@
         curvaLact(curvas, PA[id].sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : 0; }), CT[id], function () { return u; }, refC, pend);
       });
       curvaProy(curvas, pend);
-      curvas['v|2'] = 1; // versión de los promedios (2: sólidos con los controles y estimación en 12 meses)
+      curvas['v|3'] = 1; // versión de los promedios (3: 305 d o el total si se secó antes; sólidos con los controles)
     } catch (e) { curvas = {}; }
 
     var info = infoFromName(opts.nombreArchivo);
