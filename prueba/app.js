@@ -833,7 +833,7 @@
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
           if ((!d.tambo || externo(d.origen)) && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
-          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
+          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], curvas: d.curvas || null, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
           if (!r) return;
@@ -2068,13 +2068,28 @@
     }
     function selMesHTML(G, id) { return '<label class="secfecha">Hasta el mes <input type="month" id="' + id + '" value="' + G.fin + '"' + (G.minMes ? ' min="' + G.minMes + '"' : '') + ' max="' + G.maxMes + '"></label>'; }
     // Partos ocurridos en los 12 meses: vacas y vaquillonas (sin abortos), en % de la vaca masa promedio
+    // resumen de las crías de Partos ocurridos: hembras y machos de vacas y de vaquillonas
+    function sexoHTML(SX) {
+      var T = { m: SX.v.m + SX.q.m, h: SX.v.h + SX.q.h, sd: SX.v.sd + SX.q.sd, mel: SX.v.mel + SX.q.mel };
+      if (!T.m && !T.h) return '';
+      var pH = function (x) { var n = x.m + x.h; return n ? nf(x.h / n * 100, 0) + '%' : '–'; };
+      var fila = function (nom, x, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + nom + '</td><td>' + nf(x.h) + '</td><td>' + nf(x.m) + '</td><td><b>' + pH(x) + '</b></td></tr>'; };
+      return '<h3 class="vh3">Crías: hembras y machos</h3><table class="tbl"><thead><tr><th></th><th>Hembras</th><th>Machos</th><th>% hembras</th></tr></thead><tbody>' +
+        fila('Partos de vacas', SX.v) + fila('Partos de vaquillonas', SX.q) + fila('<b>Total</b>', T, 'sep tot') + '</tbody></table>' +
+        '<p class="cap">Cuenta cada cría' + (T.mel ? ' (hubo ' + T.mel + (T.mel === 1 ? ' parto de mellizos' : ' partos de mellizos') + ')' : '') + (T.sd ? '; ' + T.sd + (T.sd === 1 ? ' cría sin sexo anotado' : ' crías sin sexo anotado') : '') + '. El % de hembras es sobre las crías con sexo anotado.</p>';
+    }
     function partosOcHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var G = rangoVO(), M = G.M, keys = M.map(function (x) { return x.key; }), pv = M.map(function () { return 0; }), pq = pv.slice(), ab = 0;
+      var SX = { v: { m: 0, h: 0, sd: 0, mel: 0 }, q: { m: 0, h: 0, sd: 0, mel: 0 } };
       infLista().forEach(function (x) { x.h.pa.forEach(function (p) {
         var k = keys.indexOf(p[0].slice(0, 7)); if (k < 0 || !enSel(unidadEn(x, p[0]))) return;
         if (/^A/.test(p[2] || '')) { ab++; return; }
         if (p[1] === 1) pq[k]++; else pv[k]++;
+        // sexo de las crías (mellizos: cuenta cada cría)
+        var cs = SX[p[1] === 1 ? 'q' : 'v'], cr = String(p[2] || '').split('/').filter(Boolean);
+        if (cr.length > 1) cs.mel++;
+        if (!cr.length) cs.sd++; cr.forEach(function (c) { if (c === 'M') cs.m++; else if (c === 'H') cs.h++; else cs.sd++; });
       }); });
       var tv = pv.reduce(function (a, b) { return a + b; }, 0), tq = pq.reduce(function (a, b) { return a + b; }, 0);
       var vms = G.R.vm.filter(function (v) { return v != null; }), vm = vms.length ? vms.reduce(function (a, b) { return a + b; }, 0) / vms.length : null;
@@ -2095,6 +2110,7 @@
         '<div class="kpis kpis2"><div><b>' + nf(tv) + '</b><span>Partos de vacas · ' + pc(tv) + '</span></div><div><b>' + nf(tq) + '</b><span>Partos de vaquillonas · ' + pc(tq) + '</span></div></div>' +
         '<div class="mleg"><span><i class="v"></i>Vacas</span><span><i class="q"></i>Vaquillonas</span></div>' +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Partos ocurridos por mes, vacas y vaquillonas">' + s + '</svg>' +
+        sexoHTML(SX) +
         '<p class="cap">Partos de los 12 meses que terminan en ' + A.MESES[G.m - 1] + ' ' + G.y + ', sin abortos' + (ab ? ' (hubo ' + ab + ')' : '') + '. Los % son sobre la vaca masa promedio de esos meses (ordeñe + secas: ' + (vm != null ? nf(vm) : '–') + '). El mes del respaldo puede estar incompleto.</p></section>';
     }
     function vovsHTML() {
@@ -2653,9 +2669,93 @@
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
         '<p class="cap">' + nombre[med] + (DB.origen === 'delpro' ? ' según la producción diaria de cada vaca en DelPro (medidores), resumida por semana; el mes es el promedio de sus semanas.' : ' según el control lechero de ' + SRC() + '; si hay más de un control en el mes, se promedian.') + ' El % compara con el mismo mes del año anterior.</p></section>';
     }
+    /* ----- curvas de lactancia por mes de parto (primíparas y multíparas) ----- */
+    var CLC = { k: null, r: null };
+    // SysCaw trae los promedios armados con todo el historial; las otras bases (o respaldos viejos) se arman con los controles de la libreta
+    function curvasTambo() {
+      var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '');
+      if (CLC.k === k) return CLC.r;
+      var C = DB.curvas, desdeLib = false;
+      if (!C || !Object.keys(C).length) {
+        C = {}; desdeLib = true;
+        if (root.SysCaw && root.SysCaw.curvaLact) infLista().forEach(function (x) {
+          var pa = x.h.pa.filter(function (p) { return p[1] > 0; }).map(function (p) { return [p[0], p[1]]; }), ct = (x.h.ct || []).map(function (c) { return [c[0], c[1]]; });
+          if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; });
+        });
+      }
+      var L = Object.keys(C).filter(function (key) { var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
+      CLC = { k: k, r: { L: L, desdeLib: desdeLib, desde: L.reduce(function (a, x) { return !a || x.m < a ? x.m : a; }, '') } };
+      return CLC.r;
+    }
+    function clSuma(lista) {
+      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [] };
+      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
+      return r;
+    }
+    function clTramo(r, b0, b1) { var s = 0, c = 0; for (var b = b0; b <= b1; b++) { if (r.c[b]) { s += r.s[b]; c += r.c[b]; } } return c >= 5 ? s / c : null; }
+    function clChart(series) {
+      var W = 340, H = 200, ml = 30, mr = 8, mt = 10, mb = 28, all = [];
+      series.forEach(function (S) { for (var b = 0; b < 12; b++) if (S.r.c[b] >= 5) all.push(S.r.s[b] / S.r.c[b]); });
+      if (!all.length) return '';
+      var lo = Math.max(0, Math.floor(Math.min.apply(null, all) / 5) * 5), hi = Math.ceil(Math.max.apply(null, all) / 5) * 5; if (hi - lo < 10) lo = Math.max(0, hi - 10);
+      var paso = hi - lo > 30 ? 10 : 5;
+      var X = function (b) { return ml + b * (W - ml - mr) / 11; }, Y = function (v) { return H - mb - (v - lo) / (hi - lo) * (H - mt - mb); }, s = '';
+      for (var v = lo; v <= hi; v += paso) s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 5) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+      for (var b = 1; b < 12; b += 2) s += '<text class="mlbl" x="' + X(b).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="middle">' + ((b + 1) * 25) + '</text>';
+      s += '<text class="myear" x="' + (W - mr) + '" y="' + (H - 2) + '" text-anchor="end">días en leche</text>';
+      series.forEach(function (S) {
+        var seg = [], segs = [];
+        for (var b = 0; b < 12; b++) { if (S.r.c[b] >= 5) seg.push([X(b), Y(S.r.s[b] / S.r.c[b]), S.r.s[b] / S.r.c[b], S.r.c[b], b]); else if (seg.length) { segs.push(seg); seg = []; } }
+        if (seg.length) segs.push(seg);
+        segs.forEach(function (sg) {
+          if (sg.length > 1) s += '<polyline class="clp" style="stroke:' + S.col + (S.dash ? ';stroke-dasharray:5 4' : '') + '" points="' + sg.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+          sg.forEach(function (p) { s += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="' + (S.dash ? 2.5 : 3) + '" style="fill:' + S.col + '"><title>' + S.nom + ', ' + (p[4] * 25 + 1) + ' a ' + ((p[4] + 1) * 25) + ' días: ' + nf(p[2], 1) + ' L (' + p[3] + ' lact.)</title></circle>'; });
+        });
+      });
+      return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Curva de lactancia: litros por día según días en leche">' + s + '</svg>';
+    }
+    var CL_PER = [['12', '12 meses'], ['24', '24 meses'], ['h', 'Histórico']];
+    function curvasHTML() {
+      if (!document.getElementById('clCss')) { var st = document.createElement('style'); st.id = 'clCss'; st.textContent = ':root{--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86}@media (prefers-color-scheme:dark){:root{--cl1:#E3B84A;--cl2:#7FA8EE;--clm:#5FD0D8}}.clp{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.cltbl{font-size:14px}.cltbl th,.cltbl td{padding-left:4px;padding-right:4px}.cltbl td small{color:var(--muted);font-weight:600}.cltbl tr[data-clmes]{cursor:pointer}.cltbl tr.on td{background:color-mix(in srgb,var(--clm) 16%,transparent)}.cltbl tr.clvac td{color:var(--muted)}'; document.head.appendChild(st); }
+      var T = curvasTambo(); if (!T.L.length) return '';
+      var per = state.clPer || '12', g = state.clG || 2, ref = (DB.fecha || today()).slice(0, 7);
+      var mesesAtras = function (n) { var y = +ref.slice(0, 4), m = +ref.slice(5, 7) - n; while (m < 1) { m += 12; y--; } return y + '-' + pad2(m); };
+      var desde = per === 'h' ? '0000' : mesesAtras(+per - 1);
+      var L = T.L.filter(function (x) { return x.m >= desde && x.m <= ref; });
+      var P1 = clSuma(L.filter(function (x) { return x.g === 1; })), P2 = clSuma(L.filter(function (x) { return x.g === 2; }));
+      var col1 = 'var(--cl1)', col2 = 'var(--cl2)', colM = 'var(--clm)';
+      var ser = [{ r: P2, col: col2, nom: 'Multíparas' }, { r: P1, col: col1, nom: 'Primíparas' }], mesSel = state.clMes || null;
+      var Lg = L.filter(function (x) { return x.g === g; });
+      var porMes = []; for (var m = 1; m <= 12; m++) { var mm = pad2(m); porMes.push({ m: m, r: clSuma(Lg.filter(function (x) { return x.m.slice(5, 7) === mm; })) }); }
+      // 12 meses: en orden, del mes más viejo al más nuevo, con el año
+      var filasMes = porMes;
+      if (per === '12') { filasMes = []; for (var q = 11; q >= 0; q--) { var km = mesesAtras(q); filasMes.push({ m: +km.slice(5, 7), y: km.slice(2, 4), r: porMes[+km.slice(5, 7) - 1].r }); } }
+      if (mesSel) { var rs = porMes[mesSel - 1].r; if (rs.n) ser.push({ r: rs, col: colM, nom: 'Partos de ' + A.MESES[mesSel - 1] + ' (' + (g === 1 ? 'prim.' : 'mult.') + ')', dash: true }); }
+      var h = '<section class="card"><h2>Curva de lactancia</h2>' +
+        '<div class="filters" role="group" aria-label="Período de partos">' + CL_PER.map(function (c) { return '<button class="fchip" data-clper="' + c[0] + '" aria-pressed="' + (per === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+        '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
+        clChart(ser);
+      var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') + '<br><small>' + nf(r.pd / r.pn, 0) + ' d</small>' : '–'; };
+      var t = function (v) { return v == null ? '–' : v.toFixed(1).replace('.', ','); };
+      var tot = clSuma(Lg);
+      h += '<h3 class="vh3">Por mes de parto</h3><div class="filters" role="group" aria-label="Lactancia">' + [[2, 'Multíparas'], [1, 'Primíparas']].map(function (c) { return '<button class="fchip" data-clg="' + c[0] + '" aria-pressed="' + (g === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>1–100</th><th>101–200</th><th>201–300</th></tr></thead><tbody>' +
+        filasMes.map(function (x) {
+          var nomM = A.MESES[x.m - 1] + (x.y ? ' <small>' + x.y + '</small>' : '');
+          if (!x.r.n) return '<tr class="clvac"><td>' + nomM + '</td><td>0</td><td colspan="4"></td></tr>';
+          return '<tr data-clmes="' + x.m + '"' + (mesSel === x.m ? ' class="on"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(x.r.n) + '</td><td>' + pico(x.r) + '</td><td>' + t(clTramo(x.r, 0, 3)) + '</td><td>' + t(clTramo(x.r, 4, 7)) + '</td><td>' + t(clTramo(x.r, 8, 11)) + '</td></tr>';
+        }).join('') +
+        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(tot.n) + '</b></td><td>' + pico(tot) + '</td><td>' + t(clTramo(tot, 0, 3)) + '</td><td>' + t(clTramo(tot, 4, 7)) + '</td><td>' + t(clTramo(tot, 8, 11)) + '</td></tr></tbody></table>';
+      h += '<p class="cap">Lactancias de las vacas que parieron ' + (per === 'h' ? 'desde ' + A.MESES[+T.desde.slice(5, 7) - 1] + ' ' + T.desde.slice(0, 4) : 'en los últimos ' + per + ' meses (hasta ' + A.MESES[+ref.slice(5, 7) - 1] + ' ' + ref.slice(0, 4) + ')') +
+        ', con al menos un control lechero (Lact. = lactancias evaluadas). Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
+        'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). 1–100, 101–200 y 201–300: litros por día promedio en cada tercio. ' +
+        'Las paridas recientes solo aportan el principio de la curva, por eso en los meses de parto más nuevos los últimos tercios quedan con menos lactancias o vacíos. Tocá un mes para verlo en la curva.' +
+        (T.desdeLib && DB.fuente === 'syscaw' ? ' <b>Para el histórico completo, volvé a cargar el respaldo de SysCaw</b>: ahora solo están los controles de la lactancia actual y la anterior de cada vaca.' : T.desdeLib ? ' Con esta base solo están los controles de la lactancia actual y la anterior de cada vaca.' : '') + '</p>';
+      return h + '</section>';
+    }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
-      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
+      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + curvasHTML() + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
       var lt = prom(V, function (v) { return v.lt; }), sol = prom(V, function (v) { return v.sol; });
       var conPrev = V.filter(function (v) { return v.prev && v.prev[1] > 0; });
       var dif = conPrev.length ? prom(conPrev, function (v) { return v.lt - v.prev[1]; }) : null;
@@ -2680,7 +2780,7 @@
           return rowHTML(v.a, { right: '<span class="when ' + (d != null && d < 0 ? 'late' : 'ok') + '">' + nf(v.lt, 1) + ' L</span>',
             sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
         }).join('') + '</section>';
-      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + top5 + tabla + caida;
+      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + curvasHTML() + top5 + tabla + caida;
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
@@ -2813,7 +2913,7 @@
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], curvas: o.curvas || null, config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
@@ -3717,6 +3817,9 @@
       if ((el = e.target.closest('[data-cat]'))) { state.cat = el.dataset.cat; state.filtro = 'todas'; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-f]'))) { state.filtro = el.dataset.f; state.n = 60; render(); return; }
       if ((el = e.target.closest('[data-pev]'))) { state.pev = +el.dataset.pev; render(); return; }
+      if ((el = e.target.closest('[data-clper]'))) { state.clPer = el.dataset.clper; render(); return; }
+      if ((el = e.target.closest('[data-clg]'))) { state.clG = +el.dataset.clg; render(); return; }
+      if ((el = e.target.closest('[data-clmes]'))) { var cm = +el.dataset.clmes; state.clMes = state.clMes === cm ? null : cm; render(); return; }
       if ((el = e.target.closest('[data-icf]'))) { var kf = el.dataset.icf; state.insCal = state.insCal === kf ? null : kf; var Fq = insFechas(); state.insCalM = (kf === 'd0' ? Fq[0] : Fq[1]).slice(0, 7); render(); return; }
       if ((el = e.target.closest('[data-icm]'))) { var mm = (state.insCalM || insFechas()[1].slice(0, 7)).split('-').map(Number), dt = new Date(mm[0], mm[1] - 1 + (+el.dataset.icm), 1, 12); state.insCalM = A.ymd(dt).slice(0, 7); render(); return; }
       if ((el = e.target.closest('[data-icd]'))) { var kd = state.insCal === 'd0' ? 'insD0' : 'insD1'; state[kd] = el.dataset.icd; setP(kd.toLowerCase(), el.dataset.icd); if (state.insCal === 'd0') { state.insCal = 'd1'; state.insCalM = insFechas()[1].slice(0, 7); } else state.insCal = null; render(); return; }

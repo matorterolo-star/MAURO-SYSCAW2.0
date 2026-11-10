@@ -39,6 +39,28 @@
     return { tambo: tambo || null, fecha: fecha };
   }
 
+  // suma una vaca a las curvas: pa = [[fecha parto, nº lactancia], ...] ordenado; ct = [[fecha, litros], ...]
+  // tramos de 25 días en leche (12 tramos = 300 días); pico = control más alto hasta 120 días (si tiene control antes de los 60 y otro después de los 90: ya pasó el pico)
+  var CB = 12, CW = 25;
+  function curvaLact(out, pa, ct, unidad) {
+    pa.forEach(function (p, i) {
+      var hasta = pa[i + 1] ? pa[i + 1][0] : '9999', B = {}, pk = null, pkd = null, temprano = false, tarde = false, hay = false;
+      ct.forEach(function (c) {
+        if (c[0] <= p[0] || c[0] >= hasta || !(c[1] > 0)) return;
+        var d = diffDays(c[0], p[0]); if (d < 1 || d > CB * CW) return;
+        var b = Math.floor((d - 1) / CW); (B[b] = B[b] || []).push(c[1]); hay = true;
+        if (d <= 60) temprano = true; if (d >= 90) tarde = true;
+        if (d <= 120 && (pk == null || c[1] > pk)) { pk = c[1]; pkd = d; }
+      });
+      if (!hay) return;
+      var k = p[0].slice(0, 7) + '|' + (p[1] === 1 ? 1 : 2) + '|' + unidad(p[0]);
+      var C = out[k] || (out[k] = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [] });
+      C.n++;
+      if (temprano && tarde && pk != null) { C.pk = Math.round((C.pk + pk) * 10) / 10; C.pn++; C.pd += pkd; }
+      Object.keys(B).forEach(function (b) { var v = B[b], m = v.reduce(function (x, y) { return x + y; }, 0) / v.length; C.s[b] = Math.round(((C.s[b] || 0) + m) * 10) / 10; C.c[b] = (C.c[b] || 0) + 1; });
+    });
+  }
+
   // files: { 'Identificación.DB': Uint8Array, ... }
   function build(files, opts) {
     opts = opts || {};
@@ -114,6 +136,18 @@
       g.ct.push([f, Math.round(lt * 10) / 10, r[5] || null, r[6] || null, r[7] || null]); if (f > maxF) maxF = f;
     });
     Object.keys(G).forEach(function (id) { G[id].ct.sort(cmp); });
+    // curvas de lactancia: con TODOS los controles y partos del respaldo (también vacas dadas de baja hace años), pero se guardan
+    // solo promedios por mes de parto, lactancia (1 = primípara, 2 = multípara) y unidad: no agranda la libreta
+    var curvas = {};
+    try {
+      var PA = {}, CT = {};
+      T.partos.forEach(function (r) { var f = okDate(r[1]), a = byId[r[0]]; if (!f || !a || !(r[4] > 0) || (sel && !sel[a[11]])) return; (PA[r[0]] = PA[r[0]] || []).push([f, r[4]]); });
+      T.ctrl.forEach(function (r) { var f = okDate(r[1]); if (!f || !PA[r[0]]) return; var lt = (r[2] || 0) + (r[3] || 0) + (r[4] || 0); if (lt > 0 && lt < 90) (CT[r[0]] = CT[r[0]] || []).push([f, lt]); });
+      Object.keys(CT).forEach(function (id) {
+        var u = byId[id][11] == null ? 0 : byId[id][11];
+        curvaLact(curvas, PA[id].sort(cmp), CT[id], function () { return u; });
+      });
+    } catch (e) { curvas = {}; }
 
     var info = infoFromName(opts.nombreArchivo);
     var ref = info.fecha || maxF;
@@ -195,7 +229,7 @@
     // número de productor de SysCaw: identifica al tambo para la activación
     var idProd = [];
     try { if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: ['IdProd'], array: true }).rows.forEach(function (r) { if (r[0] != null && idProd.indexOf(r[0]) < 0) idProd.push(r[0]); }); } catch (e) { idProd = []; }
-    return { idProd: idProd, ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
+    return { idProd: idProd, ctrls: ctrls, curvas: curvas, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una
@@ -236,6 +270,6 @@
     return d;
   }
 
-  var api = { build: build, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
+  var api = { build: build, curvaLact: curvaLact, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SysCaw = api;
 })(typeof window !== 'undefined' ? window : this);
