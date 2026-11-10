@@ -1,4 +1,5 @@
 {
-  "nota": "Productores bloqueados en la Libreta de vacas (número de productor de SysCaw). Para desbloquear, sacarlo de la lista.",
-  "productores": []
+  "nota": "Productores bloqueados en la Libreta de vacas (número de productor de SysCaw). Para desbloquear, sacarlo de la lista. En 'links' van los links con datos bloqueados uno por uno (se manejan desde la app, modo veterinario: Link con los datos → Links mandados).",
+  "productores": [],
+  "links": []
 }

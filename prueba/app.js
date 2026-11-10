@@ -2861,7 +2861,20 @@
     var BLOQ = []; try { BLOQ = JSON.parse(localStorage.getItem('libreta:bloq')) || []; } catch (e) { BLOQ = []; }
     function esBloq(p) { return BLOQ.indexOf(String(p)) >= 0; }
     BLOQ = BLOQ.map(String);
-    function actOK(x) { return !(x.p || []).some(esBloq); }
+    // links bloqueados uno por uno (bloqueos.json → "links"): cada link con datos tiene su id (el comienzo de su firma), que el
+    // teléfono guarda al abrirlo. Así se corta un link puntual (un operario que se fue, un link reenviado) sin tocar al productor
+    var BLOQL = []; try { BLOQL = JSON.parse(localStorage.getItem('libreta:bloqL')) || []; } catch (e) { BLOQL = []; }
+    function linkId(token) { var q = String(token || '').split('.'); return q.length > 1 ? q[1].slice(0, 12) : null; }
+    function actOK(x) { return !(x.p || []).some(esBloq) && !(x.lid && BLOQL.indexOf(x.lid) >= 0); }
+    // activaciones de antes de esta versión: si el último link abierto es de ese tambo, se le agrega su id
+    (function () {
+      var u = ''; try { u = localStorage.getItem('libreta:ultLink') || ''; } catch (e) {}
+      var mm = /#libreta=[a-f0-9]+\.[A-Za-z0-9_\-]+\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)/.exec(u); if (!mm) return;
+      var pl = null; try { pl = JSON.parse(new TextDecoder().decode(unb64u(mm[1]))); } catch (e) { return; }
+      var cambio = false;
+      ACT.forEach(function (x) { if (!x.lid && pl && JSON.stringify(x.p) === JSON.stringify(pl.p) && x.f === pl.f && (x.r || '') === (pl.r || '')) { x.lid = mm[2].slice(0, 12); cambio = true; } });
+      if (cambio) try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {}
+    })();
     function suspendido() {
       if (esVet()) return false;
       if (DB && DB.idProd && DB.idProd.some(esBloq)) return true;
@@ -2873,8 +2886,9 @@
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (o) {
           var L = ((o && o.productores) || []).map(function (x) { return String(x && typeof x === 'object' ? x.p : x).trim(); }).filter(function (n) { return n && n !== 'undefined' && n !== 'null'; }).sort();
-          if (JSON.stringify(L) === JSON.stringify(BLOQ)) return;
-          BLOQ = L; try { localStorage.setItem('libreta:bloq', JSON.stringify(BLOQ)); } catch (e) {}
+          var LL = ((o && o.links) || []).map(function (x) { return String(x && typeof x === 'object' ? x.l : x).trim(); }).filter(Boolean).sort();
+          if (JSON.stringify(L) === JSON.stringify(BLOQ) && JSON.stringify(LL) === JSON.stringify(BLOQL)) return;
+          BLOQ = L; BLOQL = LL; try { localStorage.setItem('libreta:bloq', JSON.stringify(BLOQ)); localStorage.setItem('libreta:bloqL', JSON.stringify(BLOQL)); } catch (e) {}
           render();
         }).catch(function () {});
     }
@@ -3018,11 +3032,52 @@
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
       $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' || DB.origen === 'dhm' ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
-      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="lnklista">Links mandados · bloquear uno</button><button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
+    }
+    // registro de los links con datos que se mandaron desde este teléfono (solo veterinario)
+    function linksMandados(cambiar) { var L = []; try { L = JSON.parse(localStorage.getItem('libreta:links')) || []; } catch (e) {} if (cambiar) { cambiar(L); try { localStorage.setItem('libreta:links', JSON.stringify(L.slice(0, 300))); } catch (e) {} } return L; }
+    function linksLista() {
+      var L = linksMandados(), bl = state.bloqLinks || BLOQL;
+      $('#sheetXTitle').textContent = 'Links mandados';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">Bloquear un link corta a quien lo abrió con él: deja de ver la libreta y de recibir datos nuevos. El productor y los demás links del tambo siguen andando. Se puede desbloquear después.</p>' +
+        (L.length ? L.map(function (x) {
+          var b = bl.indexOf(x.l) >= 0;
+          return '<div class="lnkrow' + (b ? ' bloq' : '') + '"><span><b>' + esc(x.n || 'Tambo') + '</b><small>' + (x.para ? 'Para ' + esc(x.para) + ' · ' : '') + (x.r === 'op' ? 'Operario' : 'Productor') + ' · ' + A.fmt(x.f) + (x.h ? ' ' + x.h : '') + (b ? ' · <b>bloqueado</b>' : '') + '</small></span><button class="btn" data-a="lnkbloq" data-l="' + esc(x.l) + '">' + (b ? 'Desbloquear' : 'Bloquear') + '</button></div>';
+        }).join('') : '<p class="hint">Todavía no hay links registrados en este teléfono (se registran desde esta versión).</p>') +
+        '<button class="lnk" data-a="lnkpegbloq" style="display:block;margin:12px 0 0">Bloquear un link que no está en la lista (pegarlo)</button>' +
+        '<style>.lnkrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.lnkrow span{display:flex;flex-direction:column;min-width:0}.lnkrow small{color:var(--muted)}.lnkrow.bloq b{color:var(--vacia)}.lnkrow .btn{min-height:40px;padding:6px 12px}</style>';
+      $('#xbtns').innerHTML = '<button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
+    }
+    // escribe bloqueos.json en GitHub (con el permiso de los links): agrega o saca el id del link
+    function bloquearLink(lid, bloquear, nota) {
+      var tok = ghToken(); if (!tok) { toast('Falta el permiso de GitHub (Ajustes → permiso para links).'); return; }
+      if (bloquear && !confirm('¿Bloquear este link? Quien lo tenga deja de ver la libreta la próxima vez que abra la app con internet.')) return;
+      var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/bloqueos.json', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+      busy(true, bloquear ? 'Bloqueando el link…' : 'Desbloqueando el link…');
+      fetch(url + '?t=' + Date.now(), { headers: H, cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('No pude leer la lista de bloqueos (' + r.status + ').'); return r.json(); }).then(function (j) {
+        var o = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\s/g, '')), function (c) { return c.charCodeAt(0); })));
+        o.links = (o.links || []).filter(function (x) { return (x && typeof x === 'object' ? x.l : x) !== lid; });
+        if (bloquear) o.links.push({ l: lid, n: nota || '', f: today() });
+        var txt = JSON.stringify(o, null, 2) + '\n';
+        return fetch(url, { method: 'PUT', headers: H, body: JSON.stringify({ message: (bloquear ? 'Bloquear' : 'Desbloquear') + ' link ' + lid, content: b64std(new TextEncoder().encode(txt)), sha: j.sha }) });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('No pude guardar la lista de bloqueos (' + r.status + ').');
+        var bl = (state.bloqLinks || BLOQL).filter(function (x) { return x !== lid; }); if (bloquear) bl.push(lid); state.bloqLinks = bl;
+        busy(false); toast(bloquear ? 'Link bloqueado. Se aplica en 1 o 2 minutos.' : 'Link desbloqueado.'); linksLista();
+      }).catch(function (e) { busy(false); toast(e && e.message || 'No se pudo.'); });
+    }
+    // lista de bloqueos que ve el veterinario (para marcar los bloqueados en la lista)
+    function leerBloqLinks() {
+      fetch(baseApp().replace(/prueba\/$/, '') + 'bloqueos.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (o) {
+        state.bloqLinks = ((o && o.links) || []).map(function (x) { return String(x && typeof x === 'object' ? x.l : x); });
+        if (!$('#sheetX').hidden && $('#sheetXTitle').textContent === 'Links mandados') linksLista();
+      }).catch(function () {});
     }
     function linkDatosRol(rol) {
       $('#sheetX').hidden = true;
+      var para = rol === 'act' ? '' : (prompt('¿Para quién es este link? (opcional: sirve para reconocerlo si un día hay que bloquearlo)', '') || '').trim().slice(0, 60);
       busy(true, 'Subiendo los datos…<small>Quedan cifrados; la clave va solo en el link</small>');
       var nombre = PERFIL.nombre || 'tu tambo';
       subirDatos().then(function (meta) {
@@ -3031,6 +3086,7 @@
         return firmar(pl).then(function (tok) {
           busy(false);
           var link = baseApp() + '#libreta=' + meta.id + '.' + meta.k + '.' + tok;
+          linksMandados(function (L) { var hh = new Date(); L.unshift({ l: linkId(tok), n: nombre, r: rol === 'op' ? 'op' : 'prod', f: today(), h: pad2(hh.getHours()) + ':' + pad2(hh.getMinutes()), para: para }); });
           var txt = 'Hola. Este es el link de la *Libreta de vacas* de ' + nombre + (rol === 'op' ? ' (operario)' : '') + ', con los datos ya cargados:\n\n' + link +
             '\n\nTocalo y se abre lista para usar. Cuando haya datos nuevos, se actualiza sola al abrirla con internet.\n\nDr. Mauro Torterolo';
           if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
@@ -3055,7 +3111,7 @@
       busy(true, 'Abriendo la libreta…');
       verificar(m[3]).then(function (pl) {
         if (!pl || !pl.p) throw new Error('El link no es válido.');
-        if (!esVet()) { ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
+        if (!esVet()) { pl.lid = linkId(m[3]); if (BLOQL.indexOf(pl.lid) >= 0) throw new Error('Este link fue dado de baja. Pedile uno nuevo al Dr. Mauro Torterolo.'); ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
         // recién generado, el link puede tardar 1 o 2 minutos en publicarse: se reintenta solo hasta 4 minutos
         var intento = 0;
         var probar = function () {
@@ -3959,6 +4015,9 @@
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
+      else if (a === 'lnklista') { linksLista(); leerBloqLinks(); }
+      else if (a === 'lnkbloq') { var lidb = b.dataset.l, ya = (state.bloqLinks || BLOQL).indexOf(lidb) >= 0, xr = linksMandados().filter(function (q) { return q.l === lidb; })[0]; bloquearLink(lidb, !ya, xr ? xr.n + (xr.r === 'op' ? ' (operario)' : '') + (xr.para ? ' · para ' + xr.para : '') + ' · ' + xr.f : ''); }
+      else if (a === 'lnkpegbloq') { var tx = prompt('Pegá el link que querés bloquear'); var mt = tx && /#libreta=[a-f0-9]+\.[A-Za-z0-9_\-]+\.([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(tx); if (tx && !mt) toast('Eso no es un link de libreta.'); else if (mt) { var pj = null; try { pj = JSON.parse(new TextDecoder().decode(unb64u(mt[1].split('.')[0]))); } catch (e) {} bloquearLink(linkId(mt[1]), true, (pj && pj.n ? pj.n + (pj.r === 'op' ? ' (operario)' : '') + ' · ' + pj.f : 'pegado')); } }
       else if (a === 'cardimg') { var scd = b.closest('section.card'); if (scd) compartirCard(scd); }
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
