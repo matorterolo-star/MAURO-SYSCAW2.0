@@ -2107,7 +2107,7 @@
         if (mo.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(mo.anio).slice(2) + '</text>';
       });
       var hT = SX.v.h + SX.q.h, mT = SX.v.m + SX.q.m;
-      CLAVE['Partos ocurridos'] = nf(tv + tq) + ' partos en 12 meses: ' + nf(tv) + ' de vacas y ' + nf(tq) + ' de vaquillonas' + (hT + mT ? '. ' + Math.round(hT / (hT + mT) * 100) + '% de hembras' + (SX.q.h + SX.q.m ? ' (' + Math.round(SX.q.h / (SX.q.h + SX.q.m) * 100) + '% en vaquillonas)' : '') : '') + '.';
+      CLAVE['Partos ocurridos'] = nf(tv + tq) + ' partos en 12 meses' + (hT + mT ? ' · ' + Math.round(hT / (hT + mT) * 100) + '% hembras' : '');
       return '<section class="card"><h2>Partos ocurridos</h2>' + selMesHTML(G, 'pomes') +
         '<div class="kpis kpis2"><div><b>' + nf(tv) + '</b><span>Partos de vacas · ' + pc(tv) + '</span></div><div><b>' + nf(tq) + '</b><span>Partos de vaquillonas · ' + pc(tq) + '</span></div></div>' +
         '<div class="mleg"><span><i class="v"></i>Vacas</span><span><i class="q"></i>Vaquillonas</span></div>' +
@@ -2575,9 +2575,10 @@
     }
     function shNombre() { var v = null; try { v = localStorage.getItem('libreta:shnom'); } catch (e) {} return v !== '0'; }
     // lo que está elegido en la tarjeta (botones marcados, mes), dicho en una línea
-    function shContexto(sec) {
-      var t = [];
-      Array.prototype.forEach.call(sec.querySelectorAll('.fchip[aria-pressed="true"]'), function (b) { var x = b.textContent.trim(); if (/^\d+ meses$/.test(x)) x = 'Últimos ' + x; t.push(x); });
+    function shContexto(sec, soloGraf) {
+      var t = [], corte = soloGraf ? sec.querySelector('h3, table') : null;
+      var antes = function (el) { return !corte || (corte.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING); };
+      Array.prototype.forEach.call(sec.querySelectorAll('.fchip[aria-pressed="true"]'), function (b) { if (!antes(b)) return; var x = b.textContent.trim(); if (/^\d+ meses$/.test(x)) x = 'Últimos ' + x; t.push(x); });
       Array.prototype.forEach.call(sec.querySelectorAll('input[type=month],input[type=date]'), function (x) { var v = x.value || ''; if (/^\d{4}-\d{2}$/.test(v)) t.push('Hasta ' + A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4)); else if (v) t.push(A.fmt(v)); });
       return t.join(' · ');
     }
@@ -2600,7 +2601,7 @@
       w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:21px;font-weight:800;line-height:1.2">' + esc(conNom ? (PERFIL.nombre || 'Tambo') : 'Tambo') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>' +
         '<div class="shcard" style="background:#fff;border:1px solid #D3DBE7;border-radius:16px;padding:14px 16px;flex:1"><div style="font-size:20px;font-weight:800;color:#0D1A33">' + esc(titulo) + '</div>' +
         (ctx ? '<div style="font-size:14px;color:#53627B;font-weight:600;margin-top:2px">' + esc(ctx) + '</div>' : '') +
-        (clave ? '<div style="margin:10px 0 4px;padding:9px 12px;border-radius:10px;background:#FBF4DF;border-left:4px solid #C9A227;font-size:15px;font-weight:700;color:#0D1A33;line-height:1.35">' + esc(clave) + '</div>' : '') +
+        (clave ? '<div style="margin:8px 0 0;font-size:14px;font-weight:400;color:#0D1A33;line-height:1.45">' + clave.split('\n').map(esc).join('<br>') + '</div>' : '') +
         '<div class="shbody" style="margin-top:8px"></div></div>' +
         '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>';
       w.querySelector('.shbody').appendChild(nodo);
@@ -2622,11 +2623,11 @@
     }
     // que: 'g' gráfico, 't' tabla, 'gt' las dos, 'todo' la tarjeta entera
     function shArmar(sec, que) {
-      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim(), ctx = shContexto(sec), clave = CLAVE[tit] || '', hojas = [];
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim(), ctx = shContexto(sec), ctxG = shContexto(sec, true), clave = CLAVE[tit] || '', hojas = [];
       if (que.indexOf('g') >= 0 || que === 'todo') {
         var g = shLimpio(sec);
         if (que !== 'todo') Array.prototype.forEach.call(g.querySelectorAll('table,h3'), function (x) { x.remove(); });
-        hojas.push(shHoja(tit, ctx, clave, g, que === 'todo' ? 0 : 500));
+        hojas.push(shHoja(tit, que === 'todo' ? ctx : ctxG, clave, g, que === 'todo' ? 0 : 500));
       }
       if (que.indexOf('t') >= 0 && que !== 'todo') {
         var t = shLimpio(sec);
@@ -2788,7 +2789,7 @@
         var uu = null; E.meses.forEach(function (m) { if (m.cur != null) uu = m; });
         if (!uu) { CLAVE['Últimos 12 meses'] = ''; return; }
         var pp = uu.prev != null && uu.prev ? (uu.cur - uu.prev) / uu.prev * 100 : null;
-        CLAVE['Últimos 12 meses'] = nombre[med] + ' en ' + uu.label + ' ' + uu.anio + ': ' + d(uu.cur) + (med === 'lv' ? ' L' : '') + (pp != null ? ' (' + (pp >= 0 ? '+' : '−') + nf(Math.abs(pp), 0) + '% contra el año anterior)' : '') + '.';
+        CLAVE['Últimos 12 meses'] = uu.label.replace(/^./, function (c) { return c.toUpperCase(); }) + ' ' + uu.anio + ': ' + d(uu.cur) + (med === 'lv' ? ' L' : '') + (pp != null ? ' (' + (pp >= 0 ? '+' : '−') + nf(Math.abs(pp), 0) + '% vs año anterior)' : '');
       })();
       return '<section class="card"><h2>Últimos 12 meses</h2>' + chips +
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
@@ -2837,7 +2838,7 @@
       var paso = hi - lo > 30 ? 10 : 5;
       var X = function (b) { return ml + b * (W - ml - mr) / 11; }, Y = function (v) { return H - mb - (v - lo) / (hi - lo) * (H - mt - mb); }, s = '';
       for (var v = lo; v <= hi; v += paso) s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 5) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
-      for (var b = 1; b < 12; b += 2) s += '<text class="mlbl" x="' + X(b).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="middle">' + ((b + 1) * 25) + '</text>';
+      for (var b = 1; b < 12; b += 2) s += '<text class="mlbl" x="' + (b === 11 ? W - mr : X(b)).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="' + (b === 11 ? 'end' : 'middle') + '">' + ((b + 1) * 25) + '</text>';
       s += '<text class="myear" x="' + (W - mr) + '" y="' + (H - 2) + '" text-anchor="end">días en leche</text>';
       series.forEach(function (S) {
         var seg = [], segs = [];
@@ -2867,12 +2868,8 @@
       var filasMes = porMes;
       if (per === '12') { filasMes = []; for (var q = 11; q >= 0; q--) { var km = mesesAtras(q); filasMes.push({ m: +km.slice(5, 7), y: km.slice(2, 4), r: porMes[+km.slice(5, 7) - 1].r }); } }
       if (mesSel) { var rs = porMes[mesSel - 1].r; if (rs.n) ser.push({ r: rs, col: colM, nom: 'Partos de ' + A.MESES[mesSel - 1] + ' (' + (g === 1 ? 'prim.' : 'mult.') + ')', dash: true }); }
-      var clG = function (nom, r) {
-        if (!r.n) return '';
-        var n305 = r.tn + (per === '12' ? r.en : 0), l305 = n305 ? (r.t + (per === '12' ? r.e : 0)) / n305 : null;
-        return nom + ': ' + (r.pn >= 3 ? 'pico ' + (r.pk / r.pn).toFixed(1).replace('.', ',') + ' L a los ' + nf(r.pd / r.pn, 0) + ' días' : nf(r.n) + ' lactancias') + (l305 ? ', ' + nf(l305) + ' L a 305 días' + (per === '12' && r.en ? ' (est.)' : '') : '') + '.';
-      };
-      CLAVE['Curva de lactancia'] = [clG('Multíparas', P2), clG('Primíparas', P1)].filter(Boolean).join(' ');
+      var clG = function (nom, r) { return r.pn >= 3 ? nom + ': pico de ' + (r.pk / r.pn).toFixed(1).replace('.', ',') + ' L a los ' + nf(r.pd / r.pn, 0) + ' días' : ''; };
+      CLAVE['Curva de lactancia'] = [clG('Multíparas', P2), clG('Primíparas', P1)].filter(Boolean).join('\n');
       var h = '<section class="card"><h2>Curva de lactancia</h2>' +
         '<div class="filters" role="group" aria-label="Período de partos">' + CL_PER.map(function (c) { return '<button class="fchip" data-clper="' + c[0] + '" aria-pressed="' + (per === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
         '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
