@@ -472,10 +472,16 @@
         var lit305 = l ? (l[2] || (np ? l[1] : null)) : null;
         if (lit305) {
           // análisis de sólidos: los controles del respaldo cubren la lactancia actual y la anterior
-          var nAn = null;
-          if (h.ct && h.ct.length && i >= h.pa.length - 2) nAn = h.ct.filter(function (c) { return c[0] >= p[0] && c[0] < hasta && c[2] > 0 && c[3] > 0; }).length;
-          var pctOk = l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
-          var r = { v: V, nro: p[1], lit: lit305, nAn: nAn, sol: pctOk ? lit305 * (l[3] + l[4]) / 100 : null };
+          // % de grasa + proteína: con los controles de la lactancia (ponderado por litros) si tiene 4 análisis o más; si no, el total
+          // de SysCaw (en las lactancias recientes ese total suele venir vacío o incompleto)
+          var nAn = null, pctC = null;
+          if (h.ct && h.ct.length && i >= h.pa.length - 2) {
+            var cc = h.ct.filter(function (c) { return c[0] >= p[0] && c[0] < hasta && c[1] > 0 && c[2] >= 2 && c[2] <= 7 && c[3] >= 2 && c[3] <= 5.5; });
+            nAn = cc.length;
+            if (nAn) { var sl = 0, ss = 0; cc.forEach(function (c) { sl += c[1]; ss += c[1] * (c[2] + c[3]); }); pctC = ss / sl; }
+          }
+          var pctOk = l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5, pctL = nAn >= 4 ? pctC : pctOk ? l[3] + l[4] : null;
+          var r = { v: V, nro: p[1], lit: lit305, nAn: nAn, sol: pctL ? lit305 * pctL / 100 : null };
           lacs.push(r); V.le.push(r);
         }
       });
