@@ -2552,6 +2552,57 @@
 
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
     var FICHA_AB = {};
+    /* ----- modo veterinario: compartir una tarjeta como imagen (para mandar por WhatsApp) ----- */
+    function vetCompartir(main) {
+      if (!esVet()) return;
+      if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}'; document.head.appendChild(st); }
+      Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
+        if (!sec.querySelector('h2') || sec.querySelector('.shbtn')) return;
+        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Compartir como imagen</button>');
+      });
+    }
+    function cargarH2C() {
+      if (root.html2canvas) return Promise.resolve(root.html2canvas);
+      return new Promise(function (ok, mal) { var sc = document.createElement('script'); sc.src = 'html2canvas.min.js?v=1'; sc.onload = function () { ok(root.html2canvas); }; sc.onerror = function () { mal(new Error('sin conexión')); }; document.head.appendChild(sc); });
+    }
+    function compartirPNG(bl, nombre) {
+      var file = null; try { file = new File([bl], nombre, { type: 'image/png' }); } catch (e) {}
+      var guardar = function () { var u = URL.createObjectURL(bl), el = document.createElement('a'); el.href = u; el.download = nombre; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Imagen guardada en Descargas'); };
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
+      else guardar();
+    }
+    function compartirCard(sec) {
+      var titulo = (sec.querySelector('h2') || {}).textContent || 'Libreta';
+      busy(true, 'Armando la imagen…');
+      cargarH2C().then(function (h2c) {
+        var w = document.createElement('div');
+        w.className = 'shot';
+        w.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;padding:14px;background:#EEF2F7;color-scheme:light;font-family:var(--sans);' +
+          '--bg:#EEF2F7;--surface:#FFFFFF;--ink:#0D1A33;--muted:#53627B;--line:#D3DBE7;--navy:#12274A;--on-navy:#FFFFFF;--gold:#C9A227;--link:#1F4FA3;--prenada:#16794A;--servida:#6B3FA0;--vacia:#B3261E;--ciclando:#2457A6;--apta:#8A6510;--sin:#53627B;--descarte:#B3261E;--bar:#9FB0CC;--bar-last:#12274A;--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86';
+        var c = sec.cloneNode(true);
+        c.classList.add('open');
+        Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns'), function (x) { x.remove(); });
+        Array.prototype.forEach.call(c.querySelectorAll('input,select'), function (x) {
+          var v = x.value || '', b = document.createElement('b');
+          if (x.type === 'month' && /^\d{4}-\d{2}$/.test(v)) v = A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4);
+          else if (x.type === 'date' && v) v = A.fmt(v);
+          else if (x.tagName === 'SELECT' && x.selectedOptions[0]) v = x.selectedOptions[0].textContent;
+          b.textContent = v; b.style.cssText = 'font-size:16px;color:#0D1A33'; x.replaceWith(b);
+        });
+        w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:20px;font-weight:800">' + esc(PERFIL.nombre || 'Libreta de vacas') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>';
+        w.appendChild(c);
+        w.insertAdjacentHTML('beforeend', '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>');
+        document.body.appendChild(w);
+        var fin = function () { w.remove(); };
+        return h2c(w, { scale: 2, backgroundColor: '#EEF2F7', logging: false, useCORS: true,
+          // la imagen sale siempre en colores claros: en la copia que dibuja html2canvas se apagan las reglas del modo oscuro
+          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } }).then(function (cv) {
+          fin();
+          var nombre = (titulo + ' ' + (PERFIL.nombre || '') + ' ' + (DB.fecha || today())).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
+          cv.toBlob(function (bl) { busy(false); if (!bl) { toast('No se pudo armar la imagen.'); return; } compartirPNG(bl, nombre); }, 'image/png');
+        }, function (e) { fin(); throw e; });
+      }).catch(function (e) { busy(false); toast(e && e.message === 'sin conexión' ? 'Para armar la imagen la primera vez hace falta internet.' : 'No se pudo armar la imagen.'); });
+    }
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
@@ -2663,7 +2714,7 @@
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
       var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = (a - b) / b * 100; return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 0) + '%</small>'; };
       var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td><td>' + d(m.prev) + '</td><td>' + d(m.hist) + '</td></tr>'; }).join('');
-      return '<section class="card fijo"><h2>Últimos 12 meses</h2>' + chips +
+      return '<section class="card"><h2>Últimos 12 meses</h2>' + chips +
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
         '<table class="tbl ptbl"><thead><tr><th>Mes</th><th>Este año</th><th>Año ant.</th><th>Histórico</th></tr></thead><tbody>' + filas + '</tbody></table>' +
@@ -2678,18 +2729,27 @@
       var C = DB.curvas, desdeLib = false;
       if (!C || !Object.keys(C).length) {
         C = {}; desdeLib = true;
-        if (root.SysCaw && root.SysCaw.curvaLact) infLista().forEach(function (x) {
-          var pa = x.h.pa.filter(function (p) { return p[1] > 0; }).map(function (p) { return [p[0], p[1]]; }), ct = (x.h.ct || []).map(function (c) { return [c[0], c[1]]; });
-          if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; });
-        });
+        if (root.SysCaw && root.SysCaw.curvaLact) {
+          var pend = [], ref = DB.fecha || today();
+          infLista().forEach(function (x) {
+            var la = {}; (x.h.la || []).forEach(function (l) { la[l[0]] = l; });
+            var pa = x.h.pa.filter(function (p) { return p[1] > 0; }).map(function (p) {
+              var l = la[p[1]], L = l && l[1] > 0 ? l[1] : null, ok = l && l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
+              return { f: p[0], n: p[1], cierre: p[5] || null, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
+            });
+            var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], c[2] > 0 && c[3] > 0 ? 1 : 0]; });
+            if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; }, ref, pend);
+          });
+          root.SysCaw.curvaProy(C, pend);
+        }
       }
       var L = Object.keys(C).filter(function (key) { var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
       CLC = { k: k, r: { L: L, desdeLib: desdeLib, desde: L.reduce(function (a, x) { return !a || x.m < a ? x.m : a; }, '') } };
       return CLC.r;
     }
     function clSuma(lista) {
-      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [] };
-      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
+      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, cs: 0, cn: 0 };
+      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; ['t', 'tn', 'gs', 'gn', 'e', 'en', 'cs', 'cn'].forEach(function (q) { r[q] += d[q] || 0; }); for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
       return r;
     }
     function clTramo(r, b0, b1) { var s = 0, c = 0; for (var b = b0; b <= b1; b++) { if (r.c[b]) { s += r.s[b]; c += r.c[b]; } } return c >= 5 ? s / c : null; }
@@ -2736,20 +2796,28 @@
         '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
         clChart(ser);
       var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') + '<br><small>' + nf(r.pd / r.pn, 0) + ' d</small>' : '–'; };
-      var t = function (v) { return v == null ? '–' : v.toFixed(1).replace('.', ','); };
-      var tot = clSuma(Lg);
+      var tot = clSuma(Lg), est = per === '12';
+      // sólidos: solo si la mayoría de las lactancias con total tienen análisis regulares (4 controles o más con grasa y proteína)
+      var conSol = tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
+      var litros = function (r) {
+        var n = r.tn + (est ? r.en : 0); if (!n) return '–';
+        return nf((r.t + (est ? r.e : 0)) / n) + '<br><small>' + (est && r.en ? 'est. · ' : '') + n + ' lact.</small>';
+      };
+      var solidos = function (r) { return r.gn >= 3 ? nf(r.gs / r.gn) + '<br><small>' + r.gn + ' lact.</small>' : '–'; };
       h += '<h3 class="vh3">Por mes de parto</h3><div class="filters" role="group" aria-label="Lactancia">' + [[2, 'Multíparas'], [1, 'Primíparas']].map(function (c) { return '<button class="fchip" data-clg="' + c[0] + '" aria-pressed="' + (g === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
-        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>1–100</th><th>101–200</th><th>201–300</th></tr></thead><tbody>' +
+        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d</th>' + (conSol ? '<th>Kg sólidos</th>' : '') + '</tr></thead><tbody>' +
         filasMes.map(function (x) {
           var nomM = A.MESES[x.m - 1] + (x.y ? ' <small>' + x.y + '</small>' : '');
-          if (!x.r.n) return '<tr class="clvac"><td>' + nomM + '</td><td>0</td><td colspan="4"></td></tr>';
-          return '<tr data-clmes="' + x.m + '"' + (mesSel === x.m ? ' class="on"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(x.r.n) + '</td><td>' + pico(x.r) + '</td><td>' + t(clTramo(x.r, 0, 3)) + '</td><td>' + t(clTramo(x.r, 4, 7)) + '</td><td>' + t(clTramo(x.r, 8, 11)) + '</td></tr>';
+          if (!x.r.n) return '<tr class="clvac"><td>' + nomM + '</td><td>0</td><td colspan="' + (conSol ? 3 : 2) + '"></td></tr>';
+          return '<tr data-clmes="' + x.m + '"' + (mesSel === x.m ? ' class="on"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(x.r.n) + '</td><td>' + pico(x.r) + '</td><td>' + litros(x.r) + '</td>' + (conSol ? '<td>' + solidos(x.r) + '</td>' : '') + '</tr>';
         }).join('') +
-        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(tot.n) + '</b></td><td>' + pico(tot) + '</td><td>' + t(clTramo(tot, 0, 3)) + '</td><td>' + t(clTramo(tot, 4, 7)) + '</td><td>' + t(clTramo(tot, 8, 11)) + '</td></tr></tbody></table>';
+        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(tot.n) + '</b></td><td>' + pico(tot) + '</td><td><b>' + litros(tot) + '</b></td>' + (conSol ? '<td><b>' + solidos(tot) + '</b></td>' : '') + '</tr></tbody></table>';
       h += '<p class="cap">Lactancias de las vacas que parieron ' + (per === 'h' ? 'desde ' + A.MESES[+T.desde.slice(5, 7) - 1] + ' ' + T.desde.slice(0, 4) : 'en los últimos ' + per + ' meses (hasta ' + A.MESES[+ref.slice(5, 7) - 1] + ' ' + ref.slice(0, 4) + ')') +
         ', con al menos un control lechero (Lact. = lactancias evaluadas). Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
-        'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). 1–100, 101–200 y 201–300: litros por día promedio en cada tercio. ' +
-        'Las paridas recientes solo aportan el principio de la curva, por eso en los meses de parto más nuevos los últimos tercios quedan con menos lactancias o vacíos. Tocá un mes para verlo en la curva.' +
+        'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
+        'Litros 305 d: promedio de la producción a 305 días de ' + SRC() + ', solo de las lactancias que llegaron a 305 días' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
+        (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias cerraron antes de los 305 días</b> (secado o baja), con un promedio de ' + nf(tot.cs / tot.cn) + ' L en toda la lactancia: no entran en la columna. ' : '') +
+        'Kg sólidos: grasa + proteína a 305 días, solo con lactancias de 4 o más análisis' + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
         (T.desdeLib && DB.fuente === 'syscaw' ? ' <b>Para el histórico completo, volvé a cargar el respaldo de SysCaw</b>: ahora solo están los controles de la lactancia actual y la anterior de cada vaca.' : T.desdeLib ? ' Con esta base solo están los controles de la lactancia actual y la anterior de cada vaca.' : '') + '</p>';
       return h + '</section>';
     }
@@ -3783,8 +3851,8 @@
       }
       var err = iosTipHTML() + (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '');
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
-      else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); }
-      else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); }
+      else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); vetCompartir(main); }
+      else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); vetCompartir(main); }
       else if (state.tab === 'panel' && panelOK()) main.innerHTML = err + panelHTML();
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
       plegarNotas(main);
@@ -3891,6 +3959,7 @@
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
+      else if (a === 'cardimg') { var scd = b.closest('section.card'); if (scd) compartirCard(scd); }
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
       else if (a === 'instk') insTicket();
