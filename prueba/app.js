@@ -2814,7 +2814,7 @@
               var l = la[p[1]], L = l && l[1] > 0 ? l[1] : null, ok = l && l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
               return { f: p[0], n: p[1], cierre: p[5] || null, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
             });
-            var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], c[2] > 0 && c[3] > 0 ? 1 : 0]; });
+            var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], 0, c[2] || null, c[3] || null]; });
             if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; }, ref, pend);
           });
           root.SysCaw.curvaProy(C, pend);

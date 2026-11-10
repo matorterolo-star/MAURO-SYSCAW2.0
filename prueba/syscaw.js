@@ -40,16 +40,18 @@
   }
 
   // suma una vaca a las curvas. pa = [{ f: fecha parto, n: nº lactancia, cierre: fecha de secado o null, L: litros totales, L305, sol: kg grasa + proteína }]
-  // ordenado por fecha; ct = [[fecha, litros, 1 si tiene análisis de grasa y proteína], ...]; ref = fecha del respaldo
+  // ordenado por fecha; ct = [[fecha, litros, -, % grasa, % proteína], ...]; ref = fecha del respaldo. Sólidos: litros a 305 d × % de
+  // grasa + proteína de sus controles (no se usa el total de sólidos de SysCaw: en las lactancias recientes viene vacío o incompleto)
   // tramos de 25 días en leche (12 tramos = 300 días); pico = control más alto hasta 120 días, en vacas con control antes de los 60 y
   // después de los 90 (ya pasó el pico). Total: litros a 305 días, solo de las que llegaron; las que cerraron antes van aparte (cs, cn). Las lactancias en curso van a pend para proyectarlas
   var CB = 12, CW = 25;
   function curvaLact(out, pa, ct, unidad, ref, pend) {
     pa.forEach(function (p, i) {
-      var hasta = pa[i + 1] ? pa[i + 1].f : '9999', B = {}, pk = null, pkd = null, temprano = false, tarde = false, hay = false, nAn = 0;
+      var hasta = pa[i + 1] ? pa[i + 1].f : '9999', B = {}, pk = null, pkd = null, temprano = false, tarde = false, hay = false, nAn = 0, sL = 0, sS = 0;
       ct.forEach(function (c) {
         if (c[0] <= p.f || c[0] >= hasta || !(c[1] > 0)) return;
-        if (c[2]) nAn++;
+        // % de grasa + proteína de la lactancia, ponderado por los litros de cada control con análisis
+        if (c[3] >= 2 && c[3] <= 7 && c[4] >= 2 && c[4] <= 5.5) { nAn++; sL += c[1]; sS += c[1] * (c[3] + c[4]) / 100; }
         var d = diffDays(c[0], p.f); if (d < 1 || d > CB * CW) return;
         var b = Math.floor((d - 1) / CW); (B[b] = B[b] || []).push(c[1]); hay = true;
         if (d <= 60) temprano = true; if (d >= 90) tarde = true;
@@ -66,7 +68,7 @@
       var cerrada = !!pa[i + 1] || !!(p.cierre && p.cierre <= ref), tot = p.L305 > 0 ? p.L305 : null;
       if (tot) {
         C.t += Math.round(tot); C.tn++;
-        if (p.sol > 0 && p.L > 0 && nAn >= 4) { C.gs = Math.round((C.gs + p.sol * tot / p.L) * 10) / 10; C.gn++; }
+        if (nAn >= 4 && sL > 0) { C.gs = Math.round((C.gs + tot * sS / sL) * 10) / 10; C.gn++; }
       } else if (cerrada) { if (p.L > 0) { C.cs = (C.cs || 0) + Math.round(p.L); C.cn = (C.cn || 0) + 1; } }
       else if (!cerrada && pend && ref && diffDays(ref, p.f) >= 30 && Object.keys(med).length >= 2) pend.push({ k: k, g: g, m: med });
     });
@@ -173,7 +175,7 @@
         var sol = gr >= 2 && gr <= 7 && pr >= 2 && pr <= 5.5 ? l[5] + l[6] : null;
         (PA[r[0]] = PA[r[0]] || []).push({ f: f, n: r[4], cierre: okDate(r[7]), L: L, L305: l && l[4] > 0 ? l[4] : null, sol: sol });
       });
-      T.ctrl.forEach(function (r) { var f = okDate(r[1]); if (!f || !PA[r[0]]) return; var lt = (r[2] || 0) + (r[3] || 0) + (r[4] || 0); if (lt > 0 && lt < 90) (CT[r[0]] = CT[r[0]] || []).push([f, lt, r[5] > 0 && r[6] > 0 ? 1 : 0]); });
+      T.ctrl.forEach(function (r) { var f = okDate(r[1]); if (!f || !PA[r[0]]) return; var lt = (r[2] || 0) + (r[3] || 0) + (r[4] || 0); if (lt > 0 && lt < 90) (CT[r[0]] = CT[r[0]] || []).push([f, lt, 0, r[5] || null, r[6] || null]); });
       Object.keys(CT).forEach(function (id) {
         var u = byId[id][11] == null ? 0 : byId[id][11];
         curvaLact(curvas, PA[id].sort(function (x, y) { return x.f < y.f ? -1 : x.f > y.f ? 1 : 0; }), CT[id], function () { return u; }, refC, pend);
