@@ -472,10 +472,16 @@
         var lit305 = l ? (l[2] || (np ? l[1] : null)) : null;
         if (lit305) {
           // análisis de sólidos: los controles del respaldo cubren la lactancia actual y la anterior
-          var nAn = null;
-          if (h.ct && h.ct.length && i >= h.pa.length - 2) nAn = h.ct.filter(function (c) { return c[0] >= p[0] && c[0] < hasta && c[2] > 0 && c[3] > 0; }).length;
-          var pctOk = l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
-          var r = { v: V, nro: p[1], lit: lit305, nAn: nAn, sol: pctOk ? lit305 * (l[3] + l[4]) / 100 : null };
+          // % de grasa + proteína: con los controles de la lactancia (ponderado por litros) si tiene 4 análisis o más; si no, el total
+          // de SysCaw (en las lactancias recientes ese total suele venir vacío o incompleto)
+          var nAn = null, pctC = null;
+          if (h.ct && h.ct.length && i >= h.pa.length - 2) {
+            var cc = h.ct.filter(function (c) { return c[0] >= p[0] && c[0] < hasta && c[1] > 0 && c[2] >= 2 && c[2] <= 7 && c[3] >= 2 && c[3] <= 5.5; });
+            nAn = cc.length;
+            if (nAn) { var sl = 0, ss = 0; cc.forEach(function (c) { sl += c[1]; ss += c[1] * (c[2] + c[3]); }); pctC = ss / sl; }
+          }
+          var pctOk = l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5, pctL = nAn >= 4 ? pctC : pctOk ? l[3] + l[4] : null;
+          var r = { v: V, nro: p[1], lit: lit305, nAn: nAn, sol: pctL ? lit305 * pctL / 100 : null };
           lacs.push(r); V.le.push(r);
         }
       });
@@ -2106,6 +2112,8 @@
         s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + mo.label + '</text>';
         if (mo.label === 'ene' || i === 0) s += '<text class="myear" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 1) + '" text-anchor="middle">' + String(mo.anio).slice(2) + '</text>';
       });
+      var hT = SX.v.h + SX.q.h, mT = SX.v.m + SX.q.m;
+      CLAVE['Partos ocurridos'] = nf(tv + tq) + ' partos en 12 meses' + (hT + mT ? ' · ' + Math.round(hT / (hT + mT) * 100) + '% hembras' : '');
       return '<section class="card"><h2>Partos ocurridos</h2>' + selMesHTML(G, 'pomes') +
         '<div class="kpis kpis2"><div><b>' + nf(tv) + '</b><span>Partos de vacas · ' + pc(tv) + '</span></div><div><b>' + nf(tq) + '</b><span>Partos de vaquillonas · ' + pc(tq) + '</span></div></div>' +
         '<div class="mleg"><span><i class="v"></i>Vacas</span><span><i class="q"></i>Vaquillonas</span></div>' +
@@ -2553,55 +2561,124 @@
     // tarjetas de la ficha: se ven solo con el título y se despliegan al tocarlo (se recuerda cuáles quedan abiertas)
     var FICHA_AB = {};
     /* ----- modo veterinario: compartir una tarjeta como imagen (para mandar por WhatsApp) ----- */
+    /* ----- modo veterinario: compartir como imagen (WhatsApp). Cada tarjeta se puede mandar como Gráfico, Tabla o las dos;
+       formato vertical, encabezado con el tambo (o anónimo), línea con lo elegido, "dato clave" y firma ----- */
+    var CLAVE = {}; // dato clave de cada tarjeta, por título; lo escriben las tarjetas al dibujarse
     function vetCompartir(main) {
       if (!esVet()) return;
-      if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}'; document.head.appendChild(st); }
+      if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}.shopt{display:flex;align-items:center;gap:10px;font-weight:600;margin:4px 0 12px}.shopt input{width:22px;height:22px}'; document.head.appendChild(st); }
+      var ico = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (!sec.querySelector('h2') || sec.querySelector('.shbtn')) return;
-        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Compartir como imagen</button>');
+        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg">' + ico + 'Compartir</button>');
       });
+      var pan = main.querySelector('.panel');
+      if (pan && !main.querySelector('.shbtn')) pan.insertAdjacentHTML('afterend', '<button class="shbtn" data-a="panelimg">' + ico + 'Compartir resumen de visita</button>');
     }
     function cargarH2C() {
       if (root.html2canvas) return Promise.resolve(root.html2canvas);
       return new Promise(function (ok, mal) { var sc = document.createElement('script'); sc.src = 'html2canvas.min.js?v=1'; sc.onload = function () { ok(root.html2canvas); }; sc.onerror = function () { mal(new Error('sin conexión')); }; document.head.appendChild(sc); });
     }
-    function compartirPNG(bl, nombre) {
-      var file = null; try { file = new File([bl], nombre, { type: 'image/png' }); } catch (e) {}
-      var guardar = function () { var u = URL.createObjectURL(bl), el = document.createElement('a'); el.href = u; el.download = nombre; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast('Imagen guardada en Descargas'); };
-      if (file && navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
-      else guardar();
+    function shNombre() { var v = null; try { v = localStorage.getItem('libreta:shnom'); } catch (e) {} return v !== '0'; }
+    // lo que está elegido en la tarjeta (botones marcados, mes), dicho en una línea
+    function shContexto(sec, soloGraf) {
+      var t = [], corte = soloGraf ? sec.querySelector('h3, table') : null;
+      var antes = function (el) { return !corte || (corte.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING); };
+      Array.prototype.forEach.call(sec.querySelectorAll('.fchip[aria-pressed="true"]'), function (b) { if (!antes(b)) return; var x = b.textContent.trim(); if (/^\d+ meses$/.test(x)) x = 'Últimos ' + x; t.push(x); });
+      Array.prototype.forEach.call(sec.querySelectorAll('input[type=month],input[type=date]'), function (x) { var v = x.value || ''; if (/^\d{4}-\d{2}$/.test(v)) t.push('Hasta ' + A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4)); else if (v) t.push(A.fmt(v)); });
+      return t.join(' · ');
     }
+    function shPartes(sec) { return { g: !!sec.querySelector('svg.mchart'), t: !!sec.querySelector('table') }; }
     function compartirCard(sec) {
-      var titulo = (sec.querySelector('h2') || {}).textContent || 'Libreta';
-      busy(true, 'Armando la imagen…');
-      cargarH2C().then(function (h2c) {
-        var w = document.createElement('div');
-        w.className = 'shot';
-        w.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;padding:14px;background:#EEF2F7;color-scheme:light;font-family:var(--sans);' +
-          '--bg:#EEF2F7;--surface:#FFFFFF;--ink:#0D1A33;--muted:#53627B;--line:#D3DBE7;--navy:#12274A;--on-navy:#FFFFFF;--gold:#C9A227;--link:#1F4FA3;--prenada:#16794A;--servida:#6B3FA0;--vacia:#B3261E;--ciclando:#2457A6;--apta:#8A6510;--sin:#53627B;--descarte:#B3261E;--bar:#9FB0CC;--bar-last:#12274A;--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86';
-        var c = sec.cloneNode(true);
-        c.classList.add('open');
-        Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns'), function (x) { x.remove(); });
-        Array.prototype.forEach.call(c.querySelectorAll('input,select'), function (x) {
-          var v = x.value || '', b = document.createElement('b');
-          if (x.type === 'month' && /^\d{4}-\d{2}$/.test(v)) v = A.MESES[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4);
-          else if (x.type === 'date' && v) v = A.fmt(v);
-          else if (x.tagName === 'SELECT' && x.selectedOptions[0]) v = x.selectedOptions[0].textContent;
-          b.textContent = v; b.style.cssText = 'font-size:16px;color:#0D1A33'; x.replaceWith(b);
-        });
-        w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:20px;font-weight:800">' + esc(PERFIL.nombre || 'Libreta de vacas') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>';
-        w.appendChild(c);
-        w.insertAdjacentHTML('beforeend', '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>');
-        document.body.appendChild(w);
-        var fin = function () { w.remove(); };
-        return h2c(w, { scale: 2, backgroundColor: '#EEF2F7', logging: false, useCORS: true,
-          // la imagen sale siempre en colores claros: en la copia que dibuja html2canvas se apagan las reglas del modo oscuro
-          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } }).then(function (cv) {
-          fin();
-          var nombre = (titulo + ' ' + (PERFIL.nombre || '') + ' ' + (DB.fecha || today())).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.png';
-          cv.toBlob(function (bl) { busy(false); if (!bl) { toast('No se pudo armar la imagen.'); return; } compartirPNG(bl, nombre); }, 'image/png');
-        }, function (e) { fin(); throw e; });
+      state.shSec = sec;
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim(), P = shPartes(sec);
+      $('#sheetXTitle').textContent = 'Compartir · ' + tit;
+      $('#xopts').innerHTML = '<label class="shopt"><input type="checkbox" id="shNom"' + (shNombre() ? ' checked' : '') + '> Con el nombre del tambo</label>' +
+        '<p class="cap" style="margin:0 0 6px">Sin nombre sale como "Tambo" (para mandar a colegas).</p>';
+      $('#xbtns').innerHTML = (P.g && P.t ? '<button class="btn primary big" data-a="shdos">Las dos imágenes</button><button class="btn big" data-a="shgraf">Solo el gráfico</button><button class="btn big" data-a="shtab">Solo la tabla</button>'
+        : '<button class="btn primary big" data-a="shtodo">Compartir imagen</button>') + '<button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    // arma una "hoja" para la imagen: encabezado, título, contexto, dato clave, contenido y firma
+    function shHoja(titulo, ctx, clave, nodo, alto) {
+      var conNom = shNombre(), w = document.createElement('div');
+      w.style.cssText = 'position:fixed;left:-10000px;top:0;width:400px;' + (alto ? 'min-height:' + alto + 'px;' : '') + 'box-sizing:border-box;padding:14px;background:#EEF2F7;color-scheme:light;font-family:var(--sans);display:flex;flex-direction:column;' +
+        '--bg:#EEF2F7;--surface:#FFFFFF;--ink:#0D1A33;--muted:#53627B;--line:#D3DBE7;--navy:#12274A;--on-navy:#FFFFFF;--gold:#C9A227;--link:#1F4FA3;--prenada:#16794A;--servida:#6B3FA0;--vacia:#B3261E;--ciclando:#2457A6;--apta:#8A6510;--sin:#53627B;--descarte:#B3261E;--bar:#9FB0CC;--bar-last:#12274A;--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86';
+      w.innerHTML = '<div style="background:#12274A;color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;border-bottom:4px solid #C9A227"><div style="font-size:12px;letter-spacing:.06em;color:#C9A227;font-weight:700">DR. MAURO TORTEROLO</div><div style="font-size:21px;font-weight:800;line-height:1.2">' + esc(conNom ? (PERFIL.nombre || 'Tambo') : 'Tambo') + '</div><div style="font-size:13px;opacity:.85">Datos al ' + A.fmt(DB.fecha || today()) + '</div></div>' +
+        '<div class="shcard" style="background:#fff;border:1px solid #D3DBE7;border-radius:16px;padding:14px 16px;flex:1"><div style="font-size:20px;font-weight:800;color:#0D1A33">' + esc(titulo) + '</div>' +
+        (ctx ? '<div style="font-size:14px;color:#53627B;font-weight:600;margin-top:2px">' + esc(ctx) + '</div>' : '') +
+        (clave ? '<div style="margin:8px 0 0;font-size:14px;font-weight:400;color:#0D1A33;line-height:1.45">' + clave.split('\n').map(esc).join('<br>') + '</div>' : '') +
+        '<div class="shbody" style="margin-top:8px"></div></div>' +
+        '<div style="text-align:center;font-size:12px;color:#53627B;margin-top:10px">Libreta de vacas · Dr. Mauro Torterolo · ' + A.fmt(today()) + '</div>';
+      w.querySelector('.shbody').appendChild(nodo);
+      return w;
+    }
+    function shLimpio(sec) {
+      var c = sec.cloneNode(true);
+      c.classList.add('open'); c.style.cssText = 'border:0;padding:0;margin:0;background:transparent;box-shadow:none';
+      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2,.clclave'), function (x) { x.remove(); });
+      Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
+      return c;
+    }
+    function shImagen(w) {
+      document.body.appendChild(w);
+      return cargarH2C().then(function (h2c) {
+        return h2c(w, { scale: 2.7, backgroundColor: '#EEF2F7', logging: false,
+          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } });
+      }).then(function (cv) { w.remove(); return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); }, function (e) { w.remove(); throw e; });
+    }
+    // que: 'g' gráfico, 't' tabla, 'gt' las dos, 'todo' la tarjeta entera
+    function shArmar(sec, que) {
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim(), ctx = shContexto(sec), ctxG = shContexto(sec, true), clave = CLAVE[tit] || '', hojas = [];
+      if (que.indexOf('g') >= 0 || que === 'todo') {
+        var g = shLimpio(sec);
+        if (que !== 'todo') Array.prototype.forEach.call(g.querySelectorAll('table,h3'), function (x) { x.remove(); });
+        hojas.push(shHoja(tit, que === 'todo' ? ctx : ctxG, clave, g, que === 'todo' ? 0 : 500));
+      }
+      if (que.indexOf('t') >= 0 && que !== 'todo') {
+        var t = shLimpio(sec);
+        Array.prototype.forEach.call(t.querySelectorAll('svg.mchart,.mleg,.kpis,.panel,.vlinea'), function (x) { x.remove(); });
+        // tablas largas: se parten en hojas de 13 filas (el encabezado se repite y el total va en la última)
+        var tbs = t.querySelectorAll('table'), largo = tbs.length === 1 ? tbs[0].querySelectorAll('tbody tr') : [];
+        if (largo.length > 14) {
+          var filas = Array.prototype.slice.call(largo), pags = [];
+          for (var q = 0; q < filas.length; q += 13) pags.push(filas.slice(q, q + 13));
+          if (pags.length > 1 && pags[pags.length - 1].length === 1) { pags[pags.length - 2] = pags[pags.length - 2].concat(pags.pop()); }
+          pags.forEach(function (pg, ix) {
+            var tt = t.cloneNode(true), tb = tt.querySelector('tbody'), idx = filas.indexOf(pg[0]);
+            Array.prototype.slice.call(tb.querySelectorAll('tr')).forEach(function (tr, k) { if (k < idx || k >= idx + pg.length) tr.remove(); });
+            hojas.push(shHoja(tit + (pags.length > 1 ? ' (' + (ix + 1) + '/' + pags.length + ')' : ''), ctx, ix === 0 && que === 't' ? clave : '', tt, 0));
+          });
+        } else hojas.push(shHoja(tit, ctx, que === 't' ? clave : '', t, 0));
+      }
+      return hojas;
+    }
+    function shMandar(hojas, base) {
+      busy(true, hojas.length > 1 ? 'Armando las ' + hojas.length + ' imágenes…' : 'Armando la imagen…');
+      var blobs = [];
+      return hojas.reduce(function (pr, w) { return pr.then(function () { return shImagen(w).then(function (b) { blobs.push(b); }); }); }, Promise.resolve()).then(function () {
+        busy(false);
+        var nom = (base + ' ' + (shNombre() ? (PERFIL.nombre || '') : '') + ' ' + (DB.fecha || today())).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
+        var files = []; try { files = blobs.map(function (b, i) { return new File([b], nom + (blobs.length > 1 ? ' ' + (i + 1) : '') + '.png', { type: 'image/png' }); }); } catch (e) { files = []; }
+        var guardar = function () { blobs.forEach(function (b, i) { var u = URL.createObjectURL(b), el = document.createElement('a'); el.href = u; el.download = nom + (blobs.length > 1 ? ' ' + (i + 1) : '') + '.png'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000); }); toast(blobs.length > 1 ? 'Imágenes guardadas en Descargas' : 'Imagen guardada en Descargas'); };
+        if (files.length && navigator.canShare && navigator.canShare({ files: files })) navigator.share({ files: files }).catch(function (e) { if (!e || e.name !== 'AbortError') guardar(); });
+        else guardar();
       }).catch(function (e) { busy(false); toast(e && e.message === 'sin conexión' ? 'Para armar la imagen la primera vez hace falta internet.' : 'No se pudo armar la imagen.'); });
+    }
+    function shDesdeSheet(que) {
+      var ck = $('#shNom'); if (ck) try { localStorage.setItem('libreta:shnom', ck.checked ? '1' : '0'); } catch (e) {}
+      $('#sheetX').hidden = true;
+      var sec = state.shSec; if (!sec || !document.body.contains(sec)) { toast('Volvé a tocar Compartir.'); return; }
+      var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim();
+      shMandar(shArmar(sec, que), tit);
+    }
+    // resumen de visita: los cuatro cuadros del Panel con su semáforo y los avisos
+    function compartirPanel() {
+      var main = $('#main') || document.querySelector('main'), pan = main && main.querySelector('.panel'); if (!pan) return;
+      var d = document.createElement('div'), pres = main.querySelector('.pres');
+      if (pres) d.appendChild(pres.cloneNode(true));
+      var pc = pan.cloneNode(true); pc.style.marginTop = '10px'; d.appendChild(pc);
+      shMandar([shHoja('Resumen de visita', 'Visita del ' + A.fmt(today()), '', d, 500)], 'Resumen de visita');
     }
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
@@ -2714,6 +2791,12 @@
       var d = function (v) { return v == null ? '–' : med === 'lv' ? nf(v, 1) : nf(v); };
       var dif = function (a, b) { if (a == null || b == null || !b) return ''; var p = (a - b) / b * 100; return ' <small class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 0) + '%</small>'; };
       var filas = E.meses.slice().reverse().map(function (m) { return '<tr><td>' + m.label + ' ' + String(m.anio).slice(2) + '</td><td>' + d(m.cur) + dif(m.cur, m.prev) + '</td><td>' + d(m.prev) + '</td><td>' + d(m.hist) + '</td></tr>'; }).join('');
+      (function () {
+        var uu = null; E.meses.forEach(function (m) { if (m.cur != null) uu = m; });
+        if (!uu) { CLAVE['Últimos 12 meses'] = ''; return; }
+        var pp = uu.prev != null && uu.prev ? (uu.cur - uu.prev) / uu.prev * 100 : null;
+        CLAVE['Últimos 12 meses'] = uu.label.replace(/^./, function (c) { return c.toUpperCase(); }) + ' ' + uu.anio + ': ' + d(uu.cur) + (med === 'lv' ? ' L' : '') + (pp != null ? ' (' + (pp >= 0 ? '+' : '−') + nf(Math.abs(pp), 0) + '% vs año anterior)' : '');
+      })();
       return '<section class="card"><h2>Últimos 12 meses</h2>' + chips +
         '<div class="mleg"><span><i class="ecur"></i>Últimos 12 meses</span><span><i class="eprev"></i>Año anterior</span><span><i class="ehist"></i>Promedio histórico' + (E.desde ? ' (desde ' + E.desde + ')' : '') + '</span></div>' +
         evolChart(E, med) +
@@ -2726,7 +2809,8 @@
     function curvasTambo() {
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '');
       if (CLC.k === k) return CLC.r;
-      var C = DB.curvas, desdeLib = false;
+      // promedios armados al leer el respaldo; los de una versión anterior (sin 'v|4') no se usan: se vuelve a la libreta
+      var C = DB.curvas && DB.curvas['v|4'] ? DB.curvas : null, desdeLib = false, viejos = !!(DB.curvas && !C);
       if (!C || !Object.keys(C).length) {
         C = {}; desdeLib = true;
         if (root.SysCaw && root.SysCaw.curvaLact) {
@@ -2735,21 +2819,21 @@
             var la = {}; (x.h.la || []).forEach(function (l) { la[l[0]] = l; });
             var pa = x.h.pa.filter(function (p) { return p[1] > 0; }).map(function (p) {
               var l = la[p[1]], L = l && l[1] > 0 ? l[1] : null, ok = l && l[3] >= 2 && l[3] <= 7 && l[4] >= 2 && l[4] <= 5.5;
-              return { f: p[0], n: p[1], cierre: p[5] || null, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
+              return { f: p[0], n: p[1], cierre: p[5] || null, baja: x.a.bFecha || null, pp: x.a.partoProb && x.a.partoProb > p[0] ? x.a.partoProb : null, sec: (DB.config && DB.config.secado) || A.SECADO, L: L, L305: l && l[2] > 0 ? l[2] : null, sol: ok && L ? L * (l[3] + l[4]) / 100 : null };
             });
-            var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], c[2] > 0 && c[3] > 0 ? 1 : 0]; });
+            var ct = (x.h.ct || []).map(function (c) { return [c[0], c[1], 0, c[2] || null, c[3] || null]; });
             if (pa.length && ct.length) root.SysCaw.curvaLact(C, pa, ct, function (f) { var u = unidadEn(x, f); return u == null ? 0 : u; }, ref, pend);
           });
           root.SysCaw.curvaProy(C, pend);
         }
       }
-      var L = Object.keys(C).filter(function (key) { var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
+      var L = Object.keys(C).filter(function (key) { if (!/^\d{4}-\d{2}\|/.test(key)) return false; var u = key.split('|')[2]; return enSel(+u) || enSel(u); }).map(function (key) { var q = key.split('|'); return { m: q[0], g: +q[1], d: C[key] }; });
       CLC = { k: k, r: { L: L, desdeLib: desdeLib, desde: L.reduce(function (a, x) { return !a || x.m < a ? x.m : a; }, '') } };
       return CLC.r;
     }
     function clSuma(lista) {
-      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, cs: 0, cn: 0 };
-      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; ['t', 'tn', 'gs', 'gn', 'e', 'en', 'cs', 'cn'].forEach(function (q) { r[q] += d[q] || 0; }); for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
+      var r = { n: 0, pk: 0, pn: 0, pd: 0, s: [], c: [], t: 0, tn: 0, gs: 0, gn: 0, e: 0, en: 0, es: 0, esn: 0, cs: 0, cn: 0 };
+      lista.forEach(function (x) { var d = x.d; r.n += d.n; r.pk += d.pk; r.pn += d.pn; r.pd += d.pd; ['t', 'tn', 'gs', 'gn', 'e', 'en', 'es', 'esn', 'cs', 'cn'].forEach(function (q) { r[q] += d[q] || 0; }); for (var b = 0; b < 12; b++) { if (d.c[b]) { r.s[b] = (r.s[b] || 0) + d.s[b]; r.c[b] = (r.c[b] || 0) + d.c[b]; } } });
       return r;
     }
     function clTramo(r, b0, b1) { var s = 0, c = 0; for (var b = b0; b <= b1; b++) { if (r.c[b]) { s += r.s[b]; c += r.c[b]; } } return c >= 5 ? s / c : null; }
@@ -2761,7 +2845,7 @@
       var paso = hi - lo > 30 ? 10 : 5;
       var X = function (b) { return ml + b * (W - ml - mr) / 11; }, Y = function (v) { return H - mb - (v - lo) / (hi - lo) * (H - mt - mb); }, s = '';
       for (var v = lo; v <= hi; v += paso) s += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 5) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
-      for (var b = 1; b < 12; b += 2) s += '<text class="mlbl" x="' + X(b).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="middle">' + ((b + 1) * 25) + '</text>';
+      for (var b = 1; b < 12; b += 2) s += '<text class="mlbl" x="' + (b === 11 ? W - mr : X(b)).toFixed(1) + '" y="' + (H - mb + 15) + '" text-anchor="' + (b === 11 ? 'end' : 'middle') + '">' + ((b + 1) * 25) + '</text>';
       s += '<text class="myear" x="' + (W - mr) + '" y="' + (H - 2) + '" text-anchor="end">días en leche</text>';
       series.forEach(function (S) {
         var seg = [], segs = [];
@@ -2774,14 +2858,15 @@
       });
       return '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Curva de lactancia: litros por día según días en leche">' + s + '</svg>';
     }
-    var CL_PER = [['12', '12 meses'], ['24', '24 meses'], ['h', 'Histórico']];
+    var CL_PER = [['12', 'Este año'], ['24', 'Año anterior'], ['h', 'Histórico']];
     function curvasHTML() {
-      if (!document.getElementById('clCss')) { var st = document.createElement('style'); st.id = 'clCss'; st.textContent = ':root{--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86}@media (prefers-color-scheme:dark){:root{--cl1:#E3B84A;--cl2:#7FA8EE;--clm:#5FD0D8}}.clp{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.cltbl{font-size:14px}.cltbl th,.cltbl td{padding-left:4px;padding-right:4px}.cltbl td small{color:var(--muted);font-weight:600}.cltbl tr[data-clmes]{cursor:pointer}.cltbl tr.on td{background:color-mix(in srgb,var(--clm) 16%,transparent)}.cltbl tr.clvac td{color:var(--muted)}'; document.head.appendChild(st); }
+      if (!document.getElementById('clCss')) { var st = document.createElement('style'); st.id = 'clCss'; st.textContent = ':root{--cl1:#C9A227;--cl2:#12274A;--clm:#0E7C86}@media (prefers-color-scheme:dark){:root{--cl1:#E3B84A;--cl2:#7FA8EE;--clm:#5FD0D8}}.clp{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.cltbl{font-size:14px}.cltbl th,.cltbl td{padding-left:4px;padding-right:4px}.cltbl td small{color:var(--muted);font-weight:600}.cltbl tr[data-clmes]{cursor:pointer}.cltbl tr.on td{background:color-mix(in srgb,var(--clm) 16%,transparent)}.clclave{margin:6px 0 0;font-size:14px;color:var(--ink);line-height:1.45}.cltbl td:first-child{white-space:nowrap}.cltbl td:first-child small{font-size:11px}.cltbl tr.clvac td,.cltbl tr.clpoco td{color:var(--muted)}.cltbl tr.clpoco td b{color:var(--muted)}.cltbl th small{font-weight:600}'; document.head.appendChild(st); }
       var T = curvasTambo(); if (!T.L.length) return '';
       var per = state.clPer || '12', g = state.clG || 2, ref = (DB.fecha || today()).slice(0, 7);
       var mesesAtras = function (n) { var y = +ref.slice(0, 4), m = +ref.slice(5, 7) - n; while (m < 1) { m += 12; y--; } return y + '-' + pad2(m); };
-      var desde = per === 'h' ? '0000' : mesesAtras(+per - 1);
-      var L = T.L.filter(function (x) { return x.m >= desde && x.m <= ref; });
+      // Este año: partos de los últimos 12 meses (en curso, estimadas); Año anterior: de 13 a 24 meses atrás (terminadas); Histórico: todo
+      var desde = per === 'h' ? '0000' : per === '24' ? mesesAtras(23) : mesesAtras(11), hasta = per === '24' ? mesesAtras(12) : ref;
+      var L = T.L.filter(function (x) { return x.m >= desde && x.m <= hasta; });
       var P1 = clSuma(L.filter(function (x) { return x.g === 1; })), P2 = clSuma(L.filter(function (x) { return x.g === 2; }));
       var col1 = 'var(--cl1)', col2 = 'var(--cl2)', colM = 'var(--clm)';
       var ser = [{ r: P2, col: col2, nom: 'Multíparas' }, { r: P1, col: col1, nom: 'Primíparas' }], mesSel = state.clMes || null;
@@ -2789,35 +2874,37 @@
       var porMes = []; for (var m = 1; m <= 12; m++) { var mm = pad2(m); porMes.push({ m: m, r: clSuma(Lg.filter(function (x) { return x.m.slice(5, 7) === mm; })) }); }
       // 12 meses: en orden, del mes más viejo al más nuevo, con el año
       var filasMes = porMes;
-      if (per === '12') { filasMes = []; for (var q = 11; q >= 0; q--) { var km = mesesAtras(q); filasMes.push({ m: +km.slice(5, 7), y: km.slice(2, 4), r: porMes[+km.slice(5, 7) - 1].r }); } }
+      if (per !== 'h') { filasMes = []; for (var q = 11; q >= 0; q--) { var km = mesesAtras(q + (per === '24' ? 12 : 0)); filasMes.push({ m: +km.slice(5, 7), y: km.slice(2, 4), r: porMes[+km.slice(5, 7) - 1].r }); } }
       if (mesSel) { var rs = porMes[mesSel - 1].r; if (rs.n) ser.push({ r: rs, col: colM, nom: 'Partos de ' + A.MESES[mesSel - 1] + ' (' + (g === 1 ? 'prim.' : 'mult.') + ')', dash: true }); }
+      var clG = function (nom, r) { return r.pn >= 3 ? nom + ': pico de ' + (r.pk / r.pn).toFixed(1).replace('.', ',') + ' L a los ' + nf(r.pd / r.pn, 0) + ' días' : ''; };
+      CLAVE['Curva de lactancia'] = [clG('Multíparas', P2), clG('Primíparas', P1)].filter(Boolean).join('\n');
       var h = '<section class="card"><h2>Curva de lactancia</h2>' +
         '<div class="filters" role="group" aria-label="Período de partos">' + CL_PER.map(function (c) { return '<button class="fchip" data-clper="' + c[0] + '" aria-pressed="' + (per === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
         '<div class="mleg"><span><i style="background:' + col2 + '"></i>Multíparas · ' + nf(P2.n) + '</span><span><i style="background:' + col1 + '"></i>Primíparas · ' + nf(P1.n) + '</span>' + (mesSel && porMes[mesSel - 1].r.n ? '<span><i style="background:transparent;border-top:2px dashed ' + colM + ';border-radius:0;height:0;margin-top:5px"></i>Partos de ' + A.MESES[mesSel - 1] + '</span>' : '') + '</div>' +
-        clChart(ser);
-      var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') + '<br><small>' + nf(r.pd / r.pn, 0) + ' d</small>' : '–'; };
+        clChart(ser) + (CLAVE['Curva de lactancia'] ? '<p class="clclave">' + CLAVE['Curva de lactancia'].split('\n').map(esc).join('<br>') + '</p>' : '');
+      var pico = function (r) { return r.pn >= 3 ? (r.pk / r.pn).toFixed(1).replace('.', ',') : '–'; };
       var tot = clSuma(Lg), est = per === '12';
       // sólidos: solo si la mayoría de las lactancias con total tienen análisis regulares (4 controles o más con grasa y proteína)
-      var conSol = tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
-      var litros = function (r) {
-        var n = r.tn + (est ? r.en : 0); if (!n) return '–';
-        return nf((r.t + (est ? r.e : 0)) / n) + '<br><small>' + (est && r.en ? 'est. · ' : '') + n + ' lact.</small>';
-      };
-      var solidos = function (r) { return r.gn >= 3 ? nf(r.gs / r.gn) + '<br><small>' + r.gn + ' lact.</small>' : '–'; };
+      var conSol = est ? tot.tn + tot.en >= 5 && (tot.gn + tot.esn) / (tot.tn + tot.en) >= 0.5 : tot.tn >= 5 && tot.gn / tot.tn >= 0.5;
+      // Lact. = lactancias con las que se calculan litros y sólidos; con menos de 10 la fila va en gris
+      var nL = function (r) { return r.tn + (est ? r.en : 0); };
+      var litros = function (r) { var n = nL(r); return n ? nf((r.t + (est ? r.e : 0)) / n) : '–'; };
+      var solidos = function (r) { var n = r.gn + (est ? r.esn : 0); return n >= 3 ? nf((r.gs + (est ? r.es : 0)) / n) : '–'; };
       h += '<h3 class="vh3">Por mes de parto</h3><div class="filters" role="group" aria-label="Lactancia">' + [[2, 'Multíparas'], [1, 'Primíparas']].map(function (c) { return '<button class="fchip" data-clg="' + c[0] + '" aria-pressed="' + (g === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>' +
-        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d</th>' + (conSol ? '<th>Kg sólidos</th>' : '') + '</tr></thead><tbody>' +
+        '<table class="tbl cltbl"><thead><tr><th>Parto</th><th>Lact.</th><th>Pico</th><th>Litros 305 d' + (est ? ' <small>(est.)</small>' : '') + '</th>' + (conSol ? '<th>Kg sólidos' + (est ? ' <small>(est.)</small>' : '') + '</th>' : '') + '</tr></thead><tbody>' +
         filasMes.map(function (x) {
           var nomM = A.MESES[x.m - 1] + (x.y ? ' <small>' + x.y + '</small>' : '');
           if (!x.r.n) return '<tr class="clvac"><td>' + nomM + '</td><td>0</td><td colspan="' + (conSol ? 3 : 2) + '"></td></tr>';
-          return '<tr data-clmes="' + x.m + '"' + (mesSel === x.m ? ' class="on"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(x.r.n) + '</td><td>' + pico(x.r) + '</td><td>' + litros(x.r) + '</td>' + (conSol ? '<td>' + solidos(x.r) + '</td>' : '') + '</tr>';
+          var cls = [mesSel === x.m ? 'on' : '', nL(x.r) < 10 ? 'clpoco' : ''].filter(Boolean).join(' ');
+          return '<tr data-clmes="' + x.m + '"' + (cls ? ' class="' + cls + '"' : '') + '><td><b>' + nomM + '</b></td><td>' + nf(nL(x.r)) + '</td><td>' + pico(x.r) + '</td><td>' + litros(x.r) + '</td>' + (conSol ? '<td>' + solidos(x.r) + '</td>' : '') + '</tr>';
         }).join('') +
-        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(tot.n) + '</b></td><td>' + pico(tot) + '</td><td><b>' + litros(tot) + '</b></td>' + (conSol ? '<td><b>' + solidos(tot) + '</b></td>' : '') + '</tr></tbody></table>';
-      h += '<p class="cap">Lactancias de las vacas que parieron ' + (per === 'h' ? 'desde ' + A.MESES[+T.desde.slice(5, 7) - 1] + ' ' + T.desde.slice(0, 4) : 'en los últimos ' + per + ' meses (hasta ' + A.MESES[+ref.slice(5, 7) - 1] + ' ' + ref.slice(0, 4) + ')') +
-        ', con al menos un control lechero (Lact. = lactancias evaluadas). Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
-        'Pico: el control más alto hasta los 120 días (y a cuántos días en leche), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
-        'Litros 305 d: promedio de la producción a 305 días de ' + SRC() + ', solo de las lactancias que llegaron a 305 días' + (est ? '; en 12 meses casi ninguna llegó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio)' : '') + '. ' +
-        (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias cerraron antes de los 305 días</b> (secado o baja), con un promedio de ' + nf(tot.cs / tot.cn) + ' L en toda la lactancia: no entran en la columna. ' : '') +
-        'Kg sólidos: grasa + proteína a 305 días, solo con lactancias de 4 o más análisis' + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
+        '<tr class="sep tot"><td><b>Total</b></td><td><b>' + nf(nL(tot)) + '</b></td><td>' + pico(tot) + '</td><td><b>' + litros(tot) + '</b></td>' + (conSol ? '<td><b>' + solidos(tot) + '</b></td>' : '') + '</tr></tbody></table>';
+      h += '<p class="cap">Lactancias de las vacas que parieron ' + (function () { var mn = function (k) { return A.MESES[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4); }; return per === 'h' ? 'desde ' + mn(T.desde) : per === '24' ? 'entre ' + mn(desde) + ' y ' + mn(hasta) + ' (el año anterior: lactancias que ya terminaron)' : 'en los últimos 12 meses, de ' + mn(desde) + ' a ' + mn(ref) + ' (este año: lactancias en curso)'; })() +
+        ', con al menos un control lechero. Lact.: las lactancias con las que se calculan los litros y los sólidos (las que llegaron a 305 días o se secaron antes' + (est ? ', y las que están en curso, estimadas' : '') + '); en gris, los meses con menos de 10. Primíparas: 1ª lactancia; multíparas: 2ª o más. La curva es el promedio de litros por día en los controles, cada 25 días en leche; un punto se muestra con 5 lactancias o más. ' +
+        'Pico: el control más alto hasta los 120 días (los días al pico están debajo del gráfico), en vacas con controles antes de los 60 días y después de los 90 (las recién paridas todavía no llegaron al pico). ' +
+        'Litros 305 d: como en el control lechero (ICAR), los primeros 305 días según ' + SRC() + ', o el total real si la vaca se secó antes' + (est ? '; este año casi ninguna terminó, así que las que están en curso se <b>estiman</b> con la curva del propio tambo (su nivel en los controles que ya tiene, con la forma de la curva promedio) hasta su secado probable: las preñadas, hasta el parto probable menos los días de secado; las vacías, hasta los 305 días' : '') + '. ' +
+        (tot.cn ? '<b>' + nf(tot.cn) + ' lactancias terminaron antes de los 305 días por venta o muerte</b>, con ' + nf(tot.cs / tot.cn) + ' L de promedio: no entran en la columna, porque reflejan el descarte y no la producción. ' : '') +
+        'Kg sólidos: litros a 305 días × el % de grasa + proteína de los controles de cada vaca, en lactancias con 4 análisis o más' + (est ? ' (las en curso, con los que ya tienen)' : '') + (conSol ? '' : ' (en este tambo hay pocos, por eso no se muestra la columna)') + '. Debajo de cada valor, cuántas lactancias entran. Tocá un mes para ver su curva.' +
         (T.desdeLib && DB.fuente === 'syscaw' ? ' <b>Para el histórico completo, volvé a cargar el respaldo de SysCaw</b>: ahora solo están los controles de la lactancia actual y la anterior de cada vaca.' : T.desdeLib ? ' Con esta base solo están los controles de la lactancia actual y la anterior de cada vaca.' : '') + '</p>';
       return h + '</section>';
     }
@@ -2861,7 +2948,20 @@
     var BLOQ = []; try { BLOQ = JSON.parse(localStorage.getItem('libreta:bloq')) || []; } catch (e) { BLOQ = []; }
     function esBloq(p) { return BLOQ.indexOf(String(p)) >= 0; }
     BLOQ = BLOQ.map(String);
-    function actOK(x) { return !(x.p || []).some(esBloq); }
+    // links bloqueados uno por uno (bloqueos.json → "links"): cada link con datos tiene su id (el comienzo de su firma), que el
+    // teléfono guarda al abrirlo. Así se corta un link puntual (un operario que se fue, un link reenviado) sin tocar al productor
+    var BLOQL = []; try { BLOQL = JSON.parse(localStorage.getItem('libreta:bloqL')) || []; } catch (e) { BLOQL = []; }
+    function linkId(token) { var q = String(token || '').split('.'); return q.length > 1 ? q[1].slice(0, 12) : null; }
+    function actOK(x) { return !(x.p || []).some(esBloq) && !(x.lid && BLOQL.indexOf(x.lid) >= 0); }
+    // activaciones de antes de esta versión: si el último link abierto es de ese tambo, se le agrega su id
+    (function () {
+      var u = ''; try { u = localStorage.getItem('libreta:ultLink') || ''; } catch (e) {}
+      var mm = /#libreta=[a-f0-9]+\.[A-Za-z0-9_\-]+\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)/.exec(u); if (!mm) return;
+      var pl = null; try { pl = JSON.parse(new TextDecoder().decode(unb64u(mm[1]))); } catch (e) { return; }
+      var cambio = false;
+      ACT.forEach(function (x) { if (!x.lid && pl && JSON.stringify(x.p) === JSON.stringify(pl.p) && x.f === pl.f && (x.r || '') === (pl.r || '')) { x.lid = mm[2].slice(0, 12); cambio = true; } });
+      if (cambio) try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {}
+    })();
     function suspendido() {
       if (esVet()) return false;
       if (DB && DB.idProd && DB.idProd.some(esBloq)) return true;
@@ -2873,8 +2973,9 @@
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (o) {
           var L = ((o && o.productores) || []).map(function (x) { return String(x && typeof x === 'object' ? x.p : x).trim(); }).filter(function (n) { return n && n !== 'undefined' && n !== 'null'; }).sort();
-          if (JSON.stringify(L) === JSON.stringify(BLOQ)) return;
-          BLOQ = L; try { localStorage.setItem('libreta:bloq', JSON.stringify(BLOQ)); } catch (e) {}
+          var LL = ((o && o.links) || []).map(function (x) { return String(x && typeof x === 'object' ? x.l : x).trim(); }).filter(Boolean).sort();
+          if (JSON.stringify(L) === JSON.stringify(BLOQ) && JSON.stringify(LL) === JSON.stringify(BLOQL)) return;
+          BLOQ = L; BLOQL = LL; try { localStorage.setItem('libreta:bloq', JSON.stringify(BLOQ)); localStorage.setItem('libreta:bloqL', JSON.stringify(BLOQL)); } catch (e) {}
           render();
         }).catch(function () {});
     }
@@ -3018,11 +3119,52 @@
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
       $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' || DB.origen === 'dhm' ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
-      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="lnklista">Links mandados · bloquear uno</button><button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
+    }
+    // registro de los links con datos que se mandaron desde este teléfono (solo veterinario)
+    function linksMandados(cambiar) { var L = []; try { L = JSON.parse(localStorage.getItem('libreta:links')) || []; } catch (e) {} if (cambiar) { cambiar(L); try { localStorage.setItem('libreta:links', JSON.stringify(L.slice(0, 300))); } catch (e) {} } return L; }
+    function linksLista() {
+      var L = linksMandados(), bl = state.bloqLinks || BLOQL;
+      $('#sheetXTitle').textContent = 'Links mandados';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">Bloquear un link corta a quien lo abrió con él: deja de ver la libreta y de recibir datos nuevos. El productor y los demás links del tambo siguen andando. Se puede desbloquear después.</p>' +
+        (L.length ? L.map(function (x) {
+          var b = bl.indexOf(x.l) >= 0;
+          return '<div class="lnkrow' + (b ? ' bloq' : '') + '"><span><b>' + esc(x.n || 'Tambo') + '</b><small>' + (x.para ? 'Para ' + esc(x.para) + ' · ' : '') + (x.r === 'op' ? 'Operario' : 'Productor') + ' · ' + A.fmt(x.f) + (x.h ? ' ' + x.h : '') + (b ? ' · <b>bloqueado</b>' : '') + '</small></span><button class="btn" data-a="lnkbloq" data-l="' + esc(x.l) + '">' + (b ? 'Desbloquear' : 'Bloquear') + '</button></div>';
+        }).join('') : '<p class="hint">Todavía no hay links registrados en este teléfono (se registran desde esta versión).</p>') +
+        '<button class="lnk" data-a="lnkpegbloq" style="display:block;margin:12px 0 0">Bloquear un link que no está en la lista (pegarlo)</button>' +
+        '<style>.lnkrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.lnkrow span{display:flex;flex-direction:column;min-width:0}.lnkrow small{color:var(--muted)}.lnkrow.bloq b{color:var(--vacia)}.lnkrow .btn{min-height:40px;padding:6px 12px}</style>';
+      $('#xbtns').innerHTML = '<button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
+    }
+    // escribe bloqueos.json en GitHub (con el permiso de los links): agrega o saca el id del link
+    function bloquearLink(lid, bloquear, nota) {
+      var tok = ghToken(); if (!tok) { toast('Falta el permiso de GitHub (Ajustes → permiso para links).'); return; }
+      if (bloquear && !confirm('¿Bloquear este link? Quien lo tenga deja de ver la libreta la próxima vez que abra la app con internet.')) return;
+      var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/bloqueos.json', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+      busy(true, bloquear ? 'Bloqueando el link…' : 'Desbloqueando el link…');
+      fetch(url + '?t=' + Date.now(), { headers: H, cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('No pude leer la lista de bloqueos (' + r.status + ').'); return r.json(); }).then(function (j) {
+        var o = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\s/g, '')), function (c) { return c.charCodeAt(0); })));
+        o.links = (o.links || []).filter(function (x) { return (x && typeof x === 'object' ? x.l : x) !== lid; });
+        if (bloquear) o.links.push({ l: lid, n: nota || '', f: today() });
+        var txt = JSON.stringify(o, null, 2) + '\n';
+        return fetch(url, { method: 'PUT', headers: H, body: JSON.stringify({ message: (bloquear ? 'Bloquear' : 'Desbloquear') + ' link ' + lid, content: b64std(new TextEncoder().encode(txt)), sha: j.sha }) });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('No pude guardar la lista de bloqueos (' + r.status + ').');
+        var bl = (state.bloqLinks || BLOQL).filter(function (x) { return x !== lid; }); if (bloquear) bl.push(lid); state.bloqLinks = bl;
+        busy(false); toast(bloquear ? 'Link bloqueado. Se aplica en 1 o 2 minutos.' : 'Link desbloqueado.'); linksLista();
+      }).catch(function (e) { busy(false); toast(e && e.message || 'No se pudo.'); });
+    }
+    // lista de bloqueos que ve el veterinario (para marcar los bloqueados en la lista)
+    function leerBloqLinks() {
+      fetch(baseApp().replace(/prueba\/$/, '') + 'bloqueos.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (o) {
+        state.bloqLinks = ((o && o.links) || []).map(function (x) { return String(x && typeof x === 'object' ? x.l : x); });
+        if (!$('#sheetX').hidden && $('#sheetXTitle').textContent === 'Links mandados') linksLista();
+      }).catch(function () {});
     }
     function linkDatosRol(rol) {
       $('#sheetX').hidden = true;
+      var para = rol === 'act' ? '' : (prompt('¿Para quién es este link? (opcional: sirve para reconocerlo si un día hay que bloquearlo)', '') || '').trim().slice(0, 60);
       busy(true, 'Subiendo los datos…<small>Quedan cifrados; la clave va solo en el link</small>');
       var nombre = PERFIL.nombre || 'tu tambo';
       subirDatos().then(function (meta) {
@@ -3031,6 +3173,7 @@
         return firmar(pl).then(function (tok) {
           busy(false);
           var link = baseApp() + '#libreta=' + meta.id + '.' + meta.k + '.' + tok;
+          linksMandados(function (L) { var hh = new Date(); L.unshift({ l: linkId(tok), n: nombre, r: rol === 'op' ? 'op' : 'prod', f: today(), h: pad2(hh.getHours()) + ':' + pad2(hh.getMinutes()), para: para }); });
           var txt = 'Hola. Este es el link de la *Libreta de vacas* de ' + nombre + (rol === 'op' ? ' (operario)' : '') + ', con los datos ya cargados:\n\n' + link +
             '\n\nTocalo y se abre lista para usar. Cuando haya datos nuevos, se actualiza sola al abrirla con internet.\n\nDr. Mauro Torterolo';
           if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
@@ -3055,7 +3198,7 @@
       busy(true, 'Abriendo la libreta…');
       verificar(m[3]).then(function (pl) {
         if (!pl || !pl.p) throw new Error('El link no es válido.');
-        if (!esVet()) { ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
+        if (!esVet()) { pl.lid = linkId(m[3]); if (BLOQL.indexOf(pl.lid) >= 0) throw new Error('Este link fue dado de baja. Pedile uno nuevo al Dr. Mauro Torterolo.'); ACT = ACT.filter(function (x) { return JSON.stringify(x.p) !== JSON.stringify(pl.p); }).concat([pl]); try { localStorage.setItem('libreta:act', JSON.stringify(ACT)); } catch (e) {} }
         // recién generado, el link puede tardar 1 o 2 minutos en publicarse: se reintenta solo hasta 4 minutos
         var intento = 0;
         var probar = function () {
@@ -3854,7 +3997,7 @@
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
       else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); vetCompartir(main); }
       else if (state.tab === 'leche') { main.innerHTML = err + lecheHTML(); plegarFicha(main); vetCompartir(main); }
-      else if (state.tab === 'panel' && panelOK()) main.innerHTML = err + panelHTML();
+      else if (state.tab === 'panel' && panelOK()) { main.innerHTML = err + panelHTML(); vetCompartir(main); }
       else { main.innerHTML = err + buscarHTML(); updateResults(); }
       plegarNotas(main);
     }
@@ -3960,7 +4103,15 @@
       else if (a === 'tcerrar') closeSheetT();
       else if (a === 'unidad') cambiarUnidad();
       else if (a === 'compsecar') compartirSecar();
+      else if (a === 'lnklista') { linksLista(); leerBloqLinks(); }
+      else if (a === 'lnkbloq') { var lidb = b.dataset.l, ya = (state.bloqLinks || BLOQL).indexOf(lidb) >= 0, xr = linksMandados().filter(function (q) { return q.l === lidb; })[0]; bloquearLink(lidb, !ya, xr ? xr.n + (xr.r === 'op' ? ' (operario)' : '') + (xr.para ? ' · para ' + xr.para : '') + ' · ' + xr.f : ''); }
+      else if (a === 'lnkpegbloq') { var tx = prompt('Pegá el link que querés bloquear'); var mt = tx && /#libreta=[a-f0-9]+\.[A-Za-z0-9_\-]+\.([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/.exec(tx); if (tx && !mt) toast('Eso no es un link de libreta.'); else if (mt) { var pj = null; try { pj = JSON.parse(new TextDecoder().decode(unb64u(mt[1].split('.')[0]))); } catch (e) {} bloquearLink(linkId(mt[1]), true, (pj && pj.n ? pj.n + (pj.r === 'op' ? ' (operario)' : '') + ' · ' + pj.f : 'pegado')); } }
       else if (a === 'cardimg') { var scd = b.closest('section.card'); if (scd) compartirCard(scd); }
+      else if (a === 'shdos') shDesdeSheet('gt');
+      else if (a === 'shgraf') shDesdeSheet('g');
+      else if (a === 'shtab') shDesdeSheet('t');
+      else if (a === 'shtodo') shDesdeSheet('todo');
+      else if (a === 'panelimg') compartirPanel();
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
       else if (a === 'instk') insTicket();
