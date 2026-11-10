@@ -226,7 +226,8 @@
       else if (res) estado = 'otro';
       if (estado !== 'prenada' && le && le[1] === 'S' && (!lt || le[0] > lt[0])) estado = 'servida';
       var curLac = null; g.la.forEach(function (l) { if (lp && l[0] === lp[1]) curLac = l; });
-      var mejs = g.la.map(function (l) { return l[2] || l[1]; }).filter(Boolean);
+      // mejor lactancia como en SysCaw (Mej. 305): solo las lactancias con litros a 305 días
+      var mejs = g.la.map(function (l) { return l[2]; }).filter(Boolean);
       var pr = lp ? g.ct.filter(function (c) { return c[0] >= lpf; }).map(function (c) { return c[1]; }).reverse().slice(0, 10) : [];
       var fn = okDate(a[3]);
       var r12 = lp ? String(lp[2] || '').split('/') : [];
