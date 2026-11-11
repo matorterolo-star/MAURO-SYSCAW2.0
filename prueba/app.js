@@ -1283,7 +1283,8 @@
       var abierta = !!state.abiertas[key], lim = abierta ? items.length : 12;
       // cada lista arranca plegada: título y cantidad; se despliega tocando el título
       var desp = !!(state.desp && state.desp[key]);
-      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>' + titulo + '</h2><span class="count">' + items.length + '</span>' +
+      var ds = descDe(key);
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><span class="pttl"><h2>' + titulo + '</h2>' + (ds ? '<small class="pdesc">' + esc(ds) + '</small>' : '') + '</span><span class="count">' + items.length + '</span>' +
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       h += (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
@@ -1366,7 +1367,7 @@
     function insHTML() {
       insCSS();
       var key = 'insem', desp = !!(state.desp && state.desp[key]);
-      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>Inseminadores</h2><span class="count">$</span>' +
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><span class="pttl"><h2>Inseminadores</h2><small class="pdesc">' + descDe(key) + '</small></span>' +
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       if (!DB.hist) return h + '<p class="hint">Para liquidar a los inseminadores hace falta cargar el respaldo con el historial de servicios y tactos.</p></section>';
@@ -1476,8 +1477,9 @@
       var chips = '<div class="filters" role="group" aria-label="Ventana de tiempo">' + VENT.map(function (v) {
         return '<button class="fchip plain" data-v="' + v[0] + '" aria-pressed="' + (state.ventana === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
-      return '<h1 class="ptitle">Tareas</h1>' + '<button class="btn share xtop" data-a="exptactar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Lista a Excel (tacto, secado, venta)</button>' +
-        '<button class="btn share xtop" data-a="expparches"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Listado de parches</button>' +
+      var grp = function (t, html) { return '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>'; };
+      var lrow = function (a, t, d) { return '<button class="lrow" data-a="' + a + '"><span class="lico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="pttl"><h2>' + t + '</h2><small class="pdesc">' + d + '</small></span><svg class="chev rt" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'; };
+      return '<h1 class="ptitle">Tareas</h1>' + grp('Para hacer',
         (function () {
           var rowT = function (x) { return rowHTML(x.a, { right: '<span class="when late">hace ' + x.dias + ' días</span>', sub: 'Servicio ' + A.fmt(x.fecha) + (x.a.toro && !/^celo/i.test(x.a.toro) ? ' · ' + esc(x.a.toro) : '') }); };
           var nota = 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto posterior.';
@@ -1490,10 +1492,11 @@
         }, 'Ninguna vaca para secar el ' + A.fmt(fs) + '.') +
         secTareas('partos', 'Próximos partos', chips + '<p class="secnote">Partos probables en los próximos ' + vtxt + '.</p>', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
-        }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
-        secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
+        }, 'Ningún parto probable en los próximos ' + vtxt + '.')) +
+        grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías')) +
+        grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML();
+        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML());
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -2425,7 +2428,7 @@
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
       // orden: lo que pasó (partos, ordeñe y secas), lo que viene (partos, rodeo), y después índice, reproducción y línea de vida
       // agrupadas por tema; un grupo sin tarjetas no muestra su título
-      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p>' + html : ''; };
+      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
         grp('Lo que pasó', partosOcHTML() + vovsHTML()) +
         grp('Lo que viene', probables + proyHTML()) +
@@ -2750,8 +2753,9 @@
       if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}.shopt{display:flex;align-items:center;gap:10px;font-weight:600;margin:4px 0 12px}.shopt input{width:22px;height:22px}'; document.head.appendChild(st); }
       var ico = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
-        if (!sec.querySelector('h2') || sec.querySelector('.shbtn')) return;
-        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg">' + ico + 'Compartir</button>');
+        if (!sec.querySelector('h2') || sec.querySelector('.shic')) return;
+        sec.classList.add('consh');
+        sec.insertAdjacentHTML('afterbegin', '<button class="shic" data-a="cardimg" aria-label="Compartir como imagen" title="Compartir">' + ico + '</button>');
       });
       var pan = main.querySelector('.panel');
       if (pan && !main.querySelector('.shbtn')) pan.insertAdjacentHTML('afterend', '<button class="shbtn" data-a="panelimg">' + ico + 'Compartir resumen de visita</button>');
@@ -2797,7 +2801,7 @@
     function shLimpio(sec) {
       var c = sec.cloneNode(true);
       c.classList.add('open'); c.style.cssText = 'border:0;padding:0;margin:0;background:transparent;box-shadow:none';
-      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2,.clclave'), function (x) { x.remove(); });
+      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.shic,.pdesc,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2,.clclave'), function (x) { x.remove(); });
       Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
       return c;
     }
@@ -2861,13 +2865,33 @@
       var pc = pan.cloneNode(true); pc.style.marginTop = '10px'; d.appendChild(pc);
       shMandar([shHoja('Resumen de visita', 'Visita del ' + A.fmt(today()), '', d, 500)], 'Resumen de visita');
     }
+    // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
+    var DESC = {
+      'Partos': 'Vacas y vaquillonas, mes a mes', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
+      'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
+      'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Zafras cerradas': 'Los indicadores de cada zafra',
+      'Índice del tambo': 'Las mejores y las peores vacas',
+      'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
+      'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
+      'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas',
+      'venta': 'Las que cumplen tu criterio de venta', 'insem': 'Liquidación por número de servicio'
+    };
+    function descDe(k) {
+      if (k === 'tactar' || k === 'tactarvq') return 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto';
+      if (/^Preñez de la zafra/.test(k)) return 'Preñez acumulada contra la zafra anterior';
+      if (/^La vaca /.test(k)) return 'La línea de vida del tambo';
+      return DESC[k] || '';
+    }
     function plegarFicha(main) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
         var h2 = sec.querySelector('h2'); if (!h2) return;
         var head = h2.parentNode === sec ? h2 : h2.closest('.ixhead') || h2;
         if (head.parentNode !== sec) return;
-        var key = h2.textContent.split(' · ')[0].trim();
+        var key = h2.textContent.split(' · ')[0].trim(), ds = descDe(key);
+        // título + descripción en un bloque: el título sigue siendo el h2 de siempre
+        if (head === h2) { var w = document.createElement('div'); sec.insertBefore(w, h2); var tb = document.createElement('div'); tb.className = 'pttl'; tb.appendChild(h2); w.appendChild(tb); head = w; }
+        if (ds) (head.querySelector('.pttl') || head).insertAdjacentHTML('beforeend', '<small class="pdesc">' + esc(ds) + '</small>');
         sec.classList.add('plg'); if (FICHA_AB[key]) sec.classList.add('open');
         head.classList.add('plgh'); head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0'); head.setAttribute('aria-expanded', !!FICHA_AB[key]); head.dataset.plg = key;
         head.insertAdjacentHTML('beforeend', '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
@@ -3098,16 +3122,16 @@
     }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
-      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + curvasHTML() + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
+      if (!V.length) { var ev0 = evolHTML() + curvasHTML(); return '<h1 class="ptitle">Leche</h1>' + (evolHTML() ? '<p class="grp">Evolución</p><div class="glist">' + ev0 + '</div>' : curvasHTML() + '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>'); }
       var lt = prom(V, function (v) { return v.lt; }), sol = prom(V, function (v) { return v.sol; });
       var conPrev = V.filter(function (v) { return v.prev && v.prev[1] > 0; });
       var dif = conPrev.length ? prom(conPrev, function (v) { return v.lt - v.prev[1]; }) : null;
-      var res = '<section class="card fijo"><h2>' + (C.fecha ? 'Control del ' + A.fmt(C.fecha) : 'Último control') + '</h2>' + kv([
-        ['Vacas controladas', nf(V.length)],
-        ['Litros por vaca', nf(lt, 1) + ' L' + (dif != null ? ' <small class="' + (dif >= 0 ? 'up' : 'dn') + '">' + (dif >= 0 ? '+' : '−') + nf(Math.abs(dif), 1) + ' L vs ' + A.fmt(C.ant) + '</small>' : '')],
-        ['Sólidos por vaca', sol != null ? nf(sol, 2) + ' kg <small>' + nf(prom(V, function (v) { return v.sol != null ? v.g : null; }), 2) + '% G · ' + nf(prom(V, function (v) { return v.sol != null ? v.p : null; }), 2) + '% P</small>' : null],
-        ['Días en leche, promedio', nf(prom(V, function (v) { return v.del; }))]
-      ]) + '</section>';
+      var cuadro = function (n, l, x) { return '<div><b>' + n + '</b><span>' + l + '</span>' + (x ? '<small>' + x + '</small>' : '') + '</div>'; };
+      var res = '<section class="card fijo ctl"><h2>' + (C.fecha ? 'Control del ' + A.fmt(C.fecha) : 'Último control') + '</h2>' +
+        (C.ant ? '<p class="ctlsub">Comparado con el del ' + A.fmt(C.ant).slice(0, 5) + '</p>' : '') + '<div class="ctlg">' +
+        cuadro(nf(lt, 1) + ' L', 'litros por vaca', dif != null ? '<em class="' + (dif >= 0 ? 'up' : 'dn') + '">' + (dif >= 0 ? '+' : '−') + nf(Math.abs(dif), 1) + ' L</em>' : '') +
+        (sol != null ? cuadro(nf(sol, 2) + ' kg', 'sólidos por vaca', nf(prom(V, function (v) { return v.sol != null ? v.g : null; }), 2) + '% G · ' + nf(prom(V, function (v) { return v.sol != null ? v.p : null; }), 2) + '% P') : '') +
+        cuadro(nf(prom(V, function (v) { return v.del; })), 'días en leche, prom.') + cuadro(nf(V.length), 'vacas controladas') + '</div></section>';
       var grupo = function (l) { return '<td>' + nf(l.length) + '</td><td>' + nf(prom(l, function (v) { return v.lt; }), 1) + '</td><td>' + (sol != null ? nf(prom(l, function (v) { return v.sol; }), 2) : '–') + '</td>'; };
       var filas = [['1ª lactancia', function (v) { return v.n === 1; }], ['2ª lactancia', function (v) { return v.n === 2; }], ['3ª o más', function (v) { return v.n >= 3; }], ['0 a 100 días', function (v) { return v.del <= 100; }], ['101 a 200 días', function (v) { return v.del > 100 && v.del <= 200; }], ['Más de 200 días', function (v) { return v.del > 200; }]].map(function (f, i) {
         var l = V.filter(f[1]); return l.length ? '<tr' + (i === 3 ? ' class="sep"' : '') + '><td>' + f[0] + '</td>' + grupo(l) + '</tr>' : '';
@@ -3123,7 +3147,8 @@
           return rowHTML(v.a, { right: '<span class="when ' + (d != null && d < 0 ? 'late' : 'ok') + '">' + nf(v.lt, 1) + ' L</span>',
             sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
         }).join('') + '</section>';
-      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + curvasHTML() + top5 + tabla + caida;
+      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
+      return '<h1 class="ptitle">Leche</h1>' + res + grp('Evolución', evolHTML() + curvasHTML()) + grp('Las vacas', top5 + caida + tabla);
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
@@ -4099,7 +4124,7 @@
       var g = null; try { g = JSON.parse(localStorage.getItem(state.xmode === 'parches' ? 'libreta:xfp' : 'libreta:xf')); } catch (e) {}
       state.xf = g || (state.xmode === 'parches' ? { ord: true, sec: false, vaq: true, sinDesc: true, smin: 18, smax: 24, psv: 45, vac: true }
         : { ord: true, sec: false, vaq: true, sinDesc: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false });
-      $('#sheetXTitle').textContent = state.xmode === 'parches' ? 'Listado de parches' : 'Armar lista';
+      $('#sheetXTitle').textContent = state.xmode === 'parches' ? 'Listado de parches' : 'Lista para revisación';
       $('#xbtns').innerHTML = '<button class="btn primary big" id="btnXok" data-a="xok">Ver lista y exportar</button><button class="btn" data-a="xcancel">Cancelar</button>';
       xOpts(); $('#sheetX').hidden = false;
     }
