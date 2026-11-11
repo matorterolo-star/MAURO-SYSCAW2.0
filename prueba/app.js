@@ -2895,22 +2895,31 @@
       'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas',
       'venta': 'Las que cumplen tu criterio de venta', 'insem': 'Liquidación por número de servicio'
     };
-    function descDe(k) {
+    // en la ficha de la vaca las tarjetas tienen su propia descripción
+    var DESC_FICHA = {
+      'Control lechero': 'Litros de los últimos controles', 'Lactancias': 'Litros y sólidos de cada lactancia',
+      'Historial reproductivo': 'Partos, servicios y tactos', 'Índice del tambo': 'Su lugar entre las vacas del tambo',
+      'Identificación': 'Caravana, nacimiento y origen'
+    };
+    function descDe(k, ficha) {
+      if (ficha) return DESC_FICHA[k] || '';
       if (k === 'tactar' || k === 'tactarvq') return 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto';
       if (/^Preñez de la zafra/.test(k)) return 'Preñez acumulada contra la zafra anterior';
       if (/^La vaca /.test(k)) return 'La línea de vida del tambo';
       return DESC[k] || '';
     }
-    function plegarFicha(main) {
+    function plegarFicha(main, ficha) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
         var h2 = sec.querySelector('h2'); if (!h2) return;
         var head = h2.parentNode === sec ? h2 : h2.closest('.ixhead') || h2;
         if (head.parentNode !== sec) return;
-        var key = h2.textContent.split(' · ')[0].trim(), ds = descDe(key);
+        var key = h2.textContent.split(' · ')[0].trim(), ds = descDe(key, ficha);
         // título + descripción en un bloque: el título sigue siendo el h2 de siempre
         if (head === h2) { var w = document.createElement('div'); sec.insertBefore(w, h2); var tb = document.createElement('div'); tb.className = 'pttl'; tb.appendChild(h2); w.appendChild(tb); head = w; }
-        if (ds) (head.querySelector('.pttl') || head).insertAdjacentHTML('beforeend', '<small class="pdesc">' + esc(ds) + '</small>');
+        // índice: el título y la descripción quedan juntos, a la izquierda del número
+        if (head !== h2 && !head.querySelector('.pttl')) { var tb2 = document.createElement('div'); tb2.className = 'pttl'; head.insertBefore(tb2, h2); tb2.appendChild(h2); }
+        if (ds) head.querySelector('.pttl').insertAdjacentHTML('beforeend', '<small class="pdesc">' + esc(ds) + '</small>');
         sec.classList.add('plg'); if (FICHA_AB[key]) sec.classList.add('open');
         head.classList.add('plgh'); head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0'); head.setAttribute('aria-expanded', !!FICHA_AB[key]); head.dataset.plg = key;
         head.insertAdjacentHTML('beforeend', '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
@@ -2918,6 +2927,14 @@
     }
 
     // las explicaciones largas (cómo se calcula cada cosa) quedan plegadas detrás de un botón
+    function agruparPlegadas(main) {
+      var cards = Array.prototype.filter.call(main.children, function (c) { return c.matches && c.matches('section.card.plg'); });
+      var grupo = null, prev = null;
+      cards.forEach(function (c) {
+        if (!grupo || c.previousElementSibling !== prev) { grupo = document.createElement('div'); grupo.className = 'glist'; c.parentNode.insertBefore(grupo, c); }
+        grupo.appendChild(c); prev = grupo;
+      });
+    }
     function plegarNotas(main) {
       Array.prototype.forEach.call(main.querySelectorAll('p.cap'), function (p) {
         if (p.closest('details.nota') || p.textContent.length < 160) return;
@@ -4260,7 +4277,7 @@
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); plegarNotas(main); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main); return; }
         state.rp = null;
       }
       var err = iosTipHTML() + (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '');
