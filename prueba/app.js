@@ -2274,9 +2274,18 @@
     /* toros o inseminadores que repiten más que el resto: 20 servicios o más, concepción máxima más de 10 puntos por debajo
        del resto (con 20 servicios o más) y una diferencia que no se explica por casualidad (prueba de dos proporciones, 95%).
        "El resto" son los que andan normal: se marca el peor, se lo saca del resto y se vuelve a comparar, así un toro malo no
-       tapa a otro; la prueba estadística frena el corte cuando ya no hay diferencias reales. Devuelve { nombre: { mx, rmx, n } } */
+       tapa a otro; la prueba estadística frena el corte cuando ya no hay diferencias reales. Devuelve { nombre: { mx, rmx, n } }
+       Además: nunca es aviso una concepción máxima de 50% o más (es buena aunque otro ande mejor), y los toros que parecen de
+       monta (servicio anotado a la preñez: concepción de 85% o más con 10 servicios con resultado) no entran en la comparación. */
+    var CONC_OK = 50;
+    function probMonta(svs) {
+      var G = {}; svs.forEach(function (s) { var k = String(s.toro || '').trim(); if (!k) return; var g = G[k] || (G[k] = { ok: 0, mal: 0 }); if (s.r !== 'pend') g[s.r]++; });
+      var M = {}; Object.keys(G).forEach(function (k) { var g = G[k], d = g.ok + g.mal; if (d >= 10 && g.ok / d >= 0.85) M[k] = Math.round(g.ok / d * 100); });
+      return M;
+    }
     function repitenMas(svs, campo) {
-      var G = {}; svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; var g = G[k] || (G[k] = { ok: 0, pend: 0, mal: 0 }); g[s.r]++; });
+      var mon = campo === 'toro' ? probMonta(svs) : {};
+      var G = {}; svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k || mon[k] != null) return; var g = G[k] || (G[k] = { ok: 0, pend: 0, mal: 0 }); g[s.r]++; });
       var malos = {}, sigue = true;
       while (sigue) {
         sigue = false; var peor = null;
@@ -2285,7 +2294,7 @@
           if (malos[k]) return; var g = G[k], n = g.ok + g.pend + g.mal, rn = R.ok + R.pend + R.mal - n; if (n < 20 || rn < 20) return;
           var x1 = g.ok + g.pend, x2 = R.ok - g.ok + R.pend - g.pend, mx = x1 / n * 100, rmx = x2 / rn * 100;
           var pp = (x1 + x2) / (n + rn), se = Math.sqrt(pp * (1 - pp) * (1 / n + 1 / rn)), z = se > 0 ? (x2 / rn - x1 / n) / se : 0;
-          if (mx < rmx - 10 && z >= 1.96 && (!peor || mx - rmx < peor.mx - peor.rmx)) peor = { k: k, mx: mx, rmx: rmx, n: n };
+          if (mx < CONC_OK && mx < rmx - 10 && z >= 1.96 && (!peor || mx - rmx < peor.mx - peor.rmx)) peor = { k: k, mx: mx, rmx: rmx, n: n };
         });
         if (peor) { malos[peor.k] = peor; sigue = true; }
       }
@@ -2319,7 +2328,8 @@
       return '<div class="tibox">' + cab +
         '<h3 class="vh3">Por toro</h3>' + tabla('toro', 'Toro', 'Sin dato de toro') +
         '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') + avisos.join('') +
-        '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
+        (function () { var M = probMonta(svs), k = Object.keys(M); return k.length ? '<p class="cap">' + k.map(function (t) { return '<b>' + esc(t) + '</b> (' + M[t] + '%)'; }).join(', ') + (k.length === 1 ? ' parece un toro de monta' : ' parecen toros de monta') + ' (servicio anotado a la preñez): no se usa' + (k.length === 1 ? '' : 'n') + ' para comparar.</p>' : ''; })() +
+        '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Solo se avisa si la concepción máxima es menor a ' + CONC_OK + '% y claramente peor que el resto. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
     }
     function torosHTML(svs) {
       var grupo = function (campo, quien) {
