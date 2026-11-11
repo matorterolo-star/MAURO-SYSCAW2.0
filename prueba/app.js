@@ -2648,7 +2648,7 @@
     function ctrlChart(ct) {
       var pts = ct.filter(function (c) { return c[1] != null; });
       if (pts.length < 2) return '';
-      var W = 300, H = 130, L = 26, Rr = 40, T = 10, B = 22, n = pts.length;
+      var W = 300, H = 140, L = 26, Rr = 40, T = 20, B = 22, n = pts.length;
       var maxL = Math.max.apply(null, pts.map(function (c) { return c[1]; })) * 1.1;
       var csv = pts.map(function (c) { return c[4]; }).filter(function (v) { return v != null; });
       var maxC = Math.max(400, csv.length ? Math.max.apply(null, csv) * 1.1 : 0);
@@ -2662,9 +2662,10 @@
       pts.forEach(function (c, i) {
         var x = X(i), y = Y(c[1]);
         s += '<rect class="bar' + (i === n - 1 ? ' last' : '') + '" x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (H - B - y).toFixed(1) + '" rx="2"><title>' + A.fmt(c[0]) + ': ' + c[1] + ' lts</title></rect>';
+        // litros arriba de cada barra (con muchos controles, la letra se achica para que no se pisen)
+        s += '<text class="val" x="' + x.toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle"' + (n > 8 ? ' style="font-size:' + (n > 10 ? 8.5 : 9.5) + 'px"' : '') + '>' + nf(c[1], c[1] >= 100 ? 0 : 1) + '</text>';
         if (i === 0 || i === n - 1 || n <= 8) s += '<text class="lbl" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + c[0].slice(8, 10) + '/' + c[0].slice(5, 7) + '</text>';
       });
-      s += '<text class="lbl" x="' + (L - 4) + '" y="' + (Y(maxL / 1.1) + 3).toFixed(1) + '" text-anchor="end">' + Math.round(maxL / 1.1) + '</text>';
       var cp = pts.map(function (c, i) { return c[4] != null ? [X(i), YC(Math.min(c[4], maxC))] : null; }).filter(Boolean);
       if (cp.length > 1) s += '<polyline class="cs" points="' + cp.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
       cp.forEach(function (p) { s += '<circle class="csd" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.6"/>'; });
