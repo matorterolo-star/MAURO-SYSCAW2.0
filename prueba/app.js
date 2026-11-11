@@ -1283,14 +1283,14 @@
     }
     function catsHTML() {
       var g = grupos(), orden = ['vaca', 'seca', 'vaquillona', 'ternera'].filter(function (k) { return g[k]; });
-      if (orden.length < 2 && !prenOK()) return '';
+      if (orden.length < 2) return '';
       // en Rodeo se agrega "Todas" (partos proyectados de vacas y vaquillonas juntos)
       var conTodas = true;
       return '<div class="cats' + (orden.length === 4 || conTodas ? ' n4' : '') + '" role="group" aria-label="Categoría">' +
         (conTodas ? '<button class="todas" data-cat="todas" aria-pressed="' + (state.cat === 'todas') + '">Todas <b>' + DB.animales.length + '</b></button>' : '') +
         orden.map(function (k) {
           return '<button data-cat="' + k + '" aria-pressed="' + (state.cat === k) + '">' + GL[k] + ' <b>' + g[k] + '</b></button>';
-        }).join('') + (prenOK() ? '<button class="todas" data-cat="pren" aria-pressed="' + (state.cat === 'pren') + '">Preñez</button>' : '') + '</div>';
+        }).join('') + '</div>';
     }
     function nombreGrupo(n) { if (state.cat === 'todas') return n === 1 ? 'animal' : 'animales'; return state.cat === 'vaquillona' ? (n === 1 ? 'vaquillona' : 'vaquillonas') : state.cat === 'ternera' ? (n === 1 ? 'ternera' : 'terneras') : state.cat === 'seca' ? (n === 1 ? 'vaca seca' : 'vacas secas') : (n === 1 ? 'vaca en ordeñe' : 'vacas en ordeñe'); }
     function ordenar(list, f) {
@@ -1992,7 +1992,7 @@
     // último servicio que cuenta en la zafra: por defecto el 15 de febrero, el productor lo puede cambiar (se guarda día y mes)
     function finMD() { var v = getP('finzaf'); return /^\d{2}-\d{2}$/.test(v || '') ? v : '02-15'; }
     function finZaf(ini) { var y = +ini.slice(0, 4), md = finMD(); return (md > ini.slice(5) ? y : y + 1) + '-' + md; }
-    function zafLbl(ini) { var y = +ini.slice(2, 4); return pad2(y) + '-' + pad2((y + 1) % 100); }
+    function zafLbl(ini) { return 'Zafra ' + ini.slice(2, 4); }
     function primServ(d0, hasta) {
       var best = null;
       DB.animales.map(function (a) { return DB.hist[a.rp]; }).concat((DB.bajas || []).map(function (b) { return DB.hist[b.key]; })).forEach(function (h) {
@@ -2073,8 +2073,8 @@
       }
       var D = prenDatos(), ini = D.ini, fin = D.fin, ref = D.ref, pev = D.pev;
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; }, dias = function (v) { return v == null ? '–' : Math.round(v) + ''; };
-      var cab = '<h2>Preñez de la zafra ' + zafLbl(ini) + '</h2>' +
-        '<label class="secfecha">Inicio de servicios <input type="date" id="ini21" value="' + ini + '" max="' + ref + '"></label>' +
+      var cab = '<h2>Preñez · ' + zafLbl(ini) + '</h2>' +
+        '<p class="cap">Desde el inicio de servicios del ' + A.fmt(ini) + ' (el de Reproducción cada 21 días).</p>' +
         '<label class="secfecha">Último servicio que cuenta <input type="date" id="finZaf" value="' + fin + '" min="' + A.addDays(ini, 60) + '"></label>' +
         (finMD() !== '02-15' ? '<p class="cap inidef">Por defecto el 15 de febrero · <button class="lnk" data-a="finzafdef">volver a esa fecha</button></p>' : '');
       var cur = D.Zs[0];
@@ -2109,7 +2109,7 @@
         (state.pzAb ? '<table class="tbl rtbl pzab"><thead><tr><th>RP</th><th>Días en leche</th><th>Servicios</th><th>Estado</th></tr></thead><tbody>' + abiertas.map(function (a) {
           return '<tr data-rp="' + esc(a.rp) + '"><td><b>' + esc(a.rp) + '</b></td><td>' + A.diffDays(ref, a.pFecha) + '</td><td>' + (a.sN || 0) + (a.sFecha ? '<small>últ. ' + A.fmt(a.sFecha).slice(0, 5) + '</small>' : '') + '</td><td>' + esc(LABEL[a.estado] || a.result || '–') + '</td></tr>';
         }).join('') + '</tbody></table><p class="cap">Sin preñez confirmada y sin descarte programado. Tocá una para ver su ficha.</p>' : '') : '';
-      var card1 = '<section class="card rep fijo">' + cab + kpis + leg + prenChart(ptsC, ptsP, sem || 1) + lista + '</section>';
+      var card1 = '<section class="card rep">' + cab + kpis + leg + prenChart(ptsC, ptsP, sem || 1) + lista + '</section>';
       // cierre de zafra: de la más vieja a la actual
       var Zc = D.Zs.slice().reverse();
       var fila = function (tit, f) { return '<tr><td>' + tit + '</td>' + Zc.map(function (z) { return '<td>' + f(z.R, z) + '</td>'; }).join('') + '</tr>'; };
@@ -2501,10 +2501,10 @@
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
       // orden: lo que pasó (partos, ordeñe y secas), lo que viene (partos, rodeo), y después índice, reproducción y línea de vida
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        partosOcHTML() + vovsHTML() + probables + proyHTML() + idxCardHTML() + repHTML() + vidaHTML();
+        partosOcHTML() + vovsHTML() + probables + proyHTML() + idxCardHTML() + repHTML() + (prenOK() ? prenHTML() : '') + vidaHTML();
     }
     function rodeoHTML() {
-      if (state.cat === 'pren') { if (prenOK()) return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() + prenHTML(); state.cat = 'todas'; }
+      if (state.cat === 'pren') state.cat = 'todas';
       if (state.cat === 'todas') return rodeoTodasHTML();
       var L = lista(), r = A.resumen(L, today()), c = r.conteo;
       var seg = ORDEN.filter(function (k) { return c[k]; }).map(function (k) {
