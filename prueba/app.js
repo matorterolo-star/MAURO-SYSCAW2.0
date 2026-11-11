@@ -275,12 +275,24 @@
       }
       if (!L) return;
       var conc = L.conc && L.conc <= fin ? L.conc : null;
+      // con varias unidades: entra a la zafra cuando está en la unidad elegida (al inicio, al parir o al llegar por un pase);
+      // si se va a otra unidad sin preñarse, queda fuera ('pase'): sigue en la otra unidad, no es una falla de esta
+      var ent = L.p > ini ? L.p : ini, pase = null;
+      if (x.uEn) {
+        if (!x.uEn(ent)) {
+          var lleg = (x.cambios || []).filter(function (m) { return m > ent && m <= fin && x.uEn(m); })[0];
+          if (!lleg || (conc && conc <= lleg)) return;
+          ent = lleg;
+        }
+        pase = (x.cambios || []).filter(function (m) { return m > ent && !x.uEn(m); })[0] || null;
+      }
       var svz = L.sv.filter(function (e) { return e[0] <= fin; });
       var s1 = svz.length ? svz[0][0] : null, ult = svz.length ? svz[svz.length - 1][0] : null;
       var pend = !conc && !L.np && !!ult && !x.salida && sinResultado(L, ult, esPren);
       var d = x.desc === '0000' ? ref : x.desc, excl = null;
       if (d && d <= fin && (!conc || conc > d) && (!x.salida || d <= x.salida)) excl = 'desc';
       else if (!conc && x.salida && diffDays(x.salida, L.p) < pev) excl = 'antes';
+      else if (pase && (!conc || conc > pase)) excl = 'pase';
       // pérdida: el primer tacto positivo de una preñez de la zafra
       var T1 = L.pos.filter(function (t) { return diffDays(t, ini) >= 25; })[0] || null, sT1 = null;
       if (T1) { var sa = L.sv.filter(function (e) { return e[0] <= T1; }); if (sa.length && sa[sa.length - 1][0] > fin) T1 = null; else if (sa.length) sT1 = sa[sa.length - 1][0]; }
@@ -294,7 +306,7 @@
           L.ta.some(function (t) { return t[0] > f && diffDays(t[0], f) >= 25 && !esPren(t[1]); });
         if (falla) sRes++;
       });
-      R.push({ sOk: sOk, sRes: sRes, sTot: L.sv.filter(function (e) { return e[0] >= ini && e[0] <= fin; }).length, rp: x.rp, p: L.p, conc: conc, est: conc ? L.est : false, s1: s1, ult: ult, pend: pend, salida: x.salida || null, excl: excl, conf: !!T1, perd: T1 ? L.perdida(T1) : false });
+      R.push({ ent: ent, sOk: sOk, sRes: sRes, sTot: L.sv.filter(function (e) { return e[0] >= ini && e[0] <= fin; }).length, rp: x.rp, p: L.p, conc: conc, est: conc ? L.est : false, s1: s1, ult: ult, pend: pend, salida: x.salida || null, excl: excl, conf: !!T1, perd: T1 ? L.perdida(T1) : false });
     });
     return R;
   }
@@ -306,6 +318,7 @@
       lactConc(h, esPren, esVac).forEach(function (l) {
         var d150 = addDays(l.p, 150); if (d150 < desde || d150 > hasta) return;
         if (x.salida && x.salida <= l.p) return;
+        if (x.uEn && !x.uEn(d150)) return; // con varias unidades: cuenta donde estaba a los 150 días
         var ok = !!l.conc && l.conc <= d150;
         var d = x.desc === '0000' ? ref : x.desc, excl = null;
         if (d && d <= d150 && (!ok || l.conc > d) && (!x.salida || d <= x.salida)) excl = 'desc';
@@ -1931,7 +1944,7 @@
       var cf = Z.filter(function (r) { return r.conf; }), Q1 = Q.filter(function (r) { return !r.excl; });
       return {
         n0: Z.length, n: M.length, pren: P.length, vac: M.length - P.length,
-        desc: Z.filter(function (r) { return r.excl === 'desc'; }).length, antes: Z.filter(function (r) { return r.excl === 'antes'; }).length,
+        desc: Z.filter(function (r) { return r.excl === 'desc'; }).length, antes: Z.filter(function (r) { return r.excl === 'antes'; }).length, pase: Z.filter(function (r) { return r.excl === 'pase'; }).length,
         salV: M.filter(function (r) { return !r.conc && r.salida; }).length, pend: M.filter(function (r) { return r.pend; }).length, est: P.filter(function (r) { return r.est; }).length,
         ipps: media(ipps.map(function (r) { return A.diffDays(r.s1, r.p); })), ippsT: media(ippsT.map(function (r) { return A.diffDays(r.s1, r.p); })), nIppsT: ippsT.length,
         ipc: media(P.map(function (r) { return A.diffDays(r.conc, r.p); })), conf: cf.length, perd: cf.filter(function (r) { return r.perd; }).length,
@@ -1942,7 +1955,7 @@
     // % preñadas (confirmadas) y máximo (sumando las servidas sin resultado) a una fecha, sobre las vacas de la zafra ya paridas a esa fecha
     function zafEn(Z, d) {
       var den = 0, num = 0, mx = 0;
-      Z.forEach(function (r) { if (r.excl || r.p > d) return; den++; if (r.conc && r.conc <= d) { num++; mx++; } else if (r.pend && r.ult <= d) mx++; });
+      Z.forEach(function (r) { if (r.excl || (r.ent || r.p) > d) return; den++; if (r.conc && r.conc <= d) { num++; mx++; } else if (r.pend && r.ult <= d) mx++; });
       return { den: den, v: den ? num / den * 100 : null, mx: den ? mx / den * 100 : null, num: num };
     }
     var PZC = { k: null, r: null };
@@ -1950,8 +1963,14 @@
       var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today(), fin = finZaf(ini);
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + DB.animales.length + '|' + ini + '|' + pev + '|' + fin + '|' + ref;
       if (PZC.k === k) return PZC.r;
-      var an = DB.animales.map(function (a) { return { rp: a.rp, h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
-        .concat((DB.bajas || []).map(function (b) { return { rp: b.rp, h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
+      // con una o algunas unidades elegidas: todos los animales del respaldo, cada uno contado en la unidad donde estaba en cada fecha (pases)
+      var porU = !!(DB.sel && DB.sel.length && DB.todos);
+      var conU = function (o, a, h) {
+        if (porU && h) { var xx = { a: a, h: h }; o.uEn = function (D) { return enSel(unidadEn(xx, D)); }; o.cambios = (h.mv || []).map(function (m) { return m[0]; }); }
+        return o;
+      };
+      var an = (porU ? DB.todos : DB.animales).map(function (a) { var h = DB.hist[a.rp]; return conU({ rp: a.rp, h: h, salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }, a, h); })
+        .concat(((porU ? DB.bajasT : DB.bajas) || []).map(function (b) { var h = DB.hist[b.key]; return conU({ rp: b.rp, h: h, salida: b.bFecha, desc: b.dFecha || null }, b, h); }));
       var desde = DB.desdeHist || '0000', Zs = [];
       // zafra actual y hasta dos anteriores (con historial completo; si no, la foto guardada al cerrarla)
       var guard = {}; try { guard = JSON.parse(getP('zafras') || '{}') || {}; } catch (e) { guard = {}; }
@@ -2020,11 +2039,11 @@
         ant150 = Qp.length ? Qp.filter(function (r) { return r.ok; }).length / Qp.length * 100 : null;
       }
       var flecha = function (a, b) { if (a == null || b == null) return ''; var d = Math.round(a) - Math.round(b); return d > 0 ? ' ▲' + d : d < 0 ? ' ▼' + (-d) : ' ='; };
-      var exN = R.desc + R.antes;
+      var exN = R.desc + R.antes + (R.pase || 0);
       var kpis = '<div class="kpis"><div class="tp"><b>' + (hoy.v == null ? '–' : Math.round(hoy.v) + '%') + '</b><span>Preñez acumulada</span><small>' +
         (hoy.mx != null && Math.round(hoy.mx) > Math.round(hoy.v) ? 'hasta ' + Math.round(hoy.mx) + '% con las servidas sin tacto' : hoy.num + ' de ' + hoy.den) + (ant != null ? '<br>año ant. ' + Math.round(ant) + '%' + (hoy.mx - hoy.v <= 5 ? flecha(hoy.v, ant) : '') : '') + '</small></div>' +
         '<div><b>' + p(R.ok150, R.n150) + '</b><span>Preñadas a 150 días en leche</span><small>' + R.ok150 + ' de ' + R.n150 + (R.pend150 ? ' · ' + R.pend150 + ' sin tacto' : '') + (ant150 != null ? '<br>año ant. ' + Math.round(ant150) + '%' + flecha(R.n150 ? R.ok150 / R.n150 * 100 : null, ant150) : '') + '</small></div>' +
-        '<div><b>' + p(exN, R.n0) + '</b><span>Excluidas</span><small>' + R.desc + ' descarte' + (R.antes ? ' · ' + R.antes + ' se fueron antes de la espera' : '') + '</small></div></div>' +
+        '<div><b>' + p(exN, R.n0) + '</b><span>Excluidas</span><small>' + R.desc + ' descarte' + (R.antes ? ' · ' + R.antes + ' se fueron antes de la espera' : '') + (R.pase ? ' · ' + R.pase + ' pasaron vacías a otra unidad' : '') + '</small></div></div>' +
         '<p class="cap">' + (fin < ref ? 'Zafra terminada el ' + A.fmt(fin) : 'Al ' + A.fmt(ref) + ', semana ' + Math.floor(off / 7) + ' de ' + sem) + '. ' + R.n + ' vacas en la zafra' + (R.salV ? '; ' + R.salV + ' se fueron vacías y cuentan como no preñadas' : '') + '.' + (prev ? ' La zafra anterior, al mismo día de servicios.' : '') + '</p>';
       var leg = '<div class="mleg"><span><i class="pz1"></i>' + zafLbl(ini) + '</span><span><i class="pzm"></i>con servidas sin tacto</span>' + (prev ? '<span><i class="pz0"></i>' + zafLbl(prev.ini) + '</span>' : '') + '</div>';
       // vacas con más de 150 días en leche sin preñar, hoy
@@ -2044,7 +2063,7 @@
         fila('Vacas en la zafra', function (R) { return nf(R.n); }) +
         fila('<b>Preñez total</b>', function (R) { return '<b>' + p(R.pren, R.n) + '</b><small>' + R.pren + ' de ' + R.n + '</small>'; }) +
         fila('Vacías', function (R) { return nf(R.vac) + (R.salV ? '<small>' + R.salV + ' se fueron</small>' : ''); }) +
-        fila('Excluidas', function (R) { return p(R.desc + R.antes, R.n0) + '<small>' + (R.desc + R.antes) + '</small>'; }) +
+        fila('Excluidas', function (R) { var e = R.desc + R.antes + (R.pase || 0); return p(e, R.n0) + '<small>' + e + '</small>'; }) +
         fila('Concepción de la zafra', function (R) { return R.sRes == null ? '–' : p(R.sOk, R.sRes) + '<small>' + R.sOk + ' de ' + R.sRes + ' serv.</small>'; }) +
         fila('Preñadas a 150 días en leche', function (R) { return p(R.ok150, R.n150); }) +
         fila('Parto – 1er servicio (días)', function (R) { return dias(R.ipps) + '<small>en zafra ' + dias(R.ippsT) + '</small>'; }) +
@@ -2054,7 +2073,7 @@
         '<p class="cap"><b>En curso</b> hasta el último servicio que cuenta; <b>provisoria</b> mientras falten tactar servicios; <b>cerrada</b> cuando no quedan servicios sin tacto (o son menos del 5%) y pasaron 35 días del fin. Al cerrarse, sus números se guardan fijos. La pérdida de preñez sigue sumando hasta el parto. ' +
           '<b>Vacas en la zafra:</b> vacas con al menos un parto, en el rodeo al inicio de servicios o paridas después, no preñadas al inicio y paridas al menos ' + pev + ' días (espera voluntaria) antes del último servicio que cuenta. Las vaquillonas entran cuando paren. ' +
           '<b>Preñez acumulada:</b> preñadas por tacto (o por el parto siguiente), ubicadas en la fecha del servicio que las preñó, sobre las vacas de la zafra ya paridas a esa fecha. La línea punteada suma las servidas que todavía no tienen tacto ni repitieron: es lo máximo que puede dar. ' +
-          '<b>Excluidas:</b> marcadas como descarte programado antes del fin de la zafra sin haberse preñado, y las que se fueron antes de cumplir la espera voluntaria. Las que se fueron (venta o muerte) vacías después de la espera cuentan como no preñadas. ' +
+          '<b>Excluidas:</b> marcadas como descarte programado antes del fin de la zafra sin haberse preñado, las que se fueron antes de cumplir la espera voluntaria y, con varias unidades, las que pasaron vacías a otra unidad (cada vaca cuenta en la unidad donde estaba en cada fecha). Las que se fueron (venta o muerte) vacías después de la espera cuentan como no preñadas. ' +
           '<b>Preñadas a 150 días en leche:</b> vacas que cumplieron 150 días en leche en la zafra y se preñaron antes. ' +
           '<b>Parto – 1er servicio:</b> promedio de todas; las paridas antes del inicio esperan a que empiecen los servicios, por eso se muestra aparte el de las paridas dentro de la zafra. ' +
           '<b>Parto – concepción:</b> solo de las preñadas; leelo junto con las vacías. ' +
