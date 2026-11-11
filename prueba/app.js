@@ -27,98 +27,6 @@
     return n > 0 ? 'en ' + n + ' días' : 'hace ' + (-n) + ' días';
   }
 
-  /* ---------- lectura del Excel ---------- */
-  function txt(v) { if (v == null) return null; var s = String(v).trim(); return s === '' ? null : s; }
-  function num(v) {
-    if (v == null || v === '') return null;
-    var n = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
-    return isFinite(n) ? n : null;
-  }
-  function numOrTxt(v) { var n = num(v); return n != null ? n : txt(v); }
-
-  function parseLibreta(XLSX, buf) {
-    var wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    for (var si = 0; si < wb.SheetNames.length; si++) {
-      var ws = wb.Sheets[wb.SheetNames[si]];
-      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
-      var h = -1;
-      for (var r = 0; r < Math.min(rows.length, 40); r++) {
-        var cells = rows[r].map(function (c) { return c == null ? '' : String(c).trim(); });
-        if (cells.indexOf('RP') >= 0 && cells.some(function (c) { return /^nomb/i.test(c); })) { h = r; break; }
-      }
-      if (h < 0) continue;
-      var head = rows[h].map(function (c) { return c == null ? '' : String(c).trim(); });
-      var idx = function (name, nth) {
-        var c = 0; nth = nth || 0;
-        for (var i = 0; i < head.length; i++) { if (head[i] === name) { if (c === nth) return i; c++; } }
-        return -1;
-      };
-      var idxRe = function (re) { for (var i = 0; i < head.length; i++) { if (re.test(head[i])) return i; } return -1; };
-      var col = {
-        nombre: idxRe(/^nomb/i), edad: idx('Edad'), pFecha: idx('Fecha', 0), pN: idxRe(/^N[°º]$/),
-        r1: idx('R1'), r2: idx('R2'), sFecha: idx('Fecha', 1), sN: idx('N Serv'), toro: idxRe(/^toro/i),
-        eg: idx('E.G'), ipp: idx('Ipp'), tFecha: idx('Fecha', 2), result: idx('Result'), rech: idx('Rech'),
-        rp: idx('RP'), idElec: idx('Id Elect'), rod: idx('Rod'), dLac: idx('D Lac'),
-        prodLts: idx('Prod Lts'), mej: idxRe(/^mej/i)
-      };
-      var prCols = [];
-      for (var k = 1; k <= 10; k++) { var pc = idx('Pr' + k); if (pc >= 0) prCols.push(pc); }
-      var get = function (row, i) { return i >= 0 ? row[i] : null; };
-      var animales = [];
-      for (var j = h + 1; j < rows.length; j++) {
-        var row = rows[j];
-        var rpRaw = get(row, col.rp);
-        if (rpRaw == null || String(rpRaw).trim() === '') continue;
-        var rp = typeof rpRaw === 'number' ? String(Math.round(rpRaw)) : String(rpRaw).trim();
-        var tfRaw = get(row, col.tFecha), resRaw = get(row, col.result);
-        var tFecha = null, partoProb = null, result = txt(resRaw);
-        if (typeof tfRaw === 'string' && /^pare/i.test(tfRaw.trim())) { partoProb = parseDMY(resRaw); result = null; }
-        else tFecha = parseDMY(tfRaw);
-        var estado = 'sin';
-        if (partoProb) estado = 'prenada';
-        else if (result && /^pre/i.test(result)) estado = 'prenada';
-        else if (result && /^vac/i.test(result)) estado = 'vacia';
-        else if (result && /^cic/i.test(result)) estado = 'ciclando';
-        else if (result && /^apta/i.test(result)) estado = 'apta';
-        else if (result) estado = 'otro';
-        var pr = prCols.map(function (c) { return numOrTxt(row[c]); });
-        while (pr.length && pr[pr.length - 1] == null) pr.pop();
-        var idE = get(row, col.idElec);
-        animales.push({
-          rp: rp,
-          nombre: txt(get(row, col.nombre)),
-          edad: num(get(row, col.edad)),
-          rod: txt(get(row, col.rod)),
-          idElec: idE == null ? null : ((typeof idE === 'number' ? String(Math.round(idE)) : String(idE).trim()).replace(/^0+/, '') || null),
-          pFecha: parseDMY(get(row, col.pFecha)),
-          pN: num(get(row, col.pN)),
-          r1: txt(get(row, col.r1)),
-          r2: txt(get(row, col.r2)),
-          sFecha: parseDMY(get(row, col.sFecha)),
-          sN: num(get(row, col.sN)),
-          toro: txt(get(row, col.toro)),
-          eg: numOrTxt(get(row, col.eg)),
-          ipp: numOrTxt(get(row, col.ipp)),
-          tFecha: tFecha,
-          result: result,
-          partoProb: partoProb,
-          estado: estado,
-          rech: txt(get(row, col.rech)),
-          pr: pr,
-          dLac: num(get(row, col.dLac)),
-          prodLts: num(get(row, col.prodLts)),
-          mej: num(get(row, col.mej))
-        });
-      }
-      animales.forEach(function (a) {
-        if (a.estado !== 'prenada' && a.sFecha && a.pFecha && !/^celo/i.test(a.toro || '') && a.sFecha > a.pFecha && (!a.tFecha || a.sFecha > a.tFecha)) a.estado = 'servida';
-      });
-      animales.forEach(function (a) { a.celo = a.estado === 'prenada' && /^celo/i.test(a.toro || ''); });
-      if (!animales.length) continue;
-      return { animales: animales, hoja: wb.SheetNames[si] };
-    }
-    throw new Error('No encontré la tabla de la libreta. Debe tener las columnas "Nomb./Orig." y "RP".');
-  }
 
   /* ---------- cálculos ---------- */
   function esServicio(a) { return !!a.sFecha && !/^celo/i.test(a.toro || ''); }
@@ -655,7 +563,7 @@
     var prom = { pe: ref0.pe.m, da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
     return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
-  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, zafraPren: zafraPren, pren150: pren150, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
+  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, zafraPren: zafraPren, pren150: pren150, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') initUI(api);
 
@@ -870,6 +778,19 @@
     function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
     function esRar(buf) { var u = new Uint8Array(buf, 0, Math.min(4, buf.byteLength)); return u[0] === 0x52 && u[1] === 0x61 && u[2] === 0x72 && u[3] === 0x21; }
     // sql.js (lector de la base de FOSAPP): se descarga recién la primera vez que se usa
+    // la librería de Excel no se carga al abrir: solo al exportar una lista o al leer una base de FOSAPP (la usa para abrir el .zip)
+    var XLSXP = null;
+    function cargarXlsx() {
+      if (root.XLSX) return Promise.resolve(root.XLSX);
+      if (XLSXP) return XLSXP;
+      XLSXP = new Promise(function (ok, mal) {
+        var s = document.createElement('script'); s.src = 'xlsx.full.min.js';
+        s.onload = function () { root.XLSX ? ok(root.XLSX) : mal(new Error('no se pudo cargar Excel')); };
+        s.onerror = function () { XLSXP = null; mal(new Error('no se pudo descargar Excel (hace falta internet la primera vez)')); };
+        document.head.appendChild(s);
+      });
+      return XLSXP;
+    }
     function cargarSqlJs() {
       if (root.initSqlJs) return Promise.resolve(root.initSqlJs);
       return new Promise(function (ok, mal) {
@@ -926,7 +847,7 @@
           return (tipo === 'dhmrar' ? H.mdbDeRar(buf, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64) }) : Promise.resolve(buf)).then(function (mdb) {
             return H.fromFile(mdb, f.name, { elegir: function (us) { return elegirUnidad(us, null, true); } });
           }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; });
-        }) : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+        }) : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? Promise.all([cargarSqlJs(), cargarXlsx()]).then(function (r) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: r[0], wasmUrl: 'sql-wasm.wasm?v=1', XLSX: r[1] }); })
           : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
@@ -1063,23 +984,23 @@
       fr.onload = function () {
         if (esFirebird(fr.result)) {
           // base de SIGEA (Macoel): solo en el modo veterinario; fuera de él se responde como cualquier archivo que la app no lee
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, 'sigea'); return;
         }
         if (esDelpro(fr.result)) {
           // exportación de DelPro: solo en el modo veterinario
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, 'delpro'); return;
         }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: modo veterinario, o productor activado para un tambo de FOSAPP (cargarRespaldo comprueba que la base sea de su tambo)
           // a cualquier otro se le responde como a un archivo que la app no lee
-          if (!esVet() && !ACT.some(function (x) { return (x.p || []).some(function (q) { return /^F\d/.test(q); }); })) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet() && !ACT.some(function (x) { return (x.p || []).some(function (q) { return /^F\d/.test(q); }); })) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, true); return;
         }
         if (esAccess(fr.result)) {
           // base de DHM (Access): solo en el modo veterinario
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, 'dhm'); return;
         }
         if (esRar(fr.result) || /\.rar$/i.test(f.name)) {
@@ -1087,22 +1008,9 @@
           if (esVet()) { rarConMdb(fr.result).then(function (m) { cargarRespaldo(fr.result, f, m ? 'dhmrar' : undefined); }); return; }
           cargarRespaldo(fr.result, f); return;
         }
+        // las libretas en Excel ya no se leen: todo entra por respaldo
         if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
-        try {
-          var res = A.parseLibreta(root.XLSX, fr.result);
-          res.animales.forEach(function (a) { a.cat = 'vaca'; });
-          var mismo = state.destino !== 'nuevo' && tamboAct();
-          var prev = mismo ? DB : {};
-          if (!mismo) prepararDestino(nombreDesdeArchivo(f.name));
-          state.destino = null;
-          DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: prev.hist, codes: prev.codes, fecha: prev.fecha };
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'panel'; state.cat = 'todas';
-          try { location.hash = ''; } catch (e) {}
-          render();
-          toast(res.animales.length + ' animales cargados');
-          openSheet('Nombre del tambo', nombreDesdeArchivo(f.name) || PERFIL.nombre);
-          return;
-        } catch (e) { state.error = e.message || 'No pude leer el archivo.'; }
+        state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).';
         render();
       };
       fr.onerror = function () { state.destino = null; state.error = 'No pude abrir el archivo.'; render(); };
@@ -1236,7 +1144,7 @@
     }
     function emptyHTML() {
       return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá el respaldo</h2>' +
-        '<p>Elegí el respaldo de SysCaw (.rar)' + (esVet() ? ', la base de FOSAPP (.zip)' : '') + ' o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
+        '<p>Elegí el respaldo de SysCaw (.rar)' + (esVet() ? ', la base de FOSAPP (.zip)' : '') + '. Se lee en este teléfono y no se sube a ningún servidor.</p>' +
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
         '<button class="btn primary big" data-a="load">Elegir archivo</button>' + (!esVet() && !ACT.length ? '<p style="margin:18px 0 8px"><b>¿Todavía no activaste?</b> Escribí tu código:</p>' + codigoHTML() : '') + '</section>';
     }
@@ -4403,7 +4311,7 @@
       else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
       else if (a === 'expparches') abrirExport('parches');
-      else if (a === 'xok') exportarTactar();
+      else if (a === 'xok') { busy(true, 'Armando el Excel…'); cargarXlsx().then(function () { busy(false); exportarTactar(); }, function (er) { busy(false); toast(er.message); }); }
       else if (a === 'xshare') xCompartir();
       else if (a === 'vtacfg') vtaSheet();
       else if (a === 'vtaok') { setP('vta', JSON.stringify(state.vtaDraft)); $('#sheetX').hidden = true; render(); toast('Criterio de venta guardado'); }
