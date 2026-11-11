@@ -157,19 +157,30 @@ main{padding-top:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom,0px)
 .ihola h2{font-size:22px;line-height:1.15;margin:0 0 4px}
 .ifecha{margin:0 0 2px;font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--apta)}
 .ihola .hint{margin:0}
-.ilist{display:grid;gap:6px;margin-bottom:6px}
-.itambo{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;min-height:60px;text-align:left;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:16px;padding:8px 12px 8px 10px;color:var(--ink);font:inherit;cursor:pointer}
+.ilist{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:6px}
+.ilist[hidden]{display:none}
+.itambo{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;min-height:68px;text-align:left;background:transparent;border:0;border-radius:0;padding:12px 14px;color:var(--ink);font:inherit;cursor:pointer}
+.itambo+.itambo{border-top:1px solid var(--line)}
 .itambo[hidden]{display:none}
 .itambo:active{background:var(--bg)}
-.ilogo{width:38px;height:38px;border-radius:10px;background:var(--navy);color:var(--gold);display:grid;place-items:center;font-size:17px;font-weight:800;overflow:hidden}
+.ilogo{width:42px;height:42px;border-radius:12px;background:var(--navy);color:var(--gold);display:grid;place-items:center;font-size:18px;font-weight:800;overflow:hidden}
 .ilogo.has{background:#fff;border:1px solid var(--line)}
 .ilogo img{max-width:100%;max-height:100%;object-fit:contain}
 .itx{min-width:0;display:flex;flex-direction:column;gap:2px}
-.itx b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.irt .when{font-size:13px}
-.irt{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
-.irt small{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.itx span{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.itx b{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.005em}
+.itx span{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.irt{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.iwhen{font-size:12.5px;font-weight:700;white-space:nowrap;padding:3px 9px;border-radius:999px;background:var(--bg);color:var(--muted)}
+.iwhen.ok{color:var(--prenada);background:color-mix(in srgb,var(--prenada) 12%,transparent)}
+.iwhen.late{color:var(--vacia);background:color-mix(in srgb,var(--vacia) 12%,transparent)}
+.irt small{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.isearch{position:sticky;top:0;z-index:5;background:var(--bg);padding:2px 0 10px}
+.isearch svg{position:absolute;left:14px;top:50%;transform:translateY(-62%);color:var(--muted);pointer-events:none}
+#qTambo{width:100%;min-height:48px;font:inherit;font-size:16px;padding:10px 14px 10px 42px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);-webkit-appearance:none;appearance:none}
+#qTambo::placeholder{color:var(--muted)}
+#qTambo:focus{outline:none;border-color:var(--navy)}
+@media (prefers-color-scheme:dark){#qTambo:focus{border-color:var(--gold)}}
+.inada{margin:6px 2px 12px}
 .ihint{font-size:12.5px;margin:4px 2px 16px}
 .iacc{display:grid;gap:8px}
 
@@ -705,9 +716,9 @@ details.lac summary .l{flex:1}
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="paradox.js?v=p95"></script>
 <script src="syscaw.js?v=p172"></script>
-<script src="fosapp.js?v=p192"></script>
+<script src="fosapp.js?v=p193"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p192"></script>
+<script src="app.js?v=p193"></script>
 </body>
 </html>

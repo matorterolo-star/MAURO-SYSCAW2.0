@@ -765,12 +765,12 @@
           '<span class="ilogo' + (t.logo ? ' has' : '') + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : esc(ini)) + '</span>' +
           '<span class="itx"><b>' + esc(t.nombre || 'Sin nombre') + '</b>' +
           '<span>' + (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + A.fmt(t.fecha) : '') + '</span></span>' +
-          '<span class="irt"><span class="when' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
+          '<span class="irt"><span class="iwhen' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
       }).join('');
       return '<section class="ihola"><p class="ifecha">' + esc(fecha.charAt(0).toUpperCase() + fecha.slice(1)) + '</p>' +
         '<p class="hint">' + (L.length ? L.length + (L.length === 1 ? ' tambo' : ' tambos') + ' en este teléfono · ' + nf(tot) + ' animales' : 'Todavía no hay tambos cargados.') + '</p></section>' +
-        (L.length > 6 ? '<div class="searchbox"><input id="qTambo" type="search" placeholder="Buscar tambo" autocomplete="off" aria-label="Buscar tambo"></div>' : '') +
-        '<div class="ilist" id="ilist">' + filas + '</div>' +
+        (L.length > 6 ? '<div class="isearch"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><input id="qTambo" type="search" enterkeyhint="search" placeholder="Buscar tambo" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Buscar tambo"></div>' : '') +
+        '<div class="ilist" id="ilist">' + filas + '</div><p class="hint inada" id="inada" hidden>Ningún tambo con ese nombre.</p>' +
         '<p class="hint ihint">La fecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
         '<div class="iacc"><button class="btn primary big" data-a="tnuevo">Agregar tambo</button>' +
         (L.length > 1 ? '<button class="btn" data-a="poblacion">Población de tambos</button>' : '') +
@@ -4544,7 +4544,7 @@
       if (e.target.dataset && e.target.dataset.vn) { var w = parseInt(e.target.value, 10); state.vtaDraft[e.target.dataset.vn] = w > 0 ? w : null; vtaCuenta(); return; }
       if (e.target.dataset && e.target.dataset.xn) { var v = parseInt(e.target.value, 10); state.xf[e.target.dataset.xn] = v > 0 ? v : null; xActualizarCuenta(); return; }
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
-      if (e.target.id === 'qTambo') { var k = normNom(e.target.value); document.querySelectorAll('#ilist .itambo').forEach(function (b) { b.hidden = !!k && b.dataset.nom.indexOf(k) < 0; }); }
+      if (e.target.id === 'qTambo') { var k = normNom(e.target.value), vis = 0; document.querySelectorAll('#ilist .itambo').forEach(function (b) { b.hidden = !!k && b.dataset.nom.indexOf(k) < 0; if (!b.hidden) vis++; }); var nd = $('#inada'); if (nd) nd.hidden = vis > 0; var il = $('#ilist'); if (il) il.hidden = !vis; }
     });
     document.addEventListener('keydown', function (e) {
       if (e.target.id === 'q' && e.key === 'Enter') {
