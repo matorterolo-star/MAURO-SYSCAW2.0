@@ -2068,19 +2068,20 @@
           '.pzl{fill:none;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.pzl.pz1{stroke:var(--pz1);stroke-width:3}.pzl.pz0{stroke:var(--pz0);opacity:.75}.pzl.pzm{stroke:var(--pz1);stroke-dasharray:5 4;stroke-width:2}' +
           '.mleg i.pz1{background:var(--pz1)}.mleg i.pz0{background:var(--pz0);opacity:.75}.mleg i.pzm{background:transparent;border-top:2px dashed var(--pz1);border-radius:0;height:0;margin-top:5px}' +
           '.kpis small{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;font-weight:500;line-height:1.3}.pztbl{font-size:14px;table-layout:fixed;width:100%}.pztbl th:first-child{width:36%}.pztbl th,.pztbl td{text-align:right;padding:7px 2px}.pztbl th:first-child,.pztbl td:first-child{text-align:left;white-space:normal}.pztbl td small{display:block}' +
-          '.pztbl tr.pzest td{font-size:12.5px;color:var(--muted);font-weight:600}.pzab tr[data-rp]{cursor:pointer}';
+          '.pztbl tr.pzest td{font-size:12.5px;color:var(--muted);font-weight:600}.pzab tr[data-rp]{cursor:pointer}.pzfec{margin:12px 0 0;font-size:13px}';
         document.head.appendChild(st);
       }
       var D = prenDatos(), ini = D.ini, fin = D.fin, ref = D.ref, pev = D.pev;
       var p = function (n, d) { return d ? Math.round(n / d * 100) + '%' : '–'; }, dias = function (v) { return v == null ? '–' : Math.round(v) + ''; };
-      var cab = '<h2>Preñez de la ' + zafLbl(ini).toLowerCase() + '</h2>' +
-        '<p class="cap">Desde el inicio de servicios del ' + A.fmt(ini) + ' (el de Ciclos de 21 días).</p>' +
-        '<label class="secfecha">Último servicio que cuenta <input type="date" id="finZaf" value="' + fin + '" min="' + A.addDays(ini, 60) + '"></label>' +
-        (finMD() !== '02-15' ? '<p class="cap inidef">Por defecto el 15 de febrero · <button class="lnk" data-a="finzafdef">volver a esa fecha</button></p>' : '');
+      var cab = '<h2>Preñez de la ' + zafLbl(ini).toLowerCase() + '</h2>';
+      // las fechas de la zafra van al pie, chicas; el último servicio se cambia solo si se toca "cambiar"
+      var fechas = '<p class="cap pzfec">Servicios del ' + A.fmt(ini) + ' al ' + A.fmt(fin) + ' · <button class="lnk" data-a="pzfec">' + (state.pzFec ? 'listo' : 'cambiar') + '</button></p>' +
+        (state.pzFec ? '<label class="secfecha">Último servicio que cuenta <input type="date" id="finZaf" value="' + fin + '" min="' + A.addDays(ini, 60) + '"></label>' +
+          '<p class="cap inidef">El inicio se cambia en Ciclos de 21 días.' + (finMD() !== '02-15' ? ' Por defecto el último es el 15 de febrero · <button class="lnk" data-a="finzafdef">volver a esa fecha</button>' : '') + '</p>' : '');
       var cur = D.Zs[0];
-      if (!cur || ini > ref) return '<section class="card rep">' + cab + '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p></section>';
+      if (!cur || ini > ref) return '<section class="card rep">' + cab + fechas + '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p></section>';
       var prev = D.Zs[1] && !D.Zs[1].foto ? D.Zs[1] : null, R = cur.R;
-      if (!R.n0) return '<section class="card rep">' + cab + '<p class="hint">No hay vacas en esta zafra.</p></section>';
+      if (!R.n0) return '<section class="card rep">' + cab + '<p class="hint">No hay vacas en esta zafra.</p>' + fechas + '</section>';
       // hoy (o el fin de la zafra si ya terminó) y el mismo momento de la zafra anterior
       var dCur = fin < ref ? fin : ref, off = A.diffDays(dCur, ini), sem = Math.ceil(A.diffDays(fin, ini) / 7);
       var ptsC = [], ptsP = null;
@@ -2109,7 +2110,7 @@
         (state.pzAb ? '<table class="tbl rtbl pzab"><thead><tr><th>RP</th><th>Días en leche</th><th>Servicios</th><th>Estado</th></tr></thead><tbody>' + abiertas.map(function (a) {
           return '<tr data-rp="' + esc(a.rp) + '"><td><b>' + esc(a.rp) + '</b></td><td>' + A.diffDays(ref, a.pFecha) + '</td><td>' + (a.sN || 0) + (a.sFecha ? '<small>últ. ' + A.fmt(a.sFecha).slice(0, 5) + '</small>' : '') + '</td><td>' + esc(LABEL[a.estado] || a.result || '–') + '</td></tr>';
         }).join('') + '</tbody></table><p class="cap">Sin preñez confirmada y sin descarte programado. Tocá una para ver su ficha.</p>' : '') : '';
-      var card1 = '<section class="card rep">' + cab + kpis + leg + prenChart(ptsC, ptsP, sem || 1) + lista + '</section>';
+      var card1 = '<section class="card rep">' + cab + kpis + leg + prenChart(ptsC, ptsP, sem || 1) + lista + fechas + '</section>';
       // cierre de zafra: de la más vieja a la actual
       var Zc = D.Zs.slice().reverse();
       var fila = function (tit, f) { return '<tr><td>' + tit + '</td>' + Zc.map(function (z) { return '<td>' + f(z.R, z) + '</td>'; }).join('') + '</tr>'; };
@@ -4330,6 +4331,7 @@
       else if (a === 'repti') { state.repTI = !state.repTI; render(); }
       else if (a === 'ini21def') ini21Default();
       else if (a === 'pzab') { state.pzAb = !state.pzAb; render(); }
+      else if (a === 'pzfec') { state.pzFec = !state.pzFec; render(); }
       else if (a === 'finzafdef') { try { localStorage.removeItem('libreta:finzaf:' + TAMBOS.activo); if (TAMBOS.lista.length < 2) localStorage.removeItem('libreta:finzaf'); } catch (e) {} render(); }
       else if (a === 'enviaract') enviarActivacion();
       else if (a === 'lnkdatos') linkDatos();
