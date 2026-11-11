@@ -1300,10 +1300,15 @@
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
         var tit = f === 'ptvac' ? 'por preñar (más días de paridas primero)' : f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
-        html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
+        // por preñar: el orden es por días de parida, así que se muestran en cada fila
+        var refP = DB.fecha || today(), subP = function (a) { return a.pFecha ? '<b>' + A.diffDays(refP, a.pFecha) + ' días de parida</b> · ' + subDefault(a) : subDefault(a); };
+        html = '<h2 class="h">' + list.length + ' ' + (f === 'ptvac' ? (list.length === 1 ? 'vaca' : 'vacas') : nombreGrupo(list.length)) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return f === 'ptvac' ? rowHTML(a, { sub: subP(a) }) : rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       }
       box.innerHTML = html;
+      // el filtro elegido siempre a la vista (p. ej. "Por preñar" al venir del panel queda al final de la fila de filtros)
+      var fs = document.querySelector('.filters'), ch = fs && fs.querySelector('[aria-pressed="true"]');
+      if (ch) { var rf = fs.getBoundingClientRect(), rc = ch.getBoundingClientRect(); if (rc.left < rf.left || rc.right > rf.right) fs.scrollLeft += rc.left - rf.left - (rf.width - rc.width) / 2; }
     }
 
     /* ----- pestaña Tareas ----- */
