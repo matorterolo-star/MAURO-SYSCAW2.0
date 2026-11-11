@@ -155,9 +155,14 @@
     var mvBy = {};
     try { if (files[OPCIONALES.pases]) PX.readTable(files[OPCIONALES.pases], { fields: ['ID', 'Fecha', 'Tambo', 'Origen'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && f >= '2023-01-01' && r[2] != null) (mvBy[r[0]] = mvBy[r[0]] || []).push([f, r[2], r[3]]); }); } catch (e) { mvBy = {}; }
     Object.keys(mvBy).forEach(function (k) { mvBy[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
-    // última condición corporal de cada animal
-    var ecBy = {};
-    try { if (files[OPCIONALES.estcorp]) PX.readTable(files[OPCIONALES.estcorp], { fields: ['ID', 'Fecha', 'ECorp'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && r[2] > 0 && (!ecBy[r[0]] || f > ecBy[r[0]][0])) ecBy[r[0]] = [f, r[2]]; }); } catch (e) { ecBy = {}; }
+    // condición corporal: la última de cada animal y su historial de los últimos 3 años (como el resto del historial)
+    var ecBy = {}, ecH = {};
+    try { if (files[OPCIONALES.estcorp]) PX.readTable(files[OPCIONALES.estcorp], { fields: ['ID', 'Fecha', 'ECorp'], array: true }).rows.forEach(function (r) {
+      var f = okDate(r[1]); if (!f || !(r[2] > 0)) return;
+      if (!ecBy[r[0]] || f > ecBy[r[0]][0]) ecBy[r[0]] = [f, r[2]];
+      if (f >= desdeHist) (ecH[r[0]] = ecH[r[0]] || []).push([f, Math.round(r[2] * 100) / 100]);
+    }); } catch (e) { ecBy = {}; ecH = {}; }
+    Object.keys(ecH).forEach(function (k) { ecH[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
     T.tactos.forEach(function (r) { var g = G[r[0]], f = okDate(r[1]); if (g && f) { g.ta.push([f, r[2]]); if (f > maxF) maxF = f; } });
     T.lact.forEach(function (r) {
       var g = G[r[0]]; if (!g || !(r[1] > 0)) return;
@@ -244,7 +249,7 @@
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
       var m = byId[a[4]];
-      hist[rp] = { mv: mvBy[id] || null, ec: ecBy[id] || null, pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
+      hist[rp] = { mv: mvBy[id] || null, ec: ecBy[id] || null, ech: ecH[id] || null, pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: fn, ma: m ? String(m[1]) : null, pd: a[5] ? (toro[a[5]] || null) : null, vit: a[10] ? Math.round(a[10]) : null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
     var bajas = [];
@@ -261,7 +266,7 @@
         var lpB = paB.length ? paB[paB.length - 1] : null, desdeB = paB.length ? paB[0][0] : '0000';
         var desdeEv = function (e) { return e[0] >= desdeB; };
         var nros = paB.map(function (p) { return p[1]; });
-        hist[key] = { mv: mvBy[id] || null, pa: paB, ev: g.ev.filter(desdeEv), ta: g.ta.filter(desdeEv), la: g.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: g.ct.filter(desdeEv), ult: true, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
+        hist[key] = { mv: mvBy[id] || null, ech: ecH[id] || null, pa: paB, ev: g.ev.filter(desdeEv), ta: g.ta.filter(desdeEv), la: g.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: g.ct.filter(desdeEv), ult: true, fn: okDate(r[3]), ma: m ? String(m[1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null };
       } else hist[key] = { pa: [], ev: [], ta: [], la: [], ct: [], fn: okDate(r[3]), ma: byId[r[4]] ? String(byId[r[4]][1]) : null, pd: r[5] ? (toro[r[5]] || null) : null, vit: r[10] ? Math.round(r[10]) : null, corto: true };
     });
     bajas.sort(function (x, y) { return (y.bFecha || '') < (x.bFecha || '') ? -1 : 1; });

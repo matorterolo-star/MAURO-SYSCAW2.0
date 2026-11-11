@@ -310,6 +310,23 @@
     });
     return R;
   }
+  // resultado de cada servicio entre desde y hasta: true preñó (aunque después se perdiera), false falló, null sin resultado todavía
+  function servRes(h, esPren, esVac, desde, hasta) {
+    var out = [];
+    if (!h || !h.pa || !h.pa.length || !h.ev || !h.ta) return out;
+    lactConc(h, esPren, esVac).forEach(function (L) {
+      var T1 = L.pos[0] || null, sT1 = null;
+      if (T1) { var sa = L.sv.filter(function (e) { return e[0] <= T1; }); if (sa.length) sT1 = sa[sa.length - 1][0]; }
+      L.sv.forEach(function (e) {
+        var f = e[0]; if (f < desde || f > hasta) return;
+        if (f === L.conc || f === sT1) { out.push([f, true]); return; }
+        var falla = L.sv.some(function (o) { return o[0] > f; }) || (L.conc && L.conc > f) || !!L.np ||
+          L.ta.some(function (t) { return t[0] > f && diffDays(t[0], f) >= 25 && !esPren(t[1]); });
+        out.push([f, falla ? false : null]);
+      });
+    });
+    return out;
+  }
   // lactancias que cumplen 150 días en leche entre desde y hasta: ¿se preñaron antes de los 150 días?
   function pren150(animales, esPren, esVac, desde, hasta, pev, ref) {
     var R = [];
@@ -576,7 +593,7 @@
     var prom = { pe: ref0.pe.m, da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
     return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
-  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, zafraPren: zafraPren, pren150: pren150, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
+  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, zafraPren: zafraPren, pren150: pren150, servRes: servRes, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') initUI(api);
 
@@ -2081,7 +2098,32 @@
           '<b>Pérdida de preñez:</b> vacas con tacto positivo que después dieron vacía, se volvieron a servir (más de 20 días después) o abortaron, sobre las que tuvieron tacto positivo.' +
           (R.est ? ' Esta zafra tiene ' + R.est + ' preñeces sin servicio anotado (toro): su fecha de concepción es estimada.' : '') + '</p>' +
         '</section>';
-      return card1 + card2;
+      return card1 + card2 + ccServHTML(ref);
+    }
+    // concepción según la condición corporal al servicio (últimos 12 meses): la condición registrada hasta 45 días antes o 7 después del servicio
+    function ccServHTML(ref) {
+      var desde = A.addDays(ref, -365), G = [[0, 2.75, '< 2,75'], [2.75, 3, '2,75'], [3, 3.25, '3,00'], [3.25, 3.5, '3,25'], [3.5, 9, '≥ 3,50']];
+      var R = G.map(function () { return [0, 0]; }), sin = 0, hay = false;
+      var lista = DB.animales.map(function (a) { return DB.hist[a.rp]; }).concat((DB.bajas || []).map(function (b) { return DB.hist[b.key]; }));
+      lista.forEach(function (h) {
+        if (!h) return; var E = h.ech || []; if (E.length) hay = true;
+        A.servRes(h, esPren, esVacia, desde, ref).forEach(function (sr) {
+          if (sr[1] == null) return;
+          var c = null; E.forEach(function (x) { var d = A.diffDays(sr[0], x[0]); if (d <= 45 && d >= -7 && (!c || Math.abs(d) < Math.abs(A.diffDays(sr[0], c[0])))) c = x; });
+          if (!c) { sin++; return; }
+          for (var i = 0; i < G.length; i++) if (c[1] >= G[i][0] && c[1] < G[i][1]) { R[i][0]++; if (sr[1]) R[i][1]++; break; }
+        });
+      });
+      var tot = R.reduce(function (s, r) { return s + r[0]; }, 0);
+      if (!hay || tot < 10) return '';
+      var mx = Math.max.apply(null, R.map(function (r) { return r[0] ? r[1] / r[0] : 0; })) || 1;
+      var filas = G.map(function (g, i) {
+        var r = R[i], pc = r[0] ? Math.round(r[1] / r[0] * 100) : null;
+        return '<tr><td>' + g[2] + '</td><td>' + nf(r[0]) + '</td><td><b>' + (pc == null ? '–' : pc + '%') + '</b></td><td style="width:34%">' + (pc == null ? '' : '<span style="display:block;height:8px;border-radius:4px;background:var(--gold);width:' + Math.max(4, Math.round(r[1] / r[0] / mx * 100)) + '%"></span>') + '</td></tr>';
+      }).join('');
+      return '<section class="card"><h2>Condición corporal al servicio</h2>' +
+        '<table class="tbl rtbl"><thead><tr><th>Condición</th><th>Servicios</th><th>Concepción</th><th></th></tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<p class="cap">Servicios de los últimos 12 meses con resultado, según la condición corporal registrada hasta 45 días antes (o 7 después) del servicio.' + (sin ? ' ' + nf(sin) + ' servicios no tienen condición registrada cerca y no se cuentan.' : '') + '</p></section>';
     }
     /* ----- reproducción de vaquillonas por zafra (1/5 al 30/4): servicios antes del primer parto ----- */
     function vaqZafra(y, ref) {
@@ -2688,6 +2730,26 @@
       if (prev.length) out += '<details class="lac"><summary><span class="l"><b>Lactancia anterior</b></span><small>' + prev.length + ' controles</small></summary><div class="scroll"><table class="htbl">' + head + '<tbody>' + rows(prev) + '</tbody></table></div></details>';
       return out;
     }
+    // condición corporal de la vaca: evolución (con los partos marcados) y los últimos registros
+    function ccHTML(h) {
+      var L = h.ech && h.ech.length ? h.ech : (h.ec ? [h.ec] : []);
+      if (!L.length) return '';
+      var cc = function (v) { return Number(v).toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var del = function (f) { var p = null; h.pa.forEach(function (q) { if (q[0] <= f) p = q[0]; }); return p ? A.diffDays(f, p) : null; };
+      var g = '';
+      if (L.length > 1) {
+        var W = 300, H = 130, ml = 26, mr = 10, mt = 18, mb = 20, f0 = L[0][0], f1 = L[L.length - 1][0], span = Math.max(1, A.diffDays(f1, f0));
+        var lo = Math.min(2, Math.floor(Math.min.apply(null, L.map(function (x) { return x[1]; })) * 2) / 2), hi = Math.max(4, Math.ceil(Math.max.apply(null, L.map(function (x) { return x[1]; })) * 2) / 2);
+        var X = function (f) { return ml + A.diffDays(f, f0) / span * (W - ml - mr); }, Y = function (v) { return mt + (1 - (v - lo) / (hi - lo)) * (H - mt - mb); };
+        for (var v = lo; v <= hi + 1e-9; v += 0.5) g += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 4) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + (v % 1 ? v.toFixed(1).replace('.', ',') : v) + '</text>';
+        h.pa.forEach(function (p) { if (p[0] < f0 || p[0] > f1) return; var x = X(p[0]).toFixed(1); g += '<line x1="' + x + '" x2="' + x + '" y1="' + mt + '" y2="' + (H - mb) + '" stroke="var(--gold)" stroke-dasharray="3 3"/><text class="mlbl" x="' + x + '" y="' + (H - 6) + '" text-anchor="middle">parto</text>'; });
+        g += '<polyline fill="none" stroke="var(--navy)" stroke-width="2" stroke-linejoin="round" points="' + L.map(function (x) { return X(x[0]).toFixed(1) + ',' + Y(x[1]).toFixed(1); }).join(' ') + '"/>';
+        L.forEach(function (x, i) { g += '<circle cx="' + X(x[0]).toFixed(1) + '" cy="' + Y(x[1]).toFixed(1) + '" r="3" fill="var(--navy)"/>' + (L.length <= 10 || i === L.length - 1 ? '<text class="val" x="' + X(x[0]).toFixed(1) + '" y="' + (Y(x[1]) - 6).toFixed(1) + '" text-anchor="middle" style="font-size:9.5px">' + cc(x[1]) + '</text>' : ''); });
+        g = '<svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Condición corporal en el tiempo">' + g + '</svg>';
+      }
+      var filas = L.slice(-8).reverse().map(function (x) { var d = del(x[0]); return '<tr><td>' + A.fmt(x[0]) + '</td><td><b>' + cc(x[1]) + '</b></td><td>' + (d != null ? d : '–') + '</td></tr>'; }).join('');
+      return '<section class="card"><h2>Condición corporal</h2>' + g + '<div class="scroll"><table class="htbl"><thead><tr><th>Fecha</th><th>Condición</th><th>Días en leche</th></tr></thead><tbody>' + filas + '</tbody></table></div></section>';
+    }
     function lactHTML(h) {
       if (!h.la.length) return '';
       var d2 = function (v) { return v == null ? '–' : Number(v).toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
@@ -2715,7 +2777,7 @@
           ['Último tacto', lt ? A.fmt(lt[0]) + (codes[lt[1]] ? ' <small>' + esc(codes[lt[1]][0]) + '</small>' : '') : null]
         ])) +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
-        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') + ccHTML(h) : '') +
         (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en ' + SRC() + '.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
         '<p class="src">' + SRCbase().replace(/^./, function (c) { return c.toUpperCase(); }) + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
@@ -2756,7 +2818,7 @@
         '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (repetidora(a) ? SELLO_REP : '') + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
-        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') + ccHTML(h) : '') +
         idxFichaHTML(a) +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
         (h ? '<p class="src">Historial ' + (externo(DB.origen) ? 'de la ' : 'del ') + SRCbase() + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
@@ -2890,7 +2952,7 @@
       'Partos': 'Vacas y vaquillonas, mes a mes', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Zafras cerradas': 'Los indicadores de cada zafra',
-      'Índice del tambo': 'Las mejores y las peores vacas',
+      'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal al servicio': 'Concepción según la condición al servicio',
       'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
       'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
       'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas',
@@ -2900,7 +2962,7 @@
     var DESC_FICHA = {
       'Control lechero': 'Litros de los últimos controles', 'Lactancias': 'Litros y sólidos de cada lactancia',
       'Historial reproductivo': 'Partos, servicios y tactos', 'Índice del tambo': 'Su lugar entre las vacas del tambo',
-      'Identificación': 'Caravana, nacimiento y origen'
+      'Identificación': 'Caravana, nacimiento y origen', 'Condición corporal': 'Cómo fue cambiando, con los partos marcados'
     };
     function descDe(k, ficha) {
       if (ficha) return DESC_FICHA[k] || '';
