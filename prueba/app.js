@@ -849,7 +849,7 @@
     // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
     function cargarDelpro() {
       if (root.Delpro) return Promise.resolve(root.Delpro);
-      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=1'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=2'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
     }
     // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
     function esDelpro(buf) {
@@ -869,6 +869,8 @@
     function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
     // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
     function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm' || o === 'delpro'; }
+    // tambos de otros programas que se mandan al productor solo por link (no tienen activación ni respaldo de SysCaw)
+    function soloLink(o) { return o === 'fosapp' || o === 'dhm' || o === 'delpro'; }
     function cargarRespaldo(buf, f, tipo) {
       var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar', delpro = tipo === 'delpro';
       busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : delpro ? 'Leyendo base de DelPro…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
@@ -1057,19 +1059,19 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
-      $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || DB.origen === 'dhm' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP y DHM: solo por link
+      $('#btnLnk').hidden = !(esVet() && (soloLink(DB.origen) || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP, DHM y DelPro: solo por link
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       // productor con un tambo de FOSAPP que le llegó por link: no carga archivos ni códigos; los datos le llegan por el link
       var porLink = !esVet() && tamboAct() && tamboAct().lnkIn;
       $('#btnLnkBuscar').hidden = !porLink;
-      $('#btnCambiar').hidden = !esVet() && DB.origen === 'dhm'; // la base de DHM trae otros tambos: solo la carga el veterinario
+      $('#btnCambiar').hidden = !esVet() && (DB.origen === 'dhm' || DB.origen === 'delpro'); // DHM y DelPro: solo los carga el veterinario
       $('#btnCambiar').textContent = DB.origen === 'fosapp' && !esVet() ? 'Actualizar este tambo (cargar la base de FOSAPP)' : 'Actualizar este tambo (cargar respaldo o libreta)';
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
-      $('#btnCod').hidden = esVet() || (!!porLink && (DB.origen === 'fosapp' || DB.origen === 'dhm'));
+      $('#btnCod').hidden = esVet() || (!!porLink && soloLink(DB.origen));
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
@@ -3476,7 +3478,7 @@
       });
     }
     function linkDatos() {
-      var fos = DB.origen === 'fosapp' || DB.origen === 'dhm';
+      var fos = soloLink(DB.origen);
       if (externo(DB.origen) && !fos) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
       if (!fos && (!DB.idProd || !DB.idProd.length)) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
       if (!root.CompressionStream || !crypto.subtle) { toast('Este navegador no puede armar el link. Usá Chrome.'); return; }
@@ -3484,7 +3486,7 @@
       closeSheet();
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' || DB.origen === 'dhm' ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (soloLink(DB.origen) ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="lnklista">Links mandados · bloquear uno</button><button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }

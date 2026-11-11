@@ -215,7 +215,9 @@
     var cc = {}; animales.forEach(function (x) { cc[x.cat] = (cc[x.cat] || 0) + 1; });
     var tambo = null; if (T.AnimalFarm && T.AnimalFarm.r[0]) tambo = tx(T.AnimalFarm.c(T.AnimalFarm.r[0], 'Name')) || null;
     if (!tambo && info.backup) { var m = /^([^_]+)_/.exec(info.backup); if (m) tambo = m[1].replace(/([a-z])([A-Z])/g, '$1 $2'); }
-    return { idProd: [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'delpro', unidades: [], fechaBackup: fch(info.fecha_backup), fantasmas: fantasmas };
+    // número para identificar (y bloquear) los links de este tambo: DP + el nombre del tambo en DelPro
+    var nro = String(tambo || '').normalize('NFD').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
+    return { idProd: nro.length >= 3 ? ['DP' + nro] : [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'delpro', unidades: [], fechaBackup: fch(info.fecha_backup), fantasmas: fantasmas };
   }
 
   function fromFile(buf, nombre) {
