@@ -1471,6 +1471,7 @@
         return '<button class="fchip plain" data-v="' + v[0] + '" aria-pressed="' + (state.ventana === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
       return '<h1 class="ptitle">Tareas</h1>' + '<button class="btn share xtop" data-a="exptactar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Lista a Excel (tacto, secado, venta)</button>' +
+        '<button class="btn share xtop" data-a="expparches"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Listado de parches</button>' +
         (function () {
           var rowT = function (x) { return rowHTML(x.a, { right: '<span class="when late">hace ' + x.dias + ' días</span>', sub: 'Servicio ' + A.fmt(x.fecha) + (x.a.toro && !/^celo/i.test(x.a.toro) ? ' · ' + esc(x.a.toro) : '') }); };
           var nota = 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto posterior.';
@@ -3850,7 +3851,23 @@
 
     /* ----- exportar a Excel: lista de tacto con filtro previo ----- */
     // criterios: se toma cada uno que esté completo; un animal entra si cumple cualquiera de ellos
+    // listado de parches: servidas entre smin y smax días sin diagnóstico, paridas hace más de psv días sin servicio y vacías al tacto
+    function xMotivosParches(a, f, hoy) {
+      var m = [], cat = a.cat || 'vaca';
+      if (!((cat === 'vaca' && f.ord) || (cat === 'seca' && f.sec) || (cat === 'vaquillona' && f.vaq))) return m;
+      if (f.sinDesc && a.rech) return m;
+      if (a.estado === 'prenada') return m;
+      var serv = a.sFecha && !/^celo/i.test(a.toro || '');
+      if ((f.smin > 0 || f.smax > 0) && serv && (!a.tFecha || a.tFecha < a.sFecha)) {
+        var d = A.diffDays(hoy, a.sFecha);
+        if ((!(f.smin > 0) || d >= f.smin) && (!(f.smax > 0) || d <= f.smax)) m.push('Servida hace ' + d + ' días' + (a.sN ? ' (' + a.sN + '° servicio)' : ''));
+      }
+      if (f.psv > 0 && a.pFecha && (!a.sFecha || a.sFecha <= a.pFecha)) { var p = A.diffDays(hoy, a.pFecha); if (p >= f.psv) m.push('Parida hace ' + p + ' días sin servicio'); }
+      if (f.vac && (a.estado === 'vacia' || a.estado === 'ciclando' || a.estado === 'apta')) m.push('Vacía al tacto' + (a.tFecha ? ' del ' + A.fmt(a.tFecha).slice(0, 5) : '') + (a.result && !/^vac/i.test(a.result) ? ' (' + a.result + ')' : ''));
+      return m;
+    }
     function xMotivos(a, f, hoy, secar) {
+      if (state.xmode === 'parches') return xMotivosParches(a, f, hoy);
       var m = [], cat = a.cat || 'vaca';
       if (!((cat === 'vaca' && f.ord) || (cat === 'seca' && f.sec) || (cat === 'vaquillona' && f.vaq))) return m;
       // para venta: se toma aunque esté marcado "Excluir descartes" (la venta es justamente de descartes)
@@ -3865,7 +3882,7 @@
     }
     function xFiltradas() {
       var f = state.xf, hoy = today(), secar = {};
-      if (f.secar) listaSecado(fechaSecado()).forEach(function (x) { secar[x.a.rp] = x; });
+      if (f.secar && state.xmode !== 'parches') listaSecado(fechaSecado()).forEach(function (x) { secar[x.a.rp] = x; });
       var out = [];
       DB.animales.forEach(function (a) { var m = xMotivos(a, f, hoy, secar); if (m.length) out.push({ a: a, m: m }); });
       return out;
@@ -3874,6 +3891,18 @@
       var f = state.xf, n = xFiltradas().length;
       var chk = function (k, t) { return '<button class="fchip" data-xk="' + k + '" aria-pressed="' + !!f[k] + '">' + t + '</button>'; };
       var num = function (k, a, b) { return '<label class="xnum">' + a + ' <input type="number" inputmode="numeric" min="1" max="999" data-xn="' + k + '" value="' + (f[k] || '') + '" placeholder="–"> ' + b + '</label>'; };
+      var inp = function (k) { return '<input type="number" inputmode="numeric" min="1" max="999" data-xn="' + k + '" value="' + (f[k] || '') + '" placeholder="–">'; };
+      if (state.xmode === 'parches') {
+        $('#xopts').innerHTML = '<p class="xlbl">Categoría</p><div class="filters">' + chk('ord', 'Vacas en ordeñe') + chk('sec', 'Secas') + chk('vaq', 'Vaquillonas') + '</div>' +
+          '<div class="filters" style="margin-top:8px">' + chk('sinDesc', 'Excluir descartes') + '</div>' +
+          '<p class="xlbl">Incluir (lo que quede vacío no se toma)</p>' +
+          '<label class="xnum">Servidas entre ' + inp('smin') + ' y ' + inp('smax') + ' días</label>' +
+          num('psv', 'Paridas con más de', 'días sin servicio') +
+          '<div class="filters" style="margin-top:8px">' + chk('vac', 'Vacías al tacto') + '</div>' +
+          '<p class="cap">Servidas: sin tacto después del servicio. Nunca entran las preñadas.</p>' +
+          '<p class="xcount"><b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales') + '</p>';
+        $('#btnXok').disabled = !n; return;
+      }
       $('#xopts').innerHTML = '<p class="xlbl">Categoría</p><div class="filters">' + chk('ord', 'Vacas en ordeñe') + chk('sec', 'Secas') + chk('vaq', 'Vaquillonas') + '</div>' +
         '<div class="filters" style="margin-top:8px">' + chk('sinDesc', 'Excluir descartes') + '</div>' +
         '<p class="xlbl">Incluir (lo que quede vacío no se toma)</p>' +
@@ -3886,15 +3915,18 @@
       $('#btnXok').disabled = !n;
     }
     function xActualizarCuenta() { var n = xFiltradas().length; var c = $('#xopts .xcount'); if (c) c.innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'animal' : 'animales'); $('#btnXok').disabled = !n; }
-    function abrirExport() {
-      var g = null; try { g = JSON.parse(localStorage.getItem('libreta:xf')); } catch (e) {}
-      state.xf = g || { ord: true, sec: false, vaq: true, sinDesc: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false };
-      $('#sheetXTitle').textContent = 'Armar lista';
+    function abrirExport(modo) {
+      state.xmode = modo === 'parches' ? 'parches' : 'lista';
+      var g = null; try { g = JSON.parse(localStorage.getItem(state.xmode === 'parches' ? 'libreta:xfp' : 'libreta:xf')); } catch (e) {}
+      state.xf = g || (state.xmode === 'parches' ? { ord: true, sec: false, vaq: true, sinDesc: true, smin: 18, smax: 24, psv: 45, vac: true }
+        : { ord: true, sec: false, vaq: true, sinDesc: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false });
+      $('#sheetXTitle').textContent = state.xmode === 'parches' ? 'Listado de parches' : 'Armar lista';
       $('#xbtns').innerHTML = '<button class="btn primary big" id="btnXok" data-a="xok">Ver lista y exportar</button><button class="btn" data-a="xcancel">Cancelar</button>';
       xOpts(); $('#sheetX').hidden = false;
     }
     function exportarTactar() {
-      try { localStorage.setItem('libreta:xf', JSON.stringify(state.xf)); } catch (e) {}
+      var parches = state.xmode === 'parches', etq = parches ? 'Parches' : 'Lista';
+      try { localStorage.setItem(parches ? 'libreta:xfp' : 'libreta:xf', JSON.stringify(state.xf)); } catch (e) {}
       var L = xFiltradas().sort(function (x, y) { return numRp(x.a, y.a); }), ref = today();
       var fila = function (x) {
         var a = x.a, h = DB.hist ? DB.hist[a.rp] : null, ins = null, serv = a.sFecha && !/^celo/i.test(a.toro || '');
@@ -3904,11 +3936,19 @@
           a.tFecha ? A.fmt(a.tFecha) : '', a.result || '', a.rech ? (a.rechDet || a.rech) : '', typeof (a.pr || [])[0] === 'number' ? a.pr[0] : ''];
       };
       var head = ['Caravana', 'Nombre', 'Categoría', 'Rodeo', 'Motivo', 'Lactancia', 'Último parto', 'Días en leche', 'Último servicio', 'Días desde servicio', 'Nº servicio', 'Toro', 'Inseminador', 'Último tacto', 'Resultado', 'Descarte', 'Litros último control'];
-      var tit = 'Lista · ' + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref);
-      var ws = root.XLSX.utils.aoa_to_sheet([[tit], [], head].concat(L.map(fila)));
-      ws['!cols'] = head.map(function (h, i) { return { wch: i === 4 ? 34 : i === 1 ? 18 : Math.max(9, h.length + 2) }; });
-      var wb = root.XLSX.utils.book_new(); root.XLSX.utils.book_append_sheet(wb, ws, 'Lista');
-      var nombre = ('Lista ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
+      var tit = 'Lista · ' + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref), ws;
+      if (parches) {
+        // parches: solo caravana (de menor a mayor) y fecha del último servicio de la lactancia; encabezado en la fila 1
+        head = ['Caravana', 'Fecha último servicio'];
+        fila = function (x) { var a = x.a; return [/^\d+$/.test(a.rp) ? +a.rp : a.rp, a.sFecha && (!a.pFecha || a.sFecha > a.pFecha) ? A.fmt(a.sFecha) : '']; };
+        ws = root.XLSX.utils.aoa_to_sheet([head].concat(L.map(fila)));
+        ws['!cols'] = [{ wch: 12 }, { wch: 22 }];
+      } else {
+        ws = root.XLSX.utils.aoa_to_sheet([[tit], [], head].concat(L.map(fila)));
+        ws['!cols'] = head.map(function (h, i) { return { wch: i === 4 ? 34 : i === 1 ? 18 : Math.max(9, h.length + 2) }; });
+      }
+      var wb = root.XLSX.utils.book_new(); root.XLSX.utils.book_append_sheet(wb, ws, etq);
+      var nombre = (etq + ' ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx';
       var buf = root.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       var file = null; try { file = new File([buf], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); } catch (e) {}
       // CSV separado por comas (como lo lee Excel en el celular) para los teléfonos que no dejan compartir .xlsx
@@ -3917,7 +3957,7 @@
       state.xout = { wb: wb, file: file, csv: fcsv, nombre: nombre };
       // la lista queda a la vista y después se elige compartir o guardar
       var puedeComp = !!(navigator.share && (file || fcsv));
-      $('#sheetXTitle').textContent = 'Lista · ' + L.length + (L.length === 1 ? ' animal' : ' animales');
+      $('#sheetXTitle').textContent = (parches ? 'Parches' : 'Lista') + ' · ' + L.length + (L.length === 1 ? ' animal' : ' animales');
       $('#xopts').innerHTML = '<div class="xprev">' + L.map(function (x) { return '<div><b>' + esc(x.a.rp) + '</b><span>' + esc(x.m.join(' · ')) + '</span></div>'; }).join('') + '</div>' +
         '<p class="cap">Archivo: ' + esc(nombre) + '</p>';
       $('#xbtns').innerHTML = (puedeComp ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button><button class="btn" data-a="xsharecsv">Compartir como CSV (se abre con Excel)</button>' : '') +
@@ -4088,6 +4128,7 @@
       else if (a === 'actcod') { var ic = $('#actCod'); activarCodigo(ic ? ic.value : ''); }
       else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
+      else if (a === 'expparches') abrirExport('parches');
       else if (a === 'xok') exportarTactar();
       else if (a === 'xshare') xCompartir();
       else if (a === 'vtacfg') vtaSheet();
