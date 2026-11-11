@@ -1940,8 +1940,9 @@
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     /* ----- Condición corporal del rodeo: distribución en tres momentos (secado, parto, 30 días) y evolución en la lactancia ----- */
-    // rangos (escala 1 a 5): [muy flaca hasta, flaca hasta, óptima hasta, gorda hasta]; por encima, muy gorda
-    var CC_RANGOS = { secado: [2.75, 3.0, 3.75, 4.0], parto: [2.5, 2.75, 3.5, 3.75], d30: [2.25, 2.5, 3.25, 3.5] };
+    // rango óptimo (escala 1 a 5) de multíparas (m) y primíparas (p); 0,25 por debajo o por encima es riesgo, más allá, mucho riesgo
+    var CC_OPT = { secado: { m: [3, 3.5], p: [3.25, 3.75] }, parto: { m: [3, 3.5], p: [3.25, 3.75] }, d30: { m: [2.5, 3], p: [2.75, 3.25] } };
+    function ccClase(v, r) { return v < r[0] - 0.25 - 1e-9 ? 0 : v < r[0] - 1e-9 ? 1 : v <= r[1] + 1e-9 ? 2 : v <= r[1] + 0.25 + 1e-9 ? 3 : 4; }
     function ccRodeoHTML() {
       var ref = DB.fecha || today(), desde = A.addDays(ref, -365);
       var ev = { secado: [], parto: [], d30: [] }, bins = [];
@@ -1952,10 +1953,12 @@
         if (!h || !h.ech || !h.ech.length || !h.pa) return; hay = true; var E = h.ech;
         h.pa.forEach(function (p, i) {
           var np = h.pa[i + 1], sec = p[5];
-          if (p[0] >= desde && p[0] <= ref) { var c = cerca(E, p[0], -21, 10, p[0]); if (c) ev.parto.push(c[1]); }
+          // primípara: la lactancia que empieza en este parto es la primera (también al secarla)
+          var pri = p[1] === 1;
+          if (p[0] >= desde && p[0] <= ref) { var c = cerca(E, p[0], -21, 10, p[0]); if (c) ev.parto.push([c[1], pri]); }
           var f30 = A.addDays(p[0], 30);
-          if (f30 >= desde && f30 <= ref) { var c3 = cerca(E, p[0], 20, 45, f30); if (c3) ev.d30.push(c3[1]); }
-          if (sec && sec >= desde && sec <= ref) { var cs = cerca(E, sec, -21, 21, sec); if (cs) ev.secado.push(cs[1]); }
+          if (f30 >= desde && f30 <= ref) { var c3 = cerca(E, p[0], 20, 45, f30); if (c3) ev.d30.push([c3[1], pri]); }
+          if (sec && sec >= desde && sec <= ref) { var cs = cerca(E, sec, -21, 21, sec); if (cs) ev.secado.push([cs[1], pri]); }
           // evolución: cada registro de los últimos 12 meses ubicado en su lactancia (por días en leche), o en el período seco
           E.forEach(function (x) {
             if (x[0] < desde || x[0] < p[0] || (np && x[0] >= np[0])) return;
@@ -1969,10 +1972,12 @@
       var COL = ['var(--vacia)', '#D9A21B', 'var(--prenada)', '#D9A21B', 'var(--vacia)'];
       var barra = function (tit, L, R) {
         if (L.length < 5) return '<div class="ccrow"><div class="cct"><b>' + tit + '</b><small>sin datos suficientes</small></div></div>';
-        var n = [0, 0, 0, 0, 0]; L.forEach(function (v) { var k = v <= R[0] ? 0 : v <= R[1] ? 1 : v <= R[2] ? 2 : v <= R[3] ? 3 : 4; n[k]++; });
+        var n = [0, 0, 0, 0, 0]; L.forEach(function (x) { n[ccClase(x[0], x[1] ? R.p : R.m)]++; });
         var seg = n.map(function (c, k) { var pc = c / L.length * 100; return c ? '<span style="width:' + pc.toFixed(1) + '%;background:' + COL[k] + '">' + (pc >= 9 ? Math.round(pc) + '%' : '') + '</span>' : ''; }).join('');
         var ok = Math.round(n[2] / L.length * 100);
-        return '<div class="ccrow"><div class="cct"><b>' + tit + '</b><small>' + L.length + ' vacas · óptima ' + cc(R[1] + 0.25) + ' a ' + cc(R[2]) + '</small><em>' + ok + '% óptima</em></div><div class="ccbar">' + seg + '</div></div>';
+        var np_ = L.filter(function (x) { return x[1]; }).length;
+        return '<div class="ccrow"><div class="cct"><b>' + tit + '</b><small>' + L.length + ' vacas (' + np_ + (np_ === 1 ? ' primípara' : ' primíparas') + ')</small><em>' + ok + '% óptima</em></div><div class="ccbar">' + seg + '</div>' +
+          '<p class="ccopt">Óptima: multíparas ' + cc(R.m[0]) + ' a ' + cc(R.m[1]) + ' · primíparas ' + cc(R.p[0]) + ' a ' + cc(R.p[1]) + '</p></div>';
       };
       // evolución en la lactancia: promedio y mitad central (25 a 75%) por tramo de 30 días
       var q = function (l, f) { var a = l.slice().sort(function (x, y) { return x - y; }), i = (a.length - 1) * f, lo = Math.floor(i); return a[lo] + (a[Math.ceil(i)] - a[lo]) * (i - lo); };
@@ -1992,11 +1997,11 @@
         linea = '<h3 class="cch3">A lo largo de la lactancia</h3><svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Condición corporal según los días en leche">' + g + '</svg>' +
           '<p class="cap">Línea: valor del medio de cada tramo de 30 días en leche; franja: la mitad de las vacas (del 25 al 75%). Registros de los últimos 12 meses.</p>';
       }
-      if (!document.getElementById('ccCss')) { var st = document.createElement('style'); st.id = 'ccCss'; st.textContent = '.ccrow{margin:12px 0 14px}.cct{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}.cct b{font-size:15px}.cct small{font-size:12.5px;color:var(--muted);flex:1}.cct em{font-style:normal;font-weight:700;font-size:13px;color:var(--prenada)}.ccbar{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--bg)}.ccbar span{display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;min-width:0}.ccleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);margin:4px 0 2px}.ccleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.cch3{font-size:15px;margin:18px 0 4px}'; document.head.appendChild(st); }
+      if (!document.getElementById('ccCss')) { var st = document.createElement('style'); st.id = 'ccCss'; st.textContent = '.ccrow{margin:12px 0 14px}.cct{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}.cct b{font-size:15px}.cct small{font-size:12.5px;color:var(--muted);flex:1}.cct em{font-style:normal;font-weight:700;font-size:13px;color:var(--prenada)}.ccbar{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--bg)}.ccbar span{display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;min-width:0}.ccleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);margin:4px 0 2px}.ccleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.cch3{font-size:15px;margin:18px 0 4px}.ccopt{margin:5px 0 0;font-size:12px;color:var(--muted)}'; document.head.appendChild(st); }
       return '<section class="card"><h2>Condición corporal</h2>' +
         '<div class="ccleg"><span><i style="background:var(--vacia)"></i>Muy flaca / muy gorda</span><span><i style="background:#D9A21B"></i>Flaca / gorda</span><span><i style="background:var(--prenada)"></i>Óptima</span></div>' +
-        barra('Al secado', ev.secado, CC_RANGOS.secado) + barra('Al parto', ev.parto, CC_RANGOS.parto) + barra('A los 30 días', ev.d30, CC_RANGOS.d30) +
-        '<p class="cap">En cada barra, de izquierda a derecha: de más flaca a más gorda. Eventos de los últimos 12 meses con condición registrada cerca (secado ±21 días, parto de 21 días antes a 10 después, entre 20 y 45 días en leche).</p>' + linea + '</section>';
+        barra('Al secado', ev.secado, CC_OPT.secado) + barra('Al parto', ev.parto, CC_OPT.parto) + barra('A los 30 días', ev.d30, CC_OPT.d30) +
+        '<p class="cap">En cada barra, de izquierda a derecha: de más flaca a más gorda. Cada vaca se compara con el óptimo de su categoría; 0,25 fuera del óptimo es riesgo (amarillo) y más allá, mucho riesgo (rojo). Eventos de los últimos 12 meses con condición registrada cerca (secado ±21 días, parto de 21 días antes a 10 después, entre 20 y 45 días en leche).</p>' + linea + '</section>';
     }
     /* ----- Preñez: preñez acumulada de la zafra, preñadas a 150 días en leche y cierre de zafra ----- */
     // preñez de la zafra y zafras cerradas: solo en el modo veterinario
