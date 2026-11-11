@@ -14,7 +14,15 @@
   var cmp = function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; };
   var CODES = { 1: ['Preñada', 'Preñada', '2'], 2: ['Vacía', 'Vacía', '1'] };
   // motivos de baja y de descarte de DelPro (vienen en inglés)
-  var MOTIVO = { 'Death': 'Muerte', 'Mastitis': 'Mastitis', 'Milk Fever': 'Hipocalcemia', 'Other Disease': 'Otra enfermedad', 'General Injury': 'Lesión', 'Hoof/Limb Problems': 'Patas y pezuñas', 'Fertility Problems': 'Problemas reproductivos', 'Livestock - Breeding': 'Venta para cría', 'Old Age': 'Edad', 'Livestock - Fattening': 'Venta para engorde', 'Livestock - Slaughter': 'Faena', 'Low Yield Performance': 'Baja producción', 'Milking Problems': 'Problemas de ordeñe', 'Mentality': 'Temperamento', 'Teat Injury': 'Lesión de pezón', 'Aborted': 'Aborto', 'Bad Udder': 'Ubre mala' };
+  // (se compara sin mayúsculas: según la versión de DelPro viene 'Bad Udder' o 'Bad udder'; los motivos propios del tambo, en castellano, pasan tal cual)
+  var MOTIVO = { 'Death': 'Muerte', 'Mastitis': 'Mastitis', 'Milk Fever': 'Hipocalcemia', 'Other Disease': 'Otra enfermedad', 'General Injury': 'Lesión', 'Hoof/Limb Problems': 'Patas y pezuñas', 'Fertility Problems': 'Problemas reproductivos', 'Livestock - Breeding': 'Venta para cría', 'Old Age': 'Edad', 'Livestock - Fattening': 'Venta para engorde', 'Livestock - Slaughter': 'Faena', 'Low Yield Performance': 'Baja producción', 'Milking Problems': 'Problemas de ordeñe', 'Mentality': 'Temperamento', 'Teat Injury': 'Lesión de pezón', 'Aborted': 'Aborto', 'Bad Udder': 'Ubre mala', 'Other': null, '(Other)': null, '(-)': null, 'None': null, 'Andet (other)': null, 'Milk fever': 'Hipocalcemia', 'Clinical mastitis': 'Mastitis', 'Fracture': 'Fractura', 'Downer cow': 'Vaca caída', 'Injury/Trauma': 'Lesión', 'Wounds and injuries': 'Lesión', 'Lameness from other causes': 'Patas y pezuñas', 'Hoof damage': 'Patas y pezuñas', 'Feet and legs': 'Patas y pezuñas', 'Leukemia': 'Leucosis', 'Metabolic disease': 'Enfermedad metabólica', 'Infectious disease': 'Enfermedad infecciosa', 'Retained placenta': 'Retención de placenta', 'Dystocia': 'Distocia', 'Uterus prolapse': 'Prolapso de útero', 'Various tumors': 'Tumores', 'Excdente de Recría': 'Excedente de recría', 'Excedente de Recría': 'Excedente de recría' };
+  var MOT = {}; Object.keys(MOTIVO).forEach(function (k) { MOT[k.toLowerCase()] = MOTIVO[k]; });
+  function motivo(m) { m = tx(m); if (!m) return null; var k = m.toLowerCase(); if (k in MOT) return MOT[k]; return /^[a-z]/.test(m) && /\b(problems?|disease|injury|udder)\b/i.test(m) ? null : m; }
+  // salida tipo 8 (ni venta ni muerte en DelPro): con motivo de muerte, golpe o patas, o comentario de sacrificio, es muerte en el campo;
+  // con otro motivo (consumo, leucosis, reproductivos, ubre...) es descarte; sin evento de salida, transferencia (p. ej. recría sacada de DelPro)
+  var MUERTE8 = /^(death|meteorismo|general injury|hoof\/limb problems|injury\/trauma|fracture|downer cow|wounds and injuries)$/i;
+  var SACRIF = /sacrific|muri[oó]|muert|desbolill|ca[ií]da|quebrad/i;
+  var VENDE = /frigor|vendid|venta|descarte|remate|feria/i, CONSUMO = /consumo/i;
   var TABLAS = ['_info.txt', 'BasicAnimal', 'AbstractAnimalEvent', 'XPObjectType', 'EventCalving', 'EventInsemination', 'EventPregCheck', 'EventExit', 'EventCullDecision', 'EventAbortion', 'Semen', 'User', 'PermissionPolicyUser', 'TextLookupItem', 'AbstractGroup', 'AnimalLactationSummary', 'HistoryAnimalDailyData', 'AnimalFarm', 'PedigreeInfo'];
 
   /* ---------- zip: se leen solo los archivos pedidos ---------- */
@@ -88,7 +96,7 @@
     var ped = {}; V('PedigreeInfo', function (g) { ped[g('OID')] = { ma: g('MotherId'), pa: g('FatherId') }; });
     // eventos: tabla general (fecha, animal, lactancia) + tabla de detalle de cada tipo, unidas por OID
     var E = {}, maxF = '0000';
-    V('AbstractAnimalEvent', function (g) { var f = fch(g('DateAndTime')); if (!f) return; E[g('OID')] = { f: f, a: g('BasicAnimal'), t: tipo[g('ObjectType')] || '', ln: +g('LactationNumber') || 0 }; });
+    V('AbstractAnimalEvent', function (g) { var f = fch(g('DateAndTime')); if (!f) return; E[g('OID')] = { f: f, a: g('BasicAnimal'), t: tipo[g('ObjectType')] || '', ln: +g('LactationNumber') || 0, c: g('Comment') || '' }; });
     var hembra = function (id) { var a = A[id]; return a && a.sex === 2 && a.obj !== 'Bull'; };
     var G = {}, g = function (id) { return G[id] || (G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [], dia: [] }); };
     var visto = {}, unico = function (k) { if (visto[k]) return false; visto[k] = 1; return true; };
@@ -120,8 +128,14 @@
       var x = g(id); if (x.pa.some(function (p) { return p[1] === n || Math.abs(diffDays(p[0], f)) <= 45; })) return;
       x.pa.push([f, n, '', '', null, null]);
     });
-    var cull = {}; V('EventCullDecision', function (r) { var e = E[r('OID')]; if (!e) return; var m = look[r('CullReason1')]; cull[e.a] = { f: e.f, m: m && MOTIVO[m] ? MOTIVO[m] : null }; });
-    var salida = {}; V('EventExit', function (r) { var e = E[r('OID')]; if (!e) return; var m = look[r('ExitReason')]; salida[e.a] = { f: e.f, t: +r('ExitType'), m: m && MOTIVO[m] ? MOTIVO[m] : null }; });
+    var cull = {}; V('EventCullDecision', function (r) { var e = E[r('OID')]; if (!e) return; cull[e.a] = { f: e.f, m: motivo(look[r('CullReason1')]) || motivo(look[r('CullReason2')]) }; });
+    var salida = {}; V('EventExit', function (r) { var e = E[r('OID')]; if (!e) return; var r1 = tx(look[r('ExitReason')]), t = +r('ExitType');
+      // el comentario manda cuando contradice al tipo (p. ej. descartes a frigorífico cargados como muerte)
+      if (VENDE.test(e.c) || CONSUMO.test(e.c) || /^consumo$/i.test(r1)) t = 6;
+      else if (t === 8) t = MUERTE8.test(r1) || SACRIF.test(e.c) ? 7 : 6;
+      var m = CONSUMO.test(e.c) || /^consumo$/i.test(r1) ? 'Consumo' : motivo(r1); if (m === 'Muerte' || !m) m = motivo(look[r('ExitReason2')]) || (m === 'Muerte' ? null : m);
+      if (t === 7 && /^Venta |^Faena$/.test(m || '')) m = null; // motivo de venta en una muerte: no informa la causa
+      salida[e.a] = { f: e.f, t: t, m: m }; });
 
     // producción diaria (medidores): por vaca y por semana (semanas que terminan en la fecha del respaldo)
     var dia = {}, maxD = '0000';
