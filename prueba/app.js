@@ -1999,7 +1999,8 @@
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
     /* ----- Preñez: preñez acumulada de la zafra, preñadas a 150 días en leche y cierre de zafra ----- */
-    function prenOK() { return DB.fuente === 'syscaw' && !!DB.hist && !esOperario(); }
+    // preñez de la zafra y zafras cerradas: solo en el modo veterinario
+    function prenOK() { return DB.fuente === 'syscaw' && !!DB.hist && !esOperario() && esVet(); }
     // último servicio que cuenta en la zafra: por defecto el 15 de febrero, el productor lo puede cambiar (se guarda día y mes)
     function finMD() { var v = getP('finzaf'); return /^\d{2}-\d{2}$/.test(v || '') ? v : '02-15'; }
     function finZaf(ini) { var y = +ini.slice(0, 4), md = finMD(); return (md > ini.slice(5) ? y : y + 1) + '-' + md; }
