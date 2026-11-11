@@ -374,9 +374,19 @@
       if (d && d <= fin && (!conc || conc > d) && (!x.salida || d <= x.salida)) excl = 'desc';
       else if (!conc && x.salida && diffDays(x.salida, L.p) < pev) excl = 'antes';
       // pérdida: el primer tacto positivo de una preñez de la zafra
-      var T1 = L.pos.filter(function (t) { return diffDays(t, ini) >= 25; })[0] || null;
-      if (T1) { var sa = L.sv.filter(function (e) { return e[0] <= T1; }); if (sa.length && sa[sa.length - 1][0] > fin) T1 = null; }
-      R.push({ rp: x.rp, p: L.p, conc: conc, est: conc ? L.est : false, s1: s1, ult: ult, pend: pend, salida: x.salida || null, excl: excl, conf: !!T1, perd: T1 ? L.perdida(T1) : false });
+      var T1 = L.pos.filter(function (t) { return diffDays(t, ini) >= 25; })[0] || null, sT1 = null;
+      if (T1) { var sa = L.sv.filter(function (e) { return e[0] <= T1; }); if (sa.length && sa[sa.length - 1][0] > fin) T1 = null; else if (sa.length) sT1 = sa[sa.length - 1][0]; }
+      // concepción de la zafra, por servicio: preña el servicio de la concepción (o el del tacto positivo, aunque después se pierda);
+      // falla si después hubo otro servicio, un tacto vacía (25 días o más) o una concepción posterior; si no, queda sin resultado
+      var sOk = 0, sRes = 0;
+      L.sv.forEach(function (e) {
+        var f = e[0]; if (f < ini || f > fin) return;
+        if (f === L.conc || f === sT1) { sOk++; sRes++; return; }
+        var falla = L.sv.some(function (o) { return o[0] > f; }) || (L.conc && L.conc > f) || !!L.np ||
+          L.ta.some(function (t) { return t[0] > f && diffDays(t[0], f) >= 25 && !esPren(t[1]); });
+        if (falla) sRes++;
+      });
+      R.push({ sOk: sOk, sRes: sRes, sTot: L.sv.filter(function (e) { return e[0] >= ini && e[0] <= fin; }).length, rp: x.rp, p: L.p, conc: conc, est: conc ? L.est : false, s1: s1, ult: ult, pend: pend, salida: x.salida || null, excl: excl, conf: !!T1, perd: T1 ? L.perdida(T1) : false });
     });
     return R;
   }
@@ -2012,7 +2022,8 @@
         salV: M.filter(function (r) { return !r.conc && r.salida; }).length, pend: M.filter(function (r) { return r.pend; }).length, est: P.filter(function (r) { return r.est; }).length,
         ipps: media(ipps.map(function (r) { return A.diffDays(r.s1, r.p); })), ippsT: media(ippsT.map(function (r) { return A.diffDays(r.s1, r.p); })), nIppsT: ippsT.length,
         ipc: media(P.map(function (r) { return A.diffDays(r.conc, r.p); })), conf: cf.length, perd: cf.filter(function (r) { return r.perd; }).length,
-        n150: Q1.length, ok150: Q1.filter(function (r) { return r.ok; }).length, pend150: Q1.filter(function (r) { return r.pend; }).length
+        n150: Q1.length, ok150: Q1.filter(function (r) { return r.ok; }).length, pend150: Q1.filter(function (r) { return r.pend; }).length,
+        sOk: Z.reduce(function (a, r) { return a + (r.sOk || 0); }, 0), sRes: Z.reduce(function (a, r) { return a + (r.sRes || 0); }, 0), sTot: Z.reduce(function (a, r) { return a + (r.sTot || 0); }, 0)
       };
     }
     // % preñadas (confirmadas) y máximo (sumando las servidas sin resultado) a una fecha, sobre las vacas de la zafra ya paridas a esa fecha
@@ -2121,6 +2132,7 @@
         fila('<b>Preñez total</b>', function (R) { return '<b>' + p(R.pren, R.n) + '</b><small>' + R.pren + ' de ' + R.n + '</small>'; }) +
         fila('Vacías', function (R) { return nf(R.vac) + (R.salV ? '<small>' + R.salV + ' se fueron</small>' : ''); }) +
         fila('Excluidas', function (R) { return p(R.desc + R.antes, R.n0) + '<small>' + (R.desc + R.antes) + '</small>'; }) +
+        fila('Concepción de la zafra', function (R) { return R.sRes == null ? '–' : p(R.sOk, R.sRes) + '<small>' + R.sOk + ' de ' + R.sRes + ' serv.</small>'; }) +
         fila('Preñadas a 150 días en leche', function (R) { return p(R.ok150, R.n150); }) +
         fila('Parto – 1er servicio (días)', function (R) { return dias(R.ipps) + '<small>en zafra ' + dias(R.ippsT) + '</small>'; }) +
         fila('Parto – concepción (días)', function (R) { return dias(R.ipc); }) +
@@ -2133,6 +2145,7 @@
           '<b>Preñadas a 150 días en leche:</b> vacas que cumplieron 150 días en leche en la zafra y se preñaron antes. ' +
           '<b>Parto – 1er servicio:</b> promedio de todas; las paridas antes del inicio esperan a que empiecen los servicios, por eso se muestra aparte el de las paridas dentro de la zafra. ' +
           '<b>Parto – concepción:</b> solo de las preñadas; leelo junto con las vacías. ' +
+          '<b>Concepción de la zafra:</b> servicios a vacas en la zafra que preñaron (por tacto positivo, aunque después se haya perdido) sobre los servicios con resultado; los que todavía no tienen tacto ni repitieron no cuentan. ' +
           '<b>Pérdida de preñez:</b> vacas con tacto positivo que después dieron vacía, se volvieron a servir (más de 20 días después) o abortaron, sobre las que tuvieron tacto positivo.' +
           (R.est ? ' Esta zafra tiene ' + R.est + ' preñeces sin servicio anotado (toro): su fecha de concepción es estimada.' : '') + '</p>' +
         '</section>';
