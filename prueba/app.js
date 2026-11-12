@@ -4454,8 +4454,10 @@
         '<button class="vf" data-voy="prox"><span>Próximos 30 días</span><span><b>' + R.secar.length + '</b> ' + (R.secar.length === 1 ? 'secado' : 'secados') + ' · <b>' + R.partos.length + '</b> ' + (R.partos.length === 1 ? 'parto' : 'partos') + '</span></button>' +
         '<button class="btn primary big vbtn" data-a="voyplanilla">Planilla de tacto para mañana</button></div>';
     }
-    function planillaElegir() {
-      $('#sheetXTitle').textContent = 'Planilla de tacto';
+    // refV: fecha a la que se calcula (Voy mañana la pide para mañana; desde Tareas, hoy)
+    function planillaElegir(refV) {
+      state.pltRef = refV || null;
+      $('#sheetXTitle').textContent = 'Planilla de tacto' + (refV ? ' para el ' + A.fmt(refV) : '');
       $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Vacas en ordeñe por caravana, en tres columnas para imprimir y anotar en el corral.</p>' +
         '<p class="cap"><b>Completa:</b> todas las vacas en ordeñe. <b>Para bastón:</b> ID de trazabilidad (858 0000 + los 8 números del ID electrónico), caravana y lo que dice la planilla completa, para cargar en el lector. <b>Simple:</b> sin preñadas, descartes ni paridas de menos de ' + PLT_PARIDA + ' días; de las preñadas solo van las que hay que secar (por la fecha de Para secar, el ' + A.fmt(fechaSecado()) + ', o con menos de ' + PLT_LTS + ' litros) y las que tienen celo o servicio después del tacto, que salen marcadas en rojo.</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="plt" data-m="simple">Planilla simple</button><button class="btn big" data-a="plt" data-m="completa">Planilla completa</button><button class="btn big" data-a="plt" data-m="baston">Planilla para bastón</button><button class="btn" data-a="xcancel">Cancelar</button>';
@@ -4495,8 +4497,8 @@
     }
     // ID de trazabilidad para el bastón: 858 0000 + los últimos 8 números del ID electrónico
     function idTraz(a) { var d = String(a.idElec || '').replace(/\D/g, ''); return d.length >= 8 ? '8580000' + d.slice(-8) : ''; }
-    function planillaBaston() {
-      var ref = today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca'; }).sort(numRp);
+    function planillaBaston(refV) {
+      var ref = refV || today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca'; }).sort(numRp);
       if (!L.length) { toast('No hay vacas en ordeñe en este tambo.'); return; }
       var desc = function (a) { var f = planillaFila(a, ref, false, {}); return (/^\d\d-\d\d-\d\d$/.test(f[0]) ? 'PARTO ' : '') + f[0] + (f[1] !== '' ? ' ' + String(f[1]).replace('.', ',') : ''); };
       var filas = L.map(function (a) { return [idTraz(a), /^\d+$/.test(a.rp) ? +a.rp : a.rp, desc(a)]; }), sinId = filas.filter(function (f) { return !f[0]; }).length;
@@ -4513,7 +4515,7 @@
       $('#sheetX').hidden = false;
     }
     function planillaTacto(modo, refV) {
-      if (modo === 'baston') { planillaBaston(); return; }
+      if (modo === 'baston') { planillaBaston(refV); return; }
       var simple = modo === 'simple', ref = refV || today(), secar = {};
       if (simple) listaSecado(fechaSecado()).forEach(function (x) { secar[x.a.rp] = x; });
       var F = {}, L = DB.animales.filter(function (a) { if (a.cat !== 'vaca') return false; var f = planillaFila(a, ref, simple, secar); if (!f) return false; F[a.rp] = f; return true; }).sort(numRp);
@@ -4741,7 +4743,7 @@
       else if (a === 'exptactar') abrirExport();
       else if (a === 'expparches') abrirExport('parches');
       else if (a === 'expplanilla') planillaElegir();
-      else if (a === 'plt') planillaTacto(b.dataset.m);
+      else if (a === 'plt') planillaTacto(b.dataset.m, state.pltRef);
       else if (a === 'xok') { busy(true, 'Armando el Excel…'); cargarXlsx().then(function () { busy(false); exportarTactar(); }, function (er) { busy(false); toast(er.message); }); }
       else if (a === 'xshare') xCompartir();
       else if (a === 'vtacfg') vtaSheet();
@@ -4761,7 +4763,7 @@
       else if (a === 'voy') { state.voy = true; state.voyLista = null; render(); window.scrollTo(0, 0); }
       else if (a === 'voycerrar') { if (state.voyLista) state.voyLista = null; else state.voy = false; render(); window.scrollTo(0, 0); }
       else if (a === 'voyleche') { state.voy = false; state.voyLista = null; setTab('leche'); }
-      else if (a === 'voyplanilla') planillaTacto('simple', A.addDays(today(), 1));
+      else if (a === 'voyplanilla') planillaElegir(A.addDays(today(), 1));
       else if (a === 'infcerrar') { state.informe = false; render(); window.scrollTo(0, 0); }
       else if (a === 'infpdf') pdfInforme();
       else if (a === 'tnuevo') { closeSheetT(); state.destino = 'nuevo'; $('#file').click(); }
