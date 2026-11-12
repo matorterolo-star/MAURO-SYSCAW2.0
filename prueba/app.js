@@ -1530,7 +1530,7 @@
         secTareas('partos', 'Próximos partos', chips + '<p class="secnote">Partos probables en los próximos ' + vtxt + '.</p>', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
         }, 'Ningún parto probable en los próximos ' + vtxt + '.')) +
-        grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías')) +
+        grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Todas las vacas por caravana, para anotar en el corral') : '')) +
         grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
         }, 'Ninguna vaca cumple el criterio de venta.') + insHTML());
@@ -4324,7 +4324,7 @@
     }
     function xCompartir() {
       var o = state.xout; if (!o) return;
-      var falla = function () { root.XLSX.writeFile(o.wb, o.nombre); toast('Este teléfono no deja compartir Excel: quedó guardado en Descargas. Podés mandarlo desde ahí o usar "Compartir como CSV".'); };
+      var falla = function () { if (o.blob) bajarBlob(o.blob, o.nombre); else root.XLSX.writeFile(o.wb, o.nombre); toast('Este teléfono no deja compartir Excel: quedó guardado en Descargas. Podés mandarlo desde ahí o usar "Compartir como CSV".'); };
       if (!o.file || !(navigator.canShare && navigator.canShare({ files: [o.file] }))) { falla(); return; }
       navigator.share({ files: [o.file], title: o.nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') falla(); });
     }
@@ -4333,7 +4333,97 @@
       if (navigator.canShare && navigator.canShare({ files: [o.csv] })) navigator.share({ files: [o.csv], title: o.csv.name }).catch(function (e) { if (!e || e.name !== 'AbortError') toast('No se pudo compartir. Usá "Guardar Excel en el teléfono".'); });
       else toast('Este teléfono no deja compartir archivos. Usá "Guardar Excel en el teléfono".');
     }
-    function xGuardar() { var o = state.xout; if (!o) return; root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
+    function bajarBlob(blob, nombre) { var u = URL.createObjectURL(blob), l = document.createElement('a'); l.href = u; l.download = nombre; document.body.appendChild(l); l.click(); setTimeout(function () { URL.revokeObjectURL(u); l.remove(); }, 4000); }
+    function xGuardar() { var o = state.xout; if (!o) return; if (o.blob) bajarBlob(o.blob, o.nombre); else root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
+    /* ----- planilla de tacto (modo veterinario): todas las vacas por caravana, en tres columnas para imprimir y anotar en el corral.
+       Preñada: fecha probable de parto · servida: PARCHE (menos de 35 días) o REVISAR (35 o más) con los días de servida ·
+       con tacto sin preñez y sin servicio después: el resultado con los días de parida · sin servicio ni tacto: PARIDA con los días de parida ·
+       descarte programado: DESCARTE. Se arma un .xlsx a mano (con formato: caravana en negrita, anchos, saltos de página). ----- */
+    var PLT_FILAS = 46;
+    function planillaFila(a, ref) {
+      var dl = a.pFecha ? A.diffDays(ref, a.pFecha) : '';
+      if (a.rech) return ['DESCARTE', ''];
+      if (a.estado === 'prenada') { var pp = A.derive(a, ref).partoProb || a.partoProb; return [pp ? pp.slice(8, 10) + '-' + pp.slice(5, 7) + '-' + pp.slice(2, 4) : 'Preñada', '']; }
+      if (/^a/i.test(a.r1 || '') && dl !== '' && dl <= 30) return ['ABORTO', dl];
+      if (a.estado === 'servida' && a.sFecha) { var ds = A.diffDays(ref, a.sFecha); return [ds >= A.DX_MIN ? 'REVISAR' : 'PARCHE', ds]; }
+      if (a.result && a.tFecha && (!a.pFecha || a.tFecha >= a.pFecha)) return [a.result, dl];
+      return ['PARIDA', dl];
+    }
+    function crc32(u) { var c, t = crc32.t; if (!t) { t = crc32.t = []; for (var n = 0; n < 256; n++) { c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } } c = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) c = t[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+    // zip sin comprimir (alcanza para un .xlsx chico)
+    function zipStore(files) {
+      var enc = new TextEncoder(), partes = [], cd = [], off = 0;
+      var le = function (n, b) { var a = []; for (var i = 0; i < b; i++) a.push((n >>> (8 * i)) & 255); return a; };
+      files.forEach(function (f) {
+        var nm = enc.encode(f[0]), d = enc.encode(f[1]), crc = crc32(d);
+        var h = [].concat([0x50, 0x4b, 3, 4], le(20, 2), le(0, 2), le(0, 2), le(0, 4), le(crc, 4), le(d.length, 4), le(d.length, 4), le(nm.length, 2), le(0, 2));
+        partes.push(new Uint8Array(h), nm, d);
+        cd.push(new Uint8Array([].concat([0x50, 0x4b, 1, 2], le(20, 2), le(20, 2), le(0, 2), le(0, 2), le(0, 4), le(crc, 4), le(d.length, 4), le(d.length, 4), le(nm.length, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 4), le(off, 4))), nm);
+        off += h.length + nm.length + d.length;
+      });
+      var cdl = 0; cd.forEach(function (x) { cdl += x.length; });
+      var fin = new Uint8Array([].concat([0x50, 0x4b, 5, 6], le(0, 2), le(0, 2), le(files.length, 2), le(files.length, 2), le(cdl, 4), le(off, 4), le(0, 2)));
+      return new Blob(partes.concat(cd, [fin]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
+    function planillaTacto() {
+      var ref = today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca'; }).sort(numRp);
+      if (!L.length) { toast('No hay vacas en este tambo.'); return; }
+      var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+      var col = function (i) { return String.fromCharCode(65 + i); };
+      var pags = Math.ceil(L.length / (PLT_FILAS * 3)), filas = [];
+      for (var pg = 0; pg < pags; pg++) for (var r = 0; r < PLT_FILAS; r++) {
+        var celdas = [], hay = false;
+        for (var c = 0; c < 3; c++) {
+          var a = L[pg * PLT_FILAS * 3 + c * PLT_FILAS + r]; if (!a) continue; hay = true;
+          var f = planillaFila(a, ref), fila = pg * PLT_FILAS + r + 1, b = c * 4;
+          celdas.push(/^\d+$/.test(a.rp) ? '<c r="' + col(b) + fila + '" s="1"><v>' + (+a.rp) + '</v></c>' : '<c r="' + col(b) + fila + '" s="1" t="inlineStr"><is><t>' + X(a.rp) + '</t></is></c>');
+          celdas.push('<c r="' + col(b + 1) + fila + '" s="2" t="inlineStr"><is><t>' + X(f[0]) + '</t></is></c>');
+          if (f[1] !== '') celdas.push('<c r="' + col(b + 2) + fila + '" s="3"><v>' + f[1] + '</v></c>');
+          celdas.push('<c r="' + col(b + 3) + fila + '" s="4"/>');
+        }
+        if (hay) filas.push('<row r="' + (pg * PLT_FILAS + r + 1) + '" ht="16" customHeight="1">' + celdas.join('') + '</row>');
+      }
+      // ancho de la caravana según el largo (4 cifras como SysCaw; 5 o más en DelPro)
+      var lmax = 0; L.forEach(function (a) { if (a.rp.length > lmax) lmax = a.rp.length; });
+      var ws = [Math.max(6.33, lmax * 1.45 + 0.6), 9.89, 4, 12], cols = '';
+      for (var k = 0; k < 12; k++) cols += '<col min="' + (k + 1) + '" max="' + (k + 1) + '" width="' + ws[k % 4] + '" customWidth="1"/>';
+      var cortes = ''; for (pg = 1; pg < pags; pg++) cortes += '<brk id="' + pg * PLT_FILAS + '" max="16383" man="1"/>';
+      var tit = 'Tacto · ' + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref);
+      var hoja = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><cols>' + cols + '</cols><sheetData>' + filas.join('') + '</sheetData>' +
+        '<pageMargins left="0.4" right="0.3" top="0.6" bottom="0.4" header="0.25" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>' +
+        '<headerFooter><oddHeader>' + X('&C&"-,Bold"' + tit) + '</oddHeader><oddFooter>' + X('&CPágina &P de &N') + '</oddFooter></headerFooter>' +
+        (cortes ? '<rowBreaks count="' + (pags - 1) + '" manualBreakCount="' + (pags - 1) + '">' + cortes + '</rowBreaks>' : '') + '</worksheet>';
+      var estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+        '<fonts count="2"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="13"/><name val="Calibri"/></font></fonts>' +
+        '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+        '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFB0B0B0"/></bottom><diagonal/></border></borders>' +
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+        '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+        '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment horizontal="center" vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/></cellXfs>' +
+        '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      var blob = zipStore([
+        ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+        ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+        ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Tacto" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+        ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+        ['xl/styles.xml', estilos],
+        ['xl/worksheets/sheet1.xml', hoja]
+      ]);
+      var nombre = ('Tacto ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx', file = null;
+      try { file = new File([blob], nombre, { type: blob.type }); } catch (e) {}
+      state.xout = { blob: blob, file: file, csv: null, nombre: nombre };
+      var cu = {}; L.forEach(function (a) { var f = planillaFila(a, ref)[0]; var k = /^\d\d-/.test(f) ? 'Preñadas' : f === 'PARCHE' ? 'Parche' : f === 'REVISAR' ? 'Revisar' : f === 'PARIDA' ? 'Paridas' : f === 'DESCARTE' ? 'Descarte' : 'Con tacto sin preñez'; cu[k] = (cu[k] || 0) + 1; });
+      $('#sheetXTitle').textContent = 'Planilla de tacto · ' + L.length + ' vacas';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Todas las vacas en ordeñe y secas por caravana, en tres columnas para imprimir (' + pags + (pags === 1 ? ' hoja' : ' hojas') + ').</p><details class="nota"><summary>Qué dice cada vaca</summary><p class="cap">Preñada: fecha probable de parto · PARCHE: servida hace menos de ' + A.DX_MIN + ' días · REVISAR: servida hace ' + A.DX_MIN + ' días o más · PARIDA: sin servicio ni tacto, con los días de parida · con tacto sin preñez: el resultado y los días de parida · DESCARTE. Al lado de cada vaca queda una columna en blanco para anotar.</p></details>' +
+        '<p class="cap">' + ['Preñadas', 'Revisar', 'Parche', 'Paridas', 'Con tacto sin preñez', 'Descarte'].filter(function (k) { return cu[k]; }).map(function (k) { return '<b>' + cu[k] + '</b> ' + k.toLowerCase(); }).join(' · ') + '</p>' +
+        '<div class="xprev">' + L.map(function (a) { var f = planillaFila(a, ref); return '<div><b>' + esc(a.rp) + '</b><span>' + esc(f[0] + (f[1] !== '' ? ' ' + f[1] : '')) + '</span></div>'; }).join('') + '</div><p class="cap">Archivo: ' + esc(nombre) + '</p>';
+      var puede = !!(navigator.share && file);
+      $('#xbtns').innerHTML = (puede ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button>' : '') + '<button class="btn' + (puede ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
+    }
 
     /* ----- render ----- */
     var NAVS = [
@@ -4491,6 +4581,7 @@
       else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
       else if (a === 'expparches') abrirExport('parches');
+      else if (a === 'expplanilla') planillaTacto();
       else if (a === 'xok') { busy(true, 'Armando el Excel…'); cargarXlsx().then(function () { busy(false); exportarTactar(); }, function (er) { busy(false); toast(er.message); }); }
       else if (a === 'xshare') xCompartir();
       else if (a === 'vtacfg') vtaSheet();
