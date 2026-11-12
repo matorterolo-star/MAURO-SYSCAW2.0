@@ -579,6 +579,11 @@ details.lac summary .l{flex:1}
 .card.plg:not(.open) .plgh .chev{transform:rotate(-90deg)}
 .glist>.card.plg.open{padding-bottom:16px}
 .glist>.card.plg.open .plgh h2{font-size:18px}
+/* sección abierta: la lista se separa arriba y abajo y la sección lleva una barra dorada, así no se confunde con los títulos cerrados */
+.glist>.card.plg.open,.glist>.sec.open{box-shadow:inset 4px 0 0 var(--gold)}
+.glist>.card.plg.open:not(:first-child),.glist>.sec.open:not(:first-child){border-top:10px solid var(--bg)!important}
+.glist>.card.plg.open+.card,.glist>.card.plg.open+.sec,.glist>.card.plg.open+.lrow,.glist>.sec.open+.sec,.glist>.sec.open+.lrow,.glist>.sec.open+.card{border-top:10px solid var(--bg)!important}
+.glist>.card.plg.open .plgh,.glist>.sec.open .sechead{border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:12px}
 /* Tareas: secciones dentro de la lista */
 .glist>.sec{margin:0}
 .glist .sechead{border:0;border-radius:0;margin:0;padding:12px 14px 12px 16px;min-height:62px;background:transparent}
@@ -716,9 +721,9 @@ details.lac summary .l{flex:1}
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="paradox.js?v=p95"></script>
 <script src="syscaw.js?v=p172"></script>
-<script src="fosapp.js?v=p200"></script>
+<script src="fosapp.js?v=p201"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p200"></script>
+<script src="app.js?v=p201"></script>
 </body>
 </html>
