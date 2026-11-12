@@ -2879,7 +2879,11 @@
       }
       var datos = kv([
         ['Fecha de último parto', a.pFecha ? A.fmt(a.pFecha) : null],
-        ['Días en lactancia', dLac != null ? nf(dLac) : null],
+        // seca: cuánto duró la lactancia (del parto al secado), no los días desde el parto
+        (function () {
+          var lpH = h && h.pa && h.pa.length ? h.pa[h.pa.length - 1] : null, real = a.cat === 'seca' && lpH && lpH[5] && a.pFecha && lpH[5] > a.pFecha ? lpH[5] : null;
+          return real ? ['Días de lactancia', nf(A.diffDays(real, a.pFecha)) + ' <small>hasta el secado</small>'] : ['Días en lactancia', dLac != null ? nf(dLac) : null];
+        })(),
         ['Fecha del último servicio', a.sFecha ? A.fmt(a.sFecha) : null],
         ['Días del último servicio', a.sFecha ? String(A.diffDays(t, a.sFecha)) : null],
         ['Número de servicio', a.sN != null ? String(a.sN) : null],
@@ -2887,7 +2891,12 @@
         ['Todos los servicios', torosLac],
         ['Último tacto y resultado', tacto],
         ['Parto probable', a.estado === 'prenada' && d.partoProb ? A.fmt(d.partoProb) + (d.partoEstimado ? ' <small>estimado</small>' : '') : null],
-        ['Secado', a.estado === 'prenada' && d.secado && (a.cat === 'vaca' || a.cat === 'seca' || !a.cat) ? A.fmt(d.secado) : null]
+        // seca: la fecha real del secado (del programa); en ordeñe y preñada: el secado que se estima según el parto probable
+        (function () {
+          var lpH = h && h.pa && h.pa.length ? h.pa[h.pa.length - 1] : null, real = lpH && lpH[5] && (!a.pFecha || lpH[5] > a.pFecha) ? lpH[5] : null;
+          if (a.cat === 'seca') return ['Secada', real ? A.fmt(real) + ' <small>hace ' + A.diffDays(today(), real) + ' días</small>' : null];
+          return ['Secado', a.estado === 'prenada' && d.secado && (a.cat === 'vaca' || !a.cat) ? A.fmt(d.secado) + ' <small>estimado</small>' : null];
+        })()
       ]);
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
