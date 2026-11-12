@@ -1136,6 +1136,8 @@
       volverALista();
     }
     window.addEventListener('hashchange', function () {
+      // un link de libreta abierto con la app ya abierta en el navegador (iPhone/Safari solo cambia el #, no recarga la página)
+      if (/#libreta=/.test(location.hash || '')) { state.error = null; leerLibreta(); return; }
       var tenia = !!state.rp, r = rpDeHash();
       if (r === state.rp) return;
       state.rp = r;
