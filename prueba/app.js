@@ -2885,8 +2885,8 @@
       ]);
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
-        // debajo de la caravana: en qué está (ordeñe, seca, vaquillona, ternera) y el lote del programa
-        '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '<div class="fhlote"><b>' + ({ vaca: 'En ordeñe', seca: 'Seca', vaquillona: 'Vaquillona', ternera: 'Ternera' }[a.cat] || '') + '</b>' + (a.rod ? '<span>' + esc(a.rod) + '</span>' : '') + '</div></div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
+        // debajo de la caravana, una sola palabra: ordeñe, seca, vaquillona o ternera
+        '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '<div class="fhlote" style="text-align:center;margin-top:6px;max-width:118px;font-size:15px;font-weight:700;line-height:1.2">' + ({ vaca: 'Ordeñe', seca: 'Seca', vaquillona: 'Vaquillona', ternera: 'Ternera' }[a.cat] || '') + '</div></div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
         '<div class="fhchips">' + chip(a) + (repetidora(a) ? SELLO_REP : '') + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + (function () { var pa = esVet() ? partoAtrasado(a) : null; return pa ? '<span class="chip venta2">Parto atrasado · ' + pa.d + ' días</span>' : ''; })() + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
