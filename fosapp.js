@@ -161,7 +161,10 @@
       var tas = g.ta.filter(function (t) { return t[0] >= lpf; }), lt = tas.length ? tas[tas.length - 1] : null;
       var cd = lt ? codes[lt[1]] : null, res = cd ? cd[0] : null, preg = !!(cd && cd[2] === '2'), conc = null;
       if (preg) { var sv = servs.filter(function (e) { return e[0] <= lt[0]; }); conc = sv.length ? sv[sv.length - 1][0] : null; }
-      var estado = preg ? 'prenada' : res && /^vac/i.test(res) ? 'vacia' : res ? 'otro' : 'sin';
+      // aborto después del último tacto (o del último servicio): vacía, con resultado "Aborto" en la fecha del aborto
+      var abL = g.ab.filter(function (f) { return f > lpf; }).pop(), abV = false;
+      if (abL && (!lt || abL >= lt[0])) { preg = false; conc = null; res = 'Aborto'; lt = [abL, null]; abV = true; }
+      var estado = preg ? 'prenada' : abV || (res && /^vac/i.test(res)) ? 'vacia' : res ? 'otro' : 'sin';
       if (estado !== 'prenada' && le && le[1] === 'S' && (!lt || le[0] > lt[0])) estado = 'servida';
       var curLac = null; g.la.forEach(function (l) { if (lp && l[0] === lp[1]) curLac = l; });
       var mejs = g.la.map(function (l) { return l[2] || l[1]; }).filter(Boolean);

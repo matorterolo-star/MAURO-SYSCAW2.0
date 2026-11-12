@@ -287,6 +287,9 @@
       var tas = x.ta.filter(function (t) { return t[0] >= lpf; }), lt = tas.length ? tas[tas.length - 1] : null;
       var cd = lt ? CODES[lt[1]] : null, res = cd ? cd[1] : null, preg = !!(cd && cd[2] === '2'), conc = null;
       if (preg) { var s2 = sv.filter(function (e) { return e[0] <= lt[0]; }); conc = s2.length ? s2[s2.length - 1][0] : null; }
+      // aborto después del último tacto (o del último servicio): vacía, con resultado "Aborto" en la fecha del aborto
+      var abL = x.ab.filter(function (f) { return f > lpf; }).pop();
+      if (abL && (!lt || abL >= lt[0])) { preg = false; conc = null; res = 'Aborto'; lt = [abL, null]; }
       var estado = preg ? 'prenada' : res ? 'vacia' : 'sin';
       if (estado !== 'prenada' && le && le[1] === 'S' && (!lt || le[0] > lt[0])) estado = 'servida';
       var curLac = null; x.la.forEach(function (l) { if (lp && l[0] === lp[1]) curLac = l; });
