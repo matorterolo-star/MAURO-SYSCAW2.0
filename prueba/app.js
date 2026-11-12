@@ -2011,7 +2011,7 @@
         '<p class="cap">En cada barra, de izquierda a derecha: de más flaca a más gorda. Cada vaca se compara con el óptimo de su categoría; 0,25 fuera del óptimo es riesgo (amarillo) y más allá, mucho riesgo (rojo). Eventos de los últimos 12 meses con condición registrada cerca (secado ±21 días, parto de 21 días antes a 10 después, entre 20 y 45 días en leche).</p>' + linea + '</section>';
     }
     /* ----- Preñez: preñez acumulada de la zafra, preñadas a 150 días en leche y cierre de zafra ----- */
-    // preñez de la zafra y zafras cerradas: solo en el modo veterinario
+    // preñez de la zafra y comparar zafras: solo en el modo veterinario
     function prenOK() { return DB.fuente === 'syscaw' && !!DB.hist && !esOperario() && esVet(); }
     // último servicio que cuenta en la zafra: por defecto el 15 de febrero, el productor lo puede cambiar (se guarda día y mes)
     function finMD() { var v = getP('finzaf'); return /^\d{2}-\d{2}$/.test(v || '') ? v : '02-15'; }
@@ -2145,7 +2145,7 @@
       // cierre de zafra: de la más vieja a la actual
       var Zc = D.Zs.slice().reverse();
       var fila = function (tit, f) { return '<tr><td>' + tit + '</td>' + Zc.map(function (z) { return '<td>' + f(z.R, z) + '</td>'; }).join('') + '</tr>'; };
-      var card2 = '<section class="card"><h2>Zafras cerradas</h2>' +
+      var card2 = '<section class="card"><h2>Comparar zafras</h2>' +
         '<table class="tbl rtbl pztbl"><thead><tr><th></th>' + Zc.map(function (z) { return '<th>' + z.lbl + '</th>'; }).join('') + '</tr></thead><tbody>' +
         '<tr class="pzest"><td>Estado</td>' + Zc.map(function (z) { return '<td>' + z.estado + '</td>'; }).join('') + '</tr>' +
         fila('Vacas en la zafra', function (R) { return nf(R.n); }) +
@@ -3009,7 +3009,7 @@
     var DESC = {
       'Partos': 'Vacas y vaquillonas, mes a mes', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
-      'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Zafras cerradas': 'Los indicadores de cada zafra',
+      'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
       'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
       'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
