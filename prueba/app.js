@@ -4650,12 +4650,13 @@
       document.body.classList.toggle('ancho', !!(state.pobl && esVet()));
       if (state.pobl && esVet()) { main.innerHTML = pobHTML(); return; }
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
-      if (state.voy && esVet() && DB.animales.length) { main.innerHTML = voyHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
         if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main); return; }
         state.rp = null;
       }
+      // Voy mañana va después de la ficha: tocar una vaca de sus listas abre su ficha, y Volver vuelve a la lista
+      if (state.voy && esVet() && DB.animales.length) { main.innerHTML = voyHTML(); return; }
       var err = iosTipHTML() + (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '');
       if (state.tab === 'tareas') main.innerHTML = err + tareasHTML();
       else if (state.tab === 'rodeo') { main.innerHTML = err + rodeoHTML(); plegarFicha(main); vetCompartir(main); }
