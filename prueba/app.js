@@ -2570,13 +2570,13 @@
       var rod = r.rodeos.length > 1 ? '<section class="card"><h2>Por rodeo</h2><table class="tbl"><thead><tr><th>Rodeo</th><th>' + GL[state.cat] + '</th><th>Preñadas</th></tr></thead><tbody>' + r.rodeos.map(function (x) {
         return '<tr><td>' + esc(x.rod) + '</td><td>' + x.n + '</td><td>' + x.pren + ' <small>' + pct(x.pren, x.n) + '</small></td></tr>';
       }).join('') + '</tbody></table></section>' : '';
-      var aviso = '';
+      // cada categoría muestra solo lo suyo; lo que es de todo el rodeo (partos por mes, ordeñe y secas, índice) queda en Todas.
+      // mismo formato que Todas: grupos con título y tarjetas plegables en una lista
+      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
-        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Proyección de partos</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
-        (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
-        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '') +
-        (state.cat === 'vaquillona' ? vaqHTML() : '');
+        '<p class="grp">Estado</p><section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
+        (state.cat === 'vaquillona' ? grp('Reproducción', vaqHTML()) : '') +
+        grp('El rodeo', (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod);
     }
 
     /* ----- ficha ----- */
@@ -3007,7 +3007,7 @@
     }
     // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
     var DESC = {
-      'Partos': 'Vacas y vaquillonas, mes a mes', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
+      'Partos': 'Vacas y vaquillonas, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
