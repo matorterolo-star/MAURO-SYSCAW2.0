@@ -4339,7 +4339,7 @@
        Preñada: fecha probable de parto · servida: PARCHE (menos de 35 días) o REVISAR (35 o más) con los días de servida ·
        con tacto sin preñez y sin servicio después: el resultado con los días de parida · sin servicio ni tacto: PARIDA con los días de parida ·
        descarte programado: DESCARTE. Se arma un .xlsx a mano (con formato: caravana en negrita, anchos, saltos de página). ----- */
-    var PLT_FILAS = 46, PLT_LTS = 14, PLT_PARIDA = 30;
+    var PLT_FILAS = 54, PLT_LTS = 14, PLT_PARIDA = 30;
     // preñada con celo o servicio después del tacto que la dio preñada: alerta (en las dos planillas)
     function prenConEvento(a) {
       if (a.estado !== 'prenada' || !a.tFecha) return null;
@@ -4399,27 +4399,31 @@
       if (!L.length) { toast('No hay vacas para la planilla.'); return; }
       var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
       var col = function (i) { return String.fromCharCode(65 + i); };
-      var pags = Math.ceil(L.length / (PLT_FILAS * 3)), filas = [];
-      for (var pg = 0; pg < pags; pg++) for (var r = 0; r < PLT_FILAS; r++) {
+      /* filas por hoja: si entra en una hoja (hasta 180 vacas), las tres columnas parejas; si no, hojas de 54 filas.
+         La hoja se escala para llenar el papel (alto y ancho), así no queda media hoja en blanco. */
+      var FP = L.length <= 180 ? Math.ceil(L.length / 3) : PLT_FILAS;
+      var pags = Math.ceil(L.length / (FP * 3)), filas = [];
+      var HT = Math.min(22, Math.max(16, Math.floor(740 / FP))); // con pocas vacas, filas más altas para usar la hoja
+      for (var pg = 0; pg < pags; pg++) for (var r = 0; r < FP; r++) {
         var celdas = [], hay = false;
         for (var c = 0; c < 3; c++) {
-          var a = L[pg * PLT_FILAS * 3 + c * PLT_FILAS + r]; if (!a) continue; hay = true;
-          var f = F[a.rp], fila = pg * PLT_FILAS + r + 1, b = c * 4;
+          var a = L[pg * FP * 3 + c * FP + r]; if (!a) continue; hay = true;
+          var f = F[a.rp], fila = pg * FP + r + 1, b = c * 4;
           celdas.push(/^\d+$/.test(a.rp) ? '<c r="' + col(b) + fila + '" s="1"><v>' + (+a.rp) + '</v></c>' : '<c r="' + col(b) + fila + '" s="1" t="inlineStr"><is><t>' + X(a.rp) + '</t></is></c>');
           celdas.push('<c r="' + col(b + 1) + fila + '" s="' + (f[2] ? 5 : 2) + '" t="inlineStr"><is><t>' + X(f[0]) + '</t></is></c>');
           if (f[1] !== '') celdas.push('<c r="' + col(b + 2) + fila + '" s="' + (f[2] ? 6 : 3) + '"><v>' + f[1] + '</v></c>');
           celdas.push('<c r="' + col(b + 3) + fila + '" s="4"/>');
         }
-        if (hay) filas.push('<row r="' + (pg * PLT_FILAS + r + 1) + '" ht="16" customHeight="1">' + celdas.join('') + '</row>');
+        if (hay) filas.push('<row r="' + (pg * FP + r + 1) + '" ht="' + HT + '" customHeight="1">' + celdas.join('') + '</row>');
       }
       // ancho de la caravana según el largo (4 cifras como SysCaw; 5 o más en DelPro)
       var lmax = 0; L.forEach(function (a) { if (a.rp.length > lmax) lmax = a.rp.length; });
-      var ws = [Math.max(6.33, lmax * 1.45 + 0.6), simple ? 11 : 9.89, 4, 12], cols = '';
+      var ws = [Math.max(6.33, lmax * 1.45 + 0.6), 12, 4.5, 12], cols = '';
       for (var k = 0; k < 12; k++) cols += '<col min="' + (k + 1) + '" max="' + (k + 1) + '" width="' + ws[k % 4] + '" customWidth="1"/>';
-      var cortes = ''; for (pg = 1; pg < pags; pg++) cortes += '<brk id="' + pg * PLT_FILAS + '" max="16383" man="1"/>';
+      var cortes = ''; for (pg = 1; pg < pags; pg++) cortes += '<brk id="' + pg * FP + '" max="16383" man="1"/>';
       var tit = (simple ? 'Tacto simple · ' : 'Tacto · ') + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref);
       var hoja = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><cols>' + cols + '</cols><sheetData>' + filas.join('') + '</sheetData>' +
-        '<pageMargins left="0.4" right="0.3" top="0.6" bottom="0.4" header="0.25" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>' +
+        '<pageMargins left="0.4" right="0.3" top="0.6" bottom="0.4" header="0.25" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="' + pags + '"/>' +
         '<headerFooter><oddHeader>' + X('&C&"-,Bold"' + tit) + '</oddHeader><oddFooter>' + X('&CPágina &P de &N') + '</oddFooter></headerFooter>' +
         (cortes ? '<rowBreaks count="' + (pags - 1) + '" manualBreakCount="' + (pags - 1) + '">' + cortes + '</rowBreaks>' : '') + '</worksheet>';
       var estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
