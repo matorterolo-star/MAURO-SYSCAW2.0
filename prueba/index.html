@@ -643,6 +643,18 @@ details.lac summary .l{flex:1}
 .vf{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;margin-top:10px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;font-size:14.5px;text-align:left;cursor:pointer}
 .vf b{font-size:16px}.vf .dn{color:var(--vacia);font-weight:700}.vf .up{color:var(--prenada);font-weight:700}
 .vbtn{width:100%;margin-top:14px}
+.vhero{position:relative;display:flex;align-items:flex-end;gap:14px;width:100%;margin-bottom:10px;padding:16px 16px 16px 18px;border:0;border-radius:20px;background:var(--navy);color:#fff;font:inherit;text-align:left;cursor:pointer}
+@media (prefers-color-scheme:dark){.vhero{background:#1d3566}}
+.vh1{flex:1;min-width:0}.vh1 b{display:block;font-size:64px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.vh1 em{display:block;font-style:normal;font-size:16px;font-weight:700;margin-top:6px}.vh1 small{display:block;font-size:12.5px;color:#c9d3e6;margin-top:1px}
+.vh2{display:flex;flex-direction:column;gap:6px;padding-left:14px;border-left:1px solid rgba(255,255,255,.22);font-size:13.5px;color:#dbe3f1;white-space:nowrap}
+.vh2 b{font-size:20px;color:#fff;font-variant-numeric:tabular-nums}.vh2 .vtot{padding-top:6px;border-top:1px solid rgba(255,255,255,.22)}
+.vhero .vch{position:absolute;right:12px;top:12px;opacity:.6;color:var(--gold)}
+.vt{min-height:118px}
+.valert{position:relative;display:flex;align-items:center;gap:14px;width:100%;margin-top:10px;padding:14px 40px 14px 16px;border:0;border-radius:16px;background:#fbebeb;color:var(--vacia);font:inherit;text-align:left;cursor:pointer}
+.valert>b{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}.valert em{display:block;font-style:normal;font-weight:700;font-size:15px}.valert small{display:block;font-size:12.5px;opacity:.85}
+.valert.ok{background:var(--surface);color:var(--muted);border:1px solid var(--line)}.valert .vch{position:absolute;right:12px;top:50%;margin-top:-9px;opacity:.6}
+@media (prefers-color-scheme:dark){.valert{background:#3d1717;color:#f3a5a0}}
 </style>
 </head>
 <body>
@@ -740,9 +752,9 @@ details.lac summary .l{flex:1}
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="paradox.js?v=p95"></script>
 <script src="syscaw.js?v=p172"></script>
-<script src="fosapp.js?v=p215"></script>
+<script src="fosapp.js?v=p216"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p215"></script>
+<script src="app.js?v=p216"></script>
 </body>
 </html>
