@@ -1042,7 +1042,7 @@
         }
         // las libretas en Excel ya no se leen: todo entra por respaldo
         if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
-        state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).';
+        state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).' + (esVet() ? '' : ' Si te mandaron un link, abrilo tocándolo o pegalo en Ajustes → Pegar un link que me mandaron.');
         render();
       };
       fr.onerror = function () { state.destino = null; state.error = 'No pude abrir el archivo.'; render(); };
