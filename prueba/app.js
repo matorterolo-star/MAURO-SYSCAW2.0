@@ -2149,8 +2149,10 @@
         '<table class="tbl rtbl pztbl"><thead><tr><th></th>' + Zc.map(function (z) { return '<th>' + z.lbl + '</th>'; }).join('') + '</tr></thead><tbody>' +
         '<tr class="pzest"><td>Estado</td>' + Zc.map(function (z) { return '<td>' + z.estado + '</td>'; }).join('') + '</tr>' +
         fila('Vacas en la zafra', function (R) { return nf(R.n); }) +
-        fila('<b>Preñez total</b>', function (R) { return '<b>' + p(R.pren, R.n) + '</b><small>' + R.pren + ' de ' + R.n + '</small>'; }) +
-        fila('Vacías', function (R) { return nf(R.vac) + (R.salV ? '<small>' + R.salV + ' se fueron</small>' : ''); }) +
+        // en una zafra abierta, las servidas sin tacto no son vacías: van aparte (y la preñez muestra hasta dónde puede llegar)
+        fila('<b>Preñez total</b>', function (R) { return '<b>' + p(R.pren, R.n) + '</b><small>' + R.pren + ' de ' + R.n + '</small>' + (R.pend > R.n * 0.05 ? '<small>hasta ' + p(R.pren + R.pend, R.n) + '</small>' : ''); }) +
+        fila('No preñadas', function (R) { var v = R.vac - (R.pend || 0); return nf(v) + (R.salV ? '<small>' + R.salV + ' se fueron</small>' : ''); }) +
+        (Zc.some(function (z) { return z.R.pend; }) ? fila('Servidas sin tacto', function (R) { return nf(R.pend || 0); }) : '') +
         fila('Excluidas', function (R) { var e = R.desc + R.antes + (R.pase || 0); return p(e, R.n0) + '<small>' + e + '</small>'; }) +
         fila('Concepción de la zafra', function (R) { return R.sRes == null ? '–' : p(R.sOk, R.sRes) + '<small>' + R.sOk + ' de ' + R.sRes + ' serv.</small>'; }) +
         fila('Preñadas a 150 días en leche', function (R) { return p(R.ok150, R.n150); }) +
