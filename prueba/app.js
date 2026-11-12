@@ -1530,7 +1530,7 @@
         secTareas('partos', 'Próximos partos', chips + '<p class="secnote">Partos probables en los próximos ' + vtxt + '.</p>', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
         }, 'Ningún parto probable en los próximos ' + vtxt + '.')) +
-        grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Todas las vacas por caravana, para anotar en el corral') : '')) +
+        grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Vacas en ordeñe por caravana, para anotar en el corral') : '')) +
         grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
         }, 'Ninguna vaca cumple el criterio de venta.') + insHTML());
@@ -4335,7 +4335,7 @@
     }
     function bajarBlob(blob, nombre) { var u = URL.createObjectURL(blob), l = document.createElement('a'); l.href = u; l.download = nombre; document.body.appendChild(l); l.click(); setTimeout(function () { URL.revokeObjectURL(u); l.remove(); }, 4000); }
     function xGuardar() { var o = state.xout; if (!o) return; if (o.blob) bajarBlob(o.blob, o.nombre); else root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
-    /* ----- planilla de tacto (modo veterinario): todas las vacas por caravana, en tres columnas para imprimir y anotar en el corral.
+    /* ----- planilla de tacto (modo veterinario): las vacas en ordeñe por caravana, en tres columnas para imprimir y anotar en el corral.
        Preñada: fecha probable de parto · servida: PARCHE (menos de 35 días) o REVISAR (35 o más) con los días de servida ·
        con tacto sin preñez y sin servicio después: el resultado con los días de parida · sin servicio ni tacto: PARIDA con los días de parida ·
        descarte programado: DESCARTE. Se arma un .xlsx a mano (con formato: caravana en negrita, anchos, saltos de página). ----- */
@@ -4366,8 +4366,8 @@
       return new Blob(partes.concat(cd, [fin]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
     function planillaTacto() {
-      var ref = today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca'; }).sort(numRp);
-      if (!L.length) { toast('No hay vacas en este tambo.'); return; }
+      var ref = today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca'; }).sort(numRp);
+      if (!L.length) { toast('No hay vacas en ordeñe en este tambo.'); return; }
       var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
       var col = function (i) { return String.fromCharCode(65 + i); };
       var pags = Math.ceil(L.length / (PLT_FILAS * 3)), filas = [];
@@ -4416,8 +4416,8 @@
       try { file = new File([blob], nombre, { type: blob.type }); } catch (e) {}
       state.xout = { blob: blob, file: file, csv: null, nombre: nombre };
       var cu = {}; L.forEach(function (a) { var f = planillaFila(a, ref)[0]; var k = /^\d\d-/.test(f) ? 'Preñadas' : f === 'PARCHE' ? 'Parche' : f === 'REVISAR' ? 'Revisar' : f === 'PARIDA' ? 'Paridas' : f === 'DESCARTE' ? 'Descarte' : 'Con tacto sin preñez'; cu[k] = (cu[k] || 0) + 1; });
-      $('#sheetXTitle').textContent = 'Planilla de tacto · ' + L.length + ' vacas';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Todas las vacas en ordeñe y secas por caravana, en tres columnas para imprimir (' + pags + (pags === 1 ? ' hoja' : ' hojas') + ').</p><details class="nota"><summary>Qué dice cada vaca</summary><p class="cap">Preñada: fecha probable de parto · PARCHE: servida hace menos de ' + A.DX_MIN + ' días · REVISAR: servida hace ' + A.DX_MIN + ' días o más · PARIDA: sin servicio ni tacto, con los días de parida · con tacto sin preñez: el resultado y los días de parida · DESCARTE. Al lado de cada vaca queda una columna en blanco para anotar.</p></details>' +
+      $('#sheetXTitle').textContent = 'Planilla de tacto · ' + L.length + ' vacas en ordeñe';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Todas las vacas en ordeñe por caravana, en tres columnas para imprimir (' + pags + (pags === 1 ? ' hoja' : ' hojas') + ').</p><details class="nota"><summary>Qué dice cada vaca</summary><p class="cap">Preñada: fecha probable de parto · PARCHE: servida hace menos de ' + A.DX_MIN + ' días · REVISAR: servida hace ' + A.DX_MIN + ' días o más · PARIDA: sin servicio ni tacto, con los días de parida · con tacto sin preñez: el resultado y los días de parida · DESCARTE. Al lado de cada vaca queda una columna en blanco para anotar.</p></details>' +
         '<p class="cap">' + ['Preñadas', 'Revisar', 'Parche', 'Paridas', 'Con tacto sin preñez', 'Descarte'].filter(function (k) { return cu[k]; }).map(function (k) { return '<b>' + cu[k] + '</b> ' + k.toLowerCase(); }).join(' · ') + '</p>' +
         '<div class="xprev">' + L.map(function (a) { var f = planillaFila(a, ref); return '<div><b>' + esc(a.rp) + '</b><span>' + esc(f[0] + (f[1] !== '' ? ' ' + f[1] : '')) + '</span></div>'; }).join('') + '</div><p class="cap">Archivo: ' + esc(nombre) + '</p>';
       var puede = !!(navigator.share && file);
