@@ -1,5 +1,5 @@
-const CACHE = 'libreta-v62';
-const FILES = ['./', 'index.html', 'app.js?v=60', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=38', 'syscaw.js?v=42', 'fosapp.js?v=43', 'manifest.webmanifest', 'icon2-192.png', 'icon2-512.png'];
+const CACHE = 'libreta-v63';
+const FILES = ['./', 'index.html', 'app.js?v=61', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=38', 'syscaw.js?v=43', 'fosapp.js?v=61', 'manifest.webmanifest', 'icon2-192.png', 'icon2-512.png'];
 // al instalar, baja todo de nuevo (sin usar la memoria del navegador) para que no queden archivos de versiones distintas
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));

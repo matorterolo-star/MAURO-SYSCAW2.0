@@ -27,98 +27,6 @@
     return n > 0 ? 'en ' + n + ' días' : 'hace ' + (-n) + ' días';
   }
 
-  /* ---------- lectura del Excel ---------- */
-  function txt(v) { if (v == null) return null; var s = String(v).trim(); return s === '' ? null : s; }
-  function num(v) {
-    if (v == null || v === '') return null;
-    var n = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
-    return isFinite(n) ? n : null;
-  }
-  function numOrTxt(v) { var n = num(v); return n != null ? n : txt(v); }
-
-  function parseLibreta(XLSX, buf) {
-    var wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    for (var si = 0; si < wb.SheetNames.length; si++) {
-      var ws = wb.Sheets[wb.SheetNames[si]];
-      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
-      var h = -1;
-      for (var r = 0; r < Math.min(rows.length, 40); r++) {
-        var cells = rows[r].map(function (c) { return c == null ? '' : String(c).trim(); });
-        if (cells.indexOf('RP') >= 0 && cells.some(function (c) { return /^nomb/i.test(c); })) { h = r; break; }
-      }
-      if (h < 0) continue;
-      var head = rows[h].map(function (c) { return c == null ? '' : String(c).trim(); });
-      var idx = function (name, nth) {
-        var c = 0; nth = nth || 0;
-        for (var i = 0; i < head.length; i++) { if (head[i] === name) { if (c === nth) return i; c++; } }
-        return -1;
-      };
-      var idxRe = function (re) { for (var i = 0; i < head.length; i++) { if (re.test(head[i])) return i; } return -1; };
-      var col = {
-        nombre: idxRe(/^nomb/i), edad: idx('Edad'), pFecha: idx('Fecha', 0), pN: idxRe(/^N[°º]$/),
-        r1: idx('R1'), r2: idx('R2'), sFecha: idx('Fecha', 1), sN: idx('N Serv'), toro: idxRe(/^toro/i),
-        eg: idx('E.G'), ipp: idx('Ipp'), tFecha: idx('Fecha', 2), result: idx('Result'), rech: idx('Rech'),
-        rp: idx('RP'), idElec: idx('Id Elect'), rod: idx('Rod'), dLac: idx('D Lac'),
-        prodLts: idx('Prod Lts'), mej: idxRe(/^mej/i)
-      };
-      var prCols = [];
-      for (var k = 1; k <= 10; k++) { var pc = idx('Pr' + k); if (pc >= 0) prCols.push(pc); }
-      var get = function (row, i) { return i >= 0 ? row[i] : null; };
-      var animales = [];
-      for (var j = h + 1; j < rows.length; j++) {
-        var row = rows[j];
-        var rpRaw = get(row, col.rp);
-        if (rpRaw == null || String(rpRaw).trim() === '') continue;
-        var rp = typeof rpRaw === 'number' ? String(Math.round(rpRaw)) : String(rpRaw).trim();
-        var tfRaw = get(row, col.tFecha), resRaw = get(row, col.result);
-        var tFecha = null, partoProb = null, result = txt(resRaw);
-        if (typeof tfRaw === 'string' && /^pare/i.test(tfRaw.trim())) { partoProb = parseDMY(resRaw); result = null; }
-        else tFecha = parseDMY(tfRaw);
-        var estado = 'sin';
-        if (partoProb) estado = 'prenada';
-        else if (result && /^pre/i.test(result)) estado = 'prenada';
-        else if (result && /^vac/i.test(result)) estado = 'vacia';
-        else if (result && /^cic/i.test(result)) estado = 'ciclando';
-        else if (result && /^apta/i.test(result)) estado = 'apta';
-        else if (result) estado = 'otro';
-        var pr = prCols.map(function (c) { return numOrTxt(row[c]); });
-        while (pr.length && pr[pr.length - 1] == null) pr.pop();
-        var idE = get(row, col.idElec);
-        animales.push({
-          rp: rp,
-          nombre: txt(get(row, col.nombre)),
-          edad: num(get(row, col.edad)),
-          rod: txt(get(row, col.rod)),
-          idElec: idE == null ? null : ((typeof idE === 'number' ? String(Math.round(idE)) : String(idE).trim()).replace(/^0+/, '') || null),
-          pFecha: parseDMY(get(row, col.pFecha)),
-          pN: num(get(row, col.pN)),
-          r1: txt(get(row, col.r1)),
-          r2: txt(get(row, col.r2)),
-          sFecha: parseDMY(get(row, col.sFecha)),
-          sN: num(get(row, col.sN)),
-          toro: txt(get(row, col.toro)),
-          eg: numOrTxt(get(row, col.eg)),
-          ipp: numOrTxt(get(row, col.ipp)),
-          tFecha: tFecha,
-          result: result,
-          partoProb: partoProb,
-          estado: estado,
-          rech: txt(get(row, col.rech)),
-          pr: pr,
-          dLac: num(get(row, col.dLac)),
-          prodLts: num(get(row, col.prodLts)),
-          mej: num(get(row, col.mej))
-        });
-      }
-      animales.forEach(function (a) {
-        if (a.estado !== 'prenada' && a.sFecha && a.pFecha && !/^celo/i.test(a.toro || '') && a.sFecha > a.pFecha && (!a.tFecha || a.sFecha > a.tFecha)) a.estado = 'servida';
-      });
-      animales.forEach(function (a) { a.celo = a.estado === 'prenada' && /^celo/i.test(a.toro || ''); });
-      if (!animales.length) continue;
-      return { animales: animales, hoja: wb.SheetNames[si] };
-    }
-    throw new Error('No encontré la tabla de la libreta. Debe tener las columnas "Nomb./Orig." y "RP".');
-  }
 
   /* ---------- cálculos ---------- */
   function esServicio(a) { return !!a.sFecha && !/^celo/i.test(a.toro || ''); }
@@ -367,12 +275,24 @@
       }
       if (!L) return;
       var conc = L.conc && L.conc <= fin ? L.conc : null;
+      // con varias unidades: entra a la zafra cuando está en la unidad elegida (al inicio, al parir o al llegar por un pase);
+      // si se va a otra unidad sin preñarse, queda fuera ('pase'): sigue en la otra unidad, no es una falla de esta
+      var ent = L.p > ini ? L.p : ini, pase = null;
+      if (x.uEn) {
+        if (!x.uEn(ent)) {
+          var lleg = (x.cambios || []).filter(function (m) { return m > ent && m <= fin && x.uEn(m); })[0];
+          if (!lleg || (conc && conc <= lleg)) return;
+          ent = lleg;
+        }
+        pase = (x.cambios || []).filter(function (m) { return m > ent && !x.uEn(m); })[0] || null;
+      }
       var svz = L.sv.filter(function (e) { return e[0] <= fin; });
       var s1 = svz.length ? svz[0][0] : null, ult = svz.length ? svz[svz.length - 1][0] : null;
       var pend = !conc && !L.np && !!ult && !x.salida && sinResultado(L, ult, esPren);
       var d = x.desc === '0000' ? ref : x.desc, excl = null;
       if (d && d <= fin && (!conc || conc > d) && (!x.salida || d <= x.salida)) excl = 'desc';
       else if (!conc && x.salida && diffDays(x.salida, L.p) < pev) excl = 'antes';
+      else if (pase && (!conc || conc > pase)) excl = 'pase';
       // pérdida: el primer tacto positivo de una preñez de la zafra
       var T1 = L.pos.filter(function (t) { return diffDays(t, ini) >= 25; })[0] || null, sT1 = null;
       if (T1) { var sa = L.sv.filter(function (e) { return e[0] <= T1; }); if (sa.length && sa[sa.length - 1][0] > fin) T1 = null; else if (sa.length) sT1 = sa[sa.length - 1][0]; }
@@ -386,9 +306,26 @@
           L.ta.some(function (t) { return t[0] > f && diffDays(t[0], f) >= 25 && !esPren(t[1]); });
         if (falla) sRes++;
       });
-      R.push({ sOk: sOk, sRes: sRes, sTot: L.sv.filter(function (e) { return e[0] >= ini && e[0] <= fin; }).length, rp: x.rp, p: L.p, conc: conc, est: conc ? L.est : false, s1: s1, ult: ult, pend: pend, salida: x.salida || null, excl: excl, conf: !!T1, perd: T1 ? L.perdida(T1) : false });
+      R.push({ ent: ent, sOk: sOk, sRes: sRes, sTot: L.sv.filter(function (e) { return e[0] >= ini && e[0] <= fin; }).length, rp: x.rp, p: L.p, conc: conc, est: conc ? L.est : false, s1: s1, ult: ult, pend: pend, salida: x.salida || null, excl: excl, conf: !!T1, perd: T1 ? L.perdida(T1) : false });
     });
     return R;
+  }
+  // resultado de cada servicio entre desde y hasta: true preñó (aunque después se perdiera), false falló, null sin resultado todavía
+  function servRes(h, esPren, esVac, desde, hasta) {
+    var out = [];
+    if (!h || !h.pa || !h.pa.length || !h.ev || !h.ta) return out;
+    lactConc(h, esPren, esVac).forEach(function (L) {
+      var T1 = L.pos[0] || null, sT1 = null;
+      if (T1) { var sa = L.sv.filter(function (e) { return e[0] <= T1; }); if (sa.length) sT1 = sa[sa.length - 1][0]; }
+      L.sv.forEach(function (e) {
+        var f = e[0]; if (f < desde || f > hasta) return;
+        if (f === L.conc || f === sT1) { out.push([f, true]); return; }
+        var falla = L.sv.some(function (o) { return o[0] > f; }) || (L.conc && L.conc > f) || !!L.np ||
+          L.ta.some(function (t) { return t[0] > f && diffDays(t[0], f) >= 25 && !esPren(t[1]); });
+        out.push([f, falla ? false : null]);
+      });
+    });
+    return out;
   }
   // lactancias que cumplen 150 días en leche entre desde y hasta: ¿se preñaron antes de los 150 días?
   function pren150(animales, esPren, esVac, desde, hasta, pev, ref) {
@@ -398,6 +335,7 @@
       lactConc(h, esPren, esVac).forEach(function (l) {
         var d150 = addDays(l.p, 150); if (d150 < desde || d150 > hasta) return;
         if (x.salida && x.salida <= l.p) return;
+        if (x.uEn && !x.uEn(d150)) return; // con varias unidades: cuenta donde estaba a los 150 días
         var ok = !!l.conc && l.conc <= d150;
         var d = x.desc === '0000' ? ref : x.desc, excl = null;
         if (d && d <= d150 && (!ok || l.conc > d) && (!x.salida || d <= x.salida)) excl = 'desc';
@@ -655,7 +593,7 @@
     var prom = { pe: ref0.pe.m, da: ref0.da.m, spc: ref0.spc.m, pc: ref0.pc.m, le: ref0.leProm, lit: ref0.litProm, sol: ref0.solProm };
     return { vacas: vacas, por: por, n: n, k10: k10, usaSol: usaSol, minAn: MIN_AN, hayAn: ultAn.length > 0, pesos: w, prom: prom, celoBajo: cobCelo < 0.5 };
   }
-  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, zafraPren: zafraPren, pren150: pren150, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, parseLibreta: parseLibreta, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
+  var api = { MESES: MESES, indice: indice, lineaVida: lineaVida, ciclos21: ciclos21, zafraPren: zafraPren, pren150: pren150, servRes: servRes, setSecado: setSecado, proyeccion: proyeccion, PREPARTO: PREPARTO, derive: derive, search: search, conteo: conteo, tareas: tareas, resumen: resumen, fmt: fmt, rel: rel, diffDays: diffDays, addDays: addDays, ymd: ymd, GEST: GEST, SECADO: SECADO, DX_MIN: DX_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') initUI(api);
 
@@ -827,12 +765,12 @@
           '<span class="ilogo' + (t.logo ? ' has' : '') + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : esc(ini)) + '</span>' +
           '<span class="itx"><b>' + esc(t.nombre || 'Sin nombre') + '</b>' +
           '<span>' + (t.n ? nf(t.n) + (t.n === 1 ? ' animal' : ' animales') : 'Sin libreta') + (t.fecha ? ' · ' + A.fmt(t.fecha) : '') + '</span></span>' +
-          '<span class="irt"><span class="when' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
+          '<span class="irt"><span class="iwhen' + cls + '">' + hace + '</span>' + (t.id === ult ? '<small>último</small>' : '') + '</span></button>';
       }).join('');
       return '<section class="ihola"><p class="ifecha">' + esc(fecha.charAt(0).toUpperCase() + fecha.slice(1)) + '</p>' +
         '<p class="hint">' + (L.length ? L.length + (L.length === 1 ? ' tambo' : ' tambos') + ' en este teléfono · ' + nf(tot) + ' animales' : 'Todavía no hay tambos cargados.') + '</p></section>' +
-        (L.length > 6 ? '<div class="searchbox"><input id="qTambo" type="search" placeholder="Buscar tambo" autocomplete="off" aria-label="Buscar tambo"></div>' : '') +
-        '<div class="ilist" id="ilist">' + filas + '</div>' +
+        (L.length > 6 ? '<div class="isearch"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><input id="qTambo" type="search" enterkeyhint="search" placeholder="Buscar tambo" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Buscar tambo"></div>' : '') +
+        '<div class="ilist" id="ilist">' + filas + '</div><p class="hint inada" id="inada" hidden>Ningún tambo con ese nombre.</p>' +
         '<p class="hint ihint">La fecha es la del último respaldo cargado (en rojo, más de 45 días).</p>' +
         '<div class="iacc"><button class="btn primary big" data-a="tnuevo">Agregar tambo</button>' +
         (L.length > 1 ? '<button class="btn" data-a="poblacion">Población de tambos</button>' : '') +
@@ -870,6 +808,19 @@
     function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
     function esRar(buf) { var u = new Uint8Array(buf, 0, Math.min(4, buf.byteLength)); return u[0] === 0x52 && u[1] === 0x61 && u[2] === 0x72 && u[3] === 0x21; }
     // sql.js (lector de la base de FOSAPP): se descarga recién la primera vez que se usa
+    // la librería de Excel no se carga al abrir: solo al exportar una lista o al leer una base de FOSAPP (la usa para abrir el .zip)
+    var XLSXP = null;
+    function cargarXlsx() {
+      if (root.XLSX) return Promise.resolve(root.XLSX);
+      if (XLSXP) return XLSXP;
+      XLSXP = new Promise(function (ok, mal) {
+        var s = document.createElement('script'); s.src = 'xlsx.full.min.js';
+        s.onload = function () { root.XLSX ? ok(root.XLSX) : mal(new Error('no se pudo cargar Excel')); };
+        s.onerror = function () { XLSXP = null; mal(new Error('no se pudo descargar Excel (hace falta internet la primera vez)')); };
+        document.head.appendChild(s);
+      });
+      return XLSXP;
+    }
     function cargarSqlJs() {
       if (root.initSqlJs) return Promise.resolve(root.initSqlJs);
       return new Promise(function (ok, mal) {
@@ -898,7 +849,7 @@
     // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
     function cargarDelpro() {
       if (root.Delpro) return Promise.resolve(root.Delpro);
-      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=1'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=3'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
     }
     // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
     function esDelpro(buf) {
@@ -918,6 +869,8 @@
     function esFirebird(buf) { if (!buf || buf.byteLength < 64) return false; var u = new Uint8Array(buf, 0, 64), ods = (u[18] | u[19] << 8) & 0x7fff; return u[0] === 1 && u[2] === 0x39 && u[3] === 0x30 && (ods === 10 || ods === 11); }
     // tambos que vienen de otro programa (FOSAPP, SIGEA): solo para el modo veterinario
     function externo(o) { return o === 'fosapp' || o === 'sigea' || o === 'dhm' || o === 'delpro'; }
+    // tambos de otros programas que se mandan al productor solo por link (no tienen activación ni respaldo de SysCaw)
+    function soloLink(o) { return o === 'fosapp' || o === 'dhm' || o === 'delpro'; }
     function cargarRespaldo(buf, f, tipo) {
       var fosapp = tipo === true || tipo === 'fosapp', sigea = tipo === 'sigea', dhm = tipo === 'dhm' || tipo === 'dhmrar', delpro = tipo === 'delpro';
       busy(true, (tipo === 'pre' ? 'Cargando el tambo…' : delpro ? 'Leyendo base de DelPro…' : dhm ? 'Leyendo base de DHM…' : sigea ? 'Leyendo base de SIGEA…' : fosapp ? 'Leyendo base de FOSAPP…' : 'Leyendo respaldo de SysCaw…') + '<small>Puede tardar unos segundos</small>');
@@ -926,7 +879,7 @@
           return (tipo === 'dhmrar' ? H.mdbDeRar(buf, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64) }) : Promise.resolve(buf)).then(function (mdb) {
             return H.fromFile(mdb, f.name, { elegir: function (us) { return elegirUnidad(us, null, true); } });
           }).then(function (d) { busy(true, 'Guardando el tambo…'); return d; });
-        }) : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? cargarSqlJs().then(function (ini) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: ini, wasmUrl: 'sql-wasm.wasm?v=1', XLSX: root.XLSX }); })
+        }) : sigea ? cargarSigea().then(function (S) { return S.fromFile(buf, f.name); }) : fosapp ? Promise.all([cargarSqlJs(), cargarXlsx()]).then(function (r) { return root.Fosapp.fromFile(buf, f.name, { initSqlJs: r[0], wasmUrl: 'sql-wasm.wasm?v=1', XLSX: r[1] }); })
           : root.SysCaw.fromRar(buf, f.name, { unrar: root.Unrar, wasmBinary: b64(root.UNRAR_WASM_B64), Paradox: root.Paradox, elegir: function (us) { return elegirUnidad(us, null, true); }, todas: true })).then(function (d) {
           if (!habilitado(d.idProd)) { busy(false); state.destino = null; bloqueado(d.tambo || nombreDesdeArchivo(f.name)); return; }
           var sel = d.unidadesSel || [], parcial = !!d.sel;
@@ -1063,23 +1016,23 @@
       fr.onload = function () {
         if (esFirebird(fr.result)) {
           // base de SIGEA (Macoel): solo en el modo veterinario; fuera de él se responde como cualquier archivo que la app no lee
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, 'sigea'); return;
         }
         if (esDelpro(fr.result)) {
           // exportación de DelPro: solo en el modo veterinario
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, 'delpro'); return;
         }
         if (root.Fosapp && root.Fosapp.es(fr.result, f.name)) {
           // base de FOSAPP: modo veterinario, o productor activado para un tambo de FOSAPP (cargarRespaldo comprueba que la base sea de su tambo)
           // a cualquier otro se le responde como a un archivo que la app no lee
-          if (!esVet() && !ACT.some(function (x) { return (x.p || []).some(function (q) { return /^F\d/.test(q); }); })) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet() && !ACT.some(function (x) { return (x.p || []).some(function (q) { return /^F\d/.test(q); }); })) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, true); return;
         }
         if (esAccess(fr.result)) {
           // base de DHM (Access): solo en el modo veterinario
-          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar) o la libreta en Excel (.xls o .xlsx).'; render(); return; }
+          if (!esVet()) { state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).'; render(); return; }
           cargarRespaldo(fr.result, f, 'dhm'); return;
         }
         if (esRar(fr.result) || /\.rar$/i.test(f.name)) {
@@ -1087,22 +1040,9 @@
           if (esVet()) { rarConMdb(fr.result).then(function (m) { cargarRespaldo(fr.result, f, m ? 'dhmrar' : undefined); }); return; }
           cargarRespaldo(fr.result, f); return;
         }
+        // las libretas en Excel ya no se leen: todo entra por respaldo
         if (!esVet() && !ACT.length) { bloqueado(nombreDesdeArchivo(f.name)); return; }
-        try {
-          var res = A.parseLibreta(root.XLSX, fr.result);
-          res.animales.forEach(function (a) { a.cat = 'vaca'; });
-          var mismo = state.destino !== 'nuevo' && tamboAct();
-          var prev = mismo ? DB : {};
-          if (!mismo) prepararDestino(nombreDesdeArchivo(f.name));
-          state.destino = null;
-          DB = { animales: res.animales, cargada: today(), archivo: f.name, fuente: 'excel', hist: prev.hist, codes: prev.codes, fecha: prev.fecha };
-          saveDB(); state.q = ''; state.rp = null; state.error = ''; state.filtro = 'todas'; state.tab = 'panel'; state.cat = 'todas';
-          try { location.hash = ''; } catch (e) {}
-          render();
-          toast(res.animales.length + ' animales cargados');
-          openSheet('Nombre del tambo', nombreDesdeArchivo(f.name) || PERFIL.nombre);
-          return;
-        } catch (e) { state.error = e.message || 'No pude leer el archivo.'; }
+        state.destino = null; state.error = 'No pude leer el archivo. Elegí el respaldo de SysCaw (.rar).';
         render();
       };
       fr.onerror = function () { state.destino = null; state.error = 'No pude abrir el archivo.'; render(); };
@@ -1119,19 +1059,19 @@
       $('label[for="inNombre"]').hidden = fijo;
       paintLogoPreview();
       $('#btnAct').hidden = !(esVet() && DB.idProd && DB.idProd.length && !externo(DB.origen));
-      $('#btnLnk').hidden = !(esVet() && (DB.origen === 'fosapp' || DB.origen === 'dhm' || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP y DHM: solo por link
+      $('#btnLnk').hidden = !(esVet() && (soloLink(DB.origen) || (DB.idProd && DB.idProd.length && !externo(DB.origen)))); // FOSAPP, DHM y DelPro: solo por link
       $('#btnGh').hidden = !esVet(); $('#btnGh').textContent = ghToken() ? 'Permiso de GitHub para links: cargado (cambiar)' : 'Cargar permiso de GitHub para links';
       $('#btnInf').hidden = !(esVet() && DB.hist && DB.animales.length);
       // productor con un tambo de FOSAPP que le llegó por link: no carga archivos ni códigos; los datos le llegan por el link
       var porLink = !esVet() && tamboAct() && tamboAct().lnkIn;
       $('#btnLnkBuscar').hidden = !porLink;
-      $('#btnCambiar').hidden = !esVet() && DB.origen === 'dhm'; // la base de DHM trae otros tambos: solo la carga el veterinario
+      $('#btnCambiar').hidden = !esVet() && (DB.origen === 'dhm' || DB.origen === 'delpro'); // DHM y DelPro: solo los carga el veterinario
       $('#btnCambiar').textContent = DB.origen === 'fosapp' && !esVet() ? 'Actualizar este tambo (cargar la base de FOSAPP)' : 'Actualizar este tambo (cargar respaldo o libreta)';
       ['#btnPob', '#btnBase', '#btnBaseIn', '#btnVetClave'].forEach(function (s) { $(s).hidden = !esVet(); });
       $('#sheet .sheet-card').classList.toggle('vet', esVet());
       $('#sheet .sheet-card').classList.toggle('fos', esVet() && externo(DB.origen)); // FOSAPP: el veterinario le pone el nombre al tambo
       Array.prototype.forEach.call(document.querySelectorAll('#sheet .sg'), function (g, i) { g.classList.remove('abierto'); });
-      $('#btnCod').hidden = esVet() || (!!porLink && (DB.origen === 'fosapp' || DB.origen === 'dhm'));
+      $('#btnCod').hidden = esVet() || (!!porLink && soloLink(DB.origen));
       $('#btnCerrar').textContent = esVet() ? 'Cerrar' : 'Cancelar';
       $('#nTambos').hidden = esOperario();
       $('#btnVet').textContent = esVet() ? 'Modo veterinario activo · salir' : 'Modo veterinario';
@@ -1236,7 +1176,7 @@
     }
     function emptyHTML() {
       return '<section class="empty"><div class="emptytag">' + tagSVG('0000', 64) + '</div><h2>Cargá el respaldo</h2>' +
-        '<p>Elegí el respaldo de SysCaw (.rar)' + (esVet() ? ', la base de FOSAPP (.zip)' : '') + ' o la libreta en Excel (.xls o .xlsx). Se lee en este teléfono y no se sube a ningún servidor.</p>' +
+        '<p>Elegí el respaldo de SysCaw (.rar)' + (esVet() ? ', la base de FOSAPP (.zip)' : '') + '. Se lee en este teléfono y no se sube a ningún servidor.</p>' +
         (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '') +
         '<button class="btn primary big" data-a="load">Elegir archivo</button>' + (!esVet() && !ACT.length ? '<p style="margin:18px 0 8px"><b>¿Todavía no activaste?</b> Escribí tu código:</p>' + codigoHTML() : '') + '</section>';
     }
@@ -1362,10 +1302,15 @@
       } else {
         list = f === 'todas' ? lista().slice().sort(numRp) : ordenar(lista().filter(function (a) { return matchFiltro(a, f); }), f);
         var tit = f === 'ptvac' ? 'por preñar (más días de paridas primero)' : f === 'prenada' ? 'por fecha de parto' : f === 'servida' ? 'servicio más antiguo primero' : f === 'descarte' ? 'descarte programado' : f === 'venta' ? 'para venta, menos litros primero' : f === 'pcelo' ? 'preñadas con celo registrado' : '';
-        html = '<h2 class="h">' + list.length + ' ' + nombreGrupo(list.length) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return rowHTML(a); }).join('');
+        // por preñar: el orden es por días de parida, así que se muestran en cada fila
+        var refP = DB.fecha || today(), subP = function (a) { return a.pFecha ? '<b>' + A.diffDays(refP, a.pFecha) + ' días de parida</b> · ' + subDefault(a) : subDefault(a); };
+        html = '<h2 class="h">' + list.length + ' ' + (f === 'ptvac' ? (list.length === 1 ? 'vaca' : 'vacas') : nombreGrupo(list.length)) + (tit ? ', ' + tit : '') + '</h2>' + list.slice(0, state.n).map(function (a) { return f === 'ptvac' ? rowHTML(a, { sub: subP(a) }) : rowHTML(a); }).join('');
         if (list.length > state.n) html += '<button class="btn more" data-a="mas">Mostrar más (' + (list.length - state.n) + ' restantes)</button>';
       }
       box.innerHTML = html;
+      // el filtro elegido siempre a la vista (p. ej. "Por preñar" al venir del panel queda al final de la fila de filtros)
+      var fs = document.querySelector('.filters'), ch = fs && fs.querySelector('[aria-pressed="true"]');
+      if (ch) { var rf = fs.getBoundingClientRect(), rc = ch.getBoundingClientRect(); if (rc.left < rf.left || rc.right > rf.right) fs.scrollLeft += rc.left - rf.left - (rf.width - rc.width) / 2; }
     }
 
     /* ----- pestaña Tareas ----- */
@@ -1375,7 +1320,8 @@
       var abierta = !!state.abiertas[key], lim = abierta ? items.length : 12;
       // cada lista arranca plegada: título y cantidad; se despliega tocando el título
       var desp = !!(state.desp && state.desp[key]);
-      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>' + titulo + '</h2><span class="count">' + items.length + '</span>' +
+      var ds = descDe(key);
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><span class="pttl"><h2>' + titulo + '</h2>' + (ds ? '<small class="pdesc">' + esc(ds) + '</small>' : '') + '</span><span class="count">' + items.length + '</span>' +
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       h += (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
@@ -1458,7 +1404,7 @@
     function insHTML() {
       insCSS();
       var key = 'insem', desp = !!(state.desp && state.desp[key]);
-      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><h2>Inseminadores</h2><span class="count">$</span>' +
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><span class="pttl"><h2>Inseminadores</h2><small class="pdesc">' + descDe(key) + '</small></span>' +
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       if (!DB.hist) return h + '<p class="hint">Para liquidar a los inseminadores hace falta cargar el respaldo con el historial de servicios y tactos.</p></section>';
@@ -1568,8 +1514,9 @@
       var chips = '<div class="filters" role="group" aria-label="Ventana de tiempo">' + VENT.map(function (v) {
         return '<button class="fchip plain" data-v="' + v[0] + '" aria-pressed="' + (state.ventana === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
-      return '<h1 class="ptitle">Tareas</h1>' + '<button class="btn share xtop" data-a="exptactar"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Lista a Excel (tacto, secado, venta)</button>' +
-        '<button class="btn share xtop" data-a="expparches"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Listado de parches</button>' +
+      var grp = function (t, html) { return '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>'; };
+      var lrow = function (a, t, d) { return '<button class="lrow" data-a="' + a + '"><span class="lico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="pttl"><h2>' + t + '</h2><small class="pdesc">' + d + '</small></span><svg class="chev rt" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'; };
+      return '<h1 class="ptitle">Tareas</h1>' + grp('Para hacer',
         (function () {
           var rowT = function (x) { return rowHTML(x.a, { right: '<span class="when late">hace ' + x.dias + ' días</span>', sub: 'Servicio ' + A.fmt(x.fecha) + (x.a.toro && !/^celo/i.test(x.a.toro) ? ' · ' + esc(x.a.toro) : '') }); };
           var nota = 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto posterior.';
@@ -1582,10 +1529,11 @@
         }, 'Ninguna vaca para secar el ' + A.fmt(fs) + '.') +
         secTareas('partos', 'Próximos partos', chips + '<p class="secnote">Partos probables en los próximos ' + vtxt + '.</p>', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
-        }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
-        secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
+        }, 'Ningún parto probable en los próximos ' + vtxt + '.')) +
+        grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Vacas en ordeñe por caravana, para anotar en el corral') : '')) +
+        grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML();
+        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML());
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -1998,8 +1946,72 @@
           (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5, 'data-a="repti"') : '')
           : '<p class="hint">Elegí una fecha de inicio anterior al ' + A.fmt(ref) + '.</p>') + '</section>';
     }
+    /* ----- Condición corporal del rodeo: distribución en tres momentos (secado, parto, 30 días) y evolución en la lactancia ----- */
+    // rango óptimo (escala 1 a 5) de multíparas (m) y primíparas (p); 0,25 por debajo o por encima es riesgo, más allá, mucho riesgo
+    var CC_OPT = { secado: { m: [3, 3.5], p: [3.25, 3.75] }, parto: { m: [3, 3.5], p: [3.25, 3.75] }, d30: { m: [2.5, 3], p: [2.75, 3.25] } };
+    function ccClase(v, r) { return v < r[0] - 0.25 - 1e-9 ? 0 : v < r[0] - 1e-9 ? 1 : v <= r[1] + 1e-9 ? 2 : v <= r[1] + 0.25 + 1e-9 ? 3 : 4; }
+    function ccRodeoHTML() {
+      var ref = DB.fecha || today(), desde = A.addDays(ref, -365);
+      var ev = { secado: [], parto: [], d30: [] }, bins = [];
+      var cerca = function (E, f, a, b, ideal) { var c = null; E.forEach(function (x) { var d = A.diffDays(x[0], f); if (d >= a && d <= b && (!c || Math.abs(A.diffDays(x[0], ideal)) < Math.abs(A.diffDays(c[0], ideal)))) c = x; }); return c; };
+      var lista = DB.animales.map(function (a) { return DB.hist[a.rp]; }).concat((DB.bajas || []).map(function (b) { return DB.hist[b.key]; }));
+      var hay = false;
+      lista.forEach(function (h) {
+        if (!h || !h.ech || !h.ech.length || !h.pa) return; hay = true; var E = h.ech;
+        h.pa.forEach(function (p, i) {
+          var np = h.pa[i + 1], sec = p[5];
+          // primípara: la lactancia que empieza en este parto es la primera (también al secarla)
+          var pri = p[1] === 1;
+          if (p[0] >= desde && p[0] <= ref) { var c = cerca(E, p[0], -21, 10, p[0]); if (c) ev.parto.push([c[1], pri]); }
+          var f30 = A.addDays(p[0], 30);
+          if (f30 >= desde && f30 <= ref) { var c3 = cerca(E, p[0], 20, 45, f30); if (c3) ev.d30.push([c3[1], pri]); }
+          if (sec && sec >= desde && sec <= ref) { var cs = cerca(E, sec, -21, 21, sec); if (cs) ev.secado.push([cs[1], pri]); }
+          // evolución: cada registro de los últimos 12 meses ubicado en su lactancia (por días en leche), o en el período seco
+          E.forEach(function (x) {
+            if (x[0] < desde || x[0] < p[0] || (np && x[0] >= np[0])) return;
+            var k = sec && x[0] >= sec ? 'seca' : Math.min(10, Math.floor(A.diffDays(x[0], p[0]) / 30));
+            (bins[k] = bins[k] || []).push(x[1]);
+          });
+        });
+      });
+      if (!hay) return '';
+      var cc = function (v) { return Number(v).toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var COL = ['var(--vacia)', '#D9A21B', 'var(--prenada)', '#D9A21B', 'var(--vacia)'];
+      var barra = function (tit, L, R) {
+        if (L.length < 5) return '<div class="ccrow"><div class="cct"><b>' + tit + '</b><small>sin datos suficientes</small></div></div>';
+        var n = [0, 0, 0, 0, 0]; L.forEach(function (x) { n[ccClase(x[0], x[1] ? R.p : R.m)]++; });
+        var seg = n.map(function (c, k) { var pc = c / L.length * 100; return c ? '<span style="width:' + pc.toFixed(1) + '%;background:' + COL[k] + '">' + (pc >= 9 ? Math.round(pc) + '%' : '') + '</span>' : ''; }).join('');
+        var ok = Math.round(n[2] / L.length * 100);
+        var np_ = L.filter(function (x) { return x[1]; }).length;
+        return '<div class="ccrow"><div class="cct"><b>' + tit + '</b><small>' + L.length + ' vacas (' + np_ + (np_ === 1 ? ' primípara' : ' primíparas') + ')</small><em>' + ok + '% óptima</em></div><div class="ccbar">' + seg + '</div>' +
+          '<p class="ccopt">Óptima: multíparas ' + cc(R.m[0]) + ' a ' + cc(R.m[1]) + ' · primíparas ' + cc(R.p[0]) + ' a ' + cc(R.p[1]) + '</p></div>';
+      };
+      // evolución en la lactancia: promedio y mitad central (25 a 75%) por tramo de 30 días
+      var q = function (l, f) { var a = l.slice().sort(function (x, y) { return x - y; }), i = (a.length - 1) * f, lo = Math.floor(i); return a[lo] + (a[Math.ceil(i)] - a[lo]) * (i - lo); };
+      var pts = []; for (var k = 0; k <= 10; k++) if (bins[k] && bins[k].length >= 5) pts.push({ x: k, lbl: k === 10 ? '300+' : String(k * 30), v: q(bins[k], 0.5), a: q(bins[k], 0.25), b: q(bins[k], 0.75), n: bins[k].length });
+      if (bins.seca && bins.seca.length >= 5) pts.push({ x: 11, lbl: 'seca', v: q(bins.seca, 0.5), a: q(bins.seca, 0.25), b: q(bins.seca, 0.75), n: bins.seca.length });
+      var linea = '';
+      if (pts.length >= 3) {
+        var W = 320, H = 170, ml = 30, mr = 14, mt = 18, mb = 24, lo = 2, hi = 4;
+        var X = function (x) { return ml + x / 11 * (W - ml - mr); }, Y = function (v) { return mt + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (H - mt - mb); };
+        var g = '';
+        for (var v = lo; v <= hi + 1e-9; v += 0.5) g += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 4) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + String(v).replace('.', ',') + '</text>';
+        g += '<polygon fill="var(--bar)" opacity=".35" points="' + pts.map(function (p) { return X(p.x).toFixed(1) + ',' + Y(p.b).toFixed(1); }).concat(pts.slice().reverse().map(function (p) { return X(p.x).toFixed(1) + ',' + Y(p.a).toFixed(1); })).join(' ') + '"/>';
+        g += '<polyline fill="none" stroke="var(--navy)" stroke-width="2.5" stroke-linejoin="round" points="' + pts.map(function (p) { return X(p.x).toFixed(1) + ',' + Y(p.v).toFixed(1); }).join(' ') + '"/>';
+        pts.forEach(function (p) { g += '<circle cx="' + X(p.x).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="3" fill="var(--navy)"><title>' + p.lbl + ': ' + cc(p.v) + ' (' + p.n + ' registros)</title></circle><text class="val" x="' + X(p.x).toFixed(1) + '" y="' + (Y(p.v) - 7).toFixed(1) + '" text-anchor="middle" style="font-size:9px">' + cc(p.v) + '</text>'; });
+        [0, 2, 4, 6, 8, 10].forEach(function (x) { g += '<text class="mlbl" x="' + X(x).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (x ? 'middle' : 'start') + '">' + x * 30 + '</text>'; });
+        g += '<text class="mlbl" x="' + X(11).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">seca</text>';
+        linea = '<h3 class="cch3">A lo largo de la lactancia</h3><svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Condición corporal según los días en leche">' + g + '</svg>' +
+          '<p class="cap">Línea: valor del medio de cada tramo de 30 días en leche; franja: la mitad de las vacas (del 25 al 75%). Registros de los últimos 12 meses.</p>';
+      }
+      if (!document.getElementById('ccCss')) { var st = document.createElement('style'); st.id = 'ccCss'; st.textContent = '.ccrow{margin:12px 0 14px}.cct{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}.cct b{font-size:15px}.cct small{font-size:12.5px;color:var(--muted);flex:1}.cct em{font-style:normal;font-weight:700;font-size:13px;color:var(--prenada)}.ccbar{display:flex;height:26px;border-radius:8px;overflow:hidden;background:var(--bg)}.ccbar span{display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;min-width:0}.ccleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);margin:4px 0 2px}.ccleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.cch3{font-size:15px;margin:18px 0 4px}.ccopt{margin:5px 0 0;font-size:12px;color:var(--muted)}'; document.head.appendChild(st); }
+      return '<section class="card"><h2>Condición corporal</h2>' +
+        '<div class="ccleg"><span><i style="background:var(--vacia)"></i>Muy flaca / muy gorda</span><span><i style="background:#D9A21B"></i>Flaca / gorda</span><span><i style="background:var(--prenada)"></i>Óptima</span></div>' +
+        barra('Al secado', ev.secado, CC_OPT.secado) + barra('Al parto', ev.parto, CC_OPT.parto) + barra('A los 30 días', ev.d30, CC_OPT.d30) +
+        '<p class="cap">En cada barra, de izquierda a derecha: de más flaca a más gorda. Cada vaca se compara con el óptimo de su categoría; 0,25 fuera del óptimo es riesgo (amarillo) y más allá, mucho riesgo (rojo). Eventos de los últimos 12 meses con condición registrada cerca (secado ±21 días, parto de 21 días antes a 10 después, entre 20 y 45 días en leche).</p>' + linea + '</section>';
+    }
     /* ----- Preñez: preñez acumulada de la zafra, preñadas a 150 días en leche y cierre de zafra ----- */
-    // preñez de la zafra y zafras cerradas: solo en el modo veterinario
+    // preñez de la zafra y comparar zafras: solo en el modo veterinario
     function prenOK() { return DB.fuente === 'syscaw' && !!DB.hist && !esOperario() && esVet(); }
     // último servicio que cuenta en la zafra: por defecto el 15 de febrero, el productor lo puede cambiar (se guarda día y mes)
     function finMD() { var v = getP('finzaf'); return /^\d{2}-\d{2}$/.test(v || '') ? v : '02-15'; }
@@ -2020,7 +2032,7 @@
       var cf = Z.filter(function (r) { return r.conf; }), Q1 = Q.filter(function (r) { return !r.excl; });
       return {
         n0: Z.length, n: M.length, pren: P.length, vac: M.length - P.length,
-        desc: Z.filter(function (r) { return r.excl === 'desc'; }).length, antes: Z.filter(function (r) { return r.excl === 'antes'; }).length,
+        desc: Z.filter(function (r) { return r.excl === 'desc'; }).length, antes: Z.filter(function (r) { return r.excl === 'antes'; }).length, pase: Z.filter(function (r) { return r.excl === 'pase'; }).length,
         salV: M.filter(function (r) { return !r.conc && r.salida; }).length, pend: M.filter(function (r) { return r.pend; }).length, est: P.filter(function (r) { return r.est; }).length,
         ipps: media(ipps.map(function (r) { return A.diffDays(r.s1, r.p); })), ippsT: media(ippsT.map(function (r) { return A.diffDays(r.s1, r.p); })), nIppsT: ippsT.length,
         ipc: media(P.map(function (r) { return A.diffDays(r.conc, r.p); })), conf: cf.length, perd: cf.filter(function (r) { return r.perd; }).length,
@@ -2031,7 +2043,7 @@
     // % preñadas (confirmadas) y máximo (sumando las servidas sin resultado) a una fecha, sobre las vacas de la zafra ya paridas a esa fecha
     function zafEn(Z, d) {
       var den = 0, num = 0, mx = 0;
-      Z.forEach(function (r) { if (r.excl || r.p > d) return; den++; if (r.conc && r.conc <= d) { num++; mx++; } else if (r.pend && r.ult <= d) mx++; });
+      Z.forEach(function (r) { if (r.excl || (r.ent || r.p) > d) return; den++; if (r.conc && r.conc <= d) { num++; mx++; } else if (r.pend && r.ult <= d) mx++; });
       return { den: den, v: den ? num / den * 100 : null, mx: den ? mx / den * 100 : null, num: num };
     }
     var PZC = { k: null, r: null };
@@ -2039,8 +2051,14 @@
       var ini = inicio21(), pev = pevActual(), ref = DB.fecha || today(), fin = finZaf(ini);
       var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + DB.animales.length + '|' + ini + '|' + pev + '|' + fin + '|' + ref;
       if (PZC.k === k) return PZC.r;
-      var an = DB.animales.map(function (a) { return { rp: a.rp, h: DB.hist[a.rp], salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }; })
-        .concat((DB.bajas || []).map(function (b) { return { rp: b.rp, h: DB.hist[b.key], salida: b.bFecha, desc: b.dFecha || null }; }));
+      // con una o algunas unidades elegidas: todos los animales del respaldo, cada uno contado en la unidad donde estaba en cada fecha (pases)
+      var porU = !!(DB.sel && DB.sel.length && DB.todos);
+      var conU = function (o, a, h) {
+        if (porU && h) { var xx = { a: a, h: h }; o.uEn = function (D) { return enSel(unidadEn(xx, D)); }; o.cambios = (h.mv || []).map(function (m) { return m[0]; }); }
+        return o;
+      };
+      var an = (porU ? DB.todos : DB.animales).map(function (a) { var h = DB.hist[a.rp]; return conU({ rp: a.rp, h: h, salida: null, desc: a.dFecha || (a.rech ? '0000' : null) }, a, h); })
+        .concat(((porU ? DB.bajasT : DB.bajas) || []).map(function (b) { var h = DB.hist[b.key]; return conU({ rp: b.rp, h: h, salida: b.bFecha, desc: b.dFecha || null }, b, h); }));
       var desde = DB.desdeHist || '0000', Zs = [];
       // zafra actual y hasta dos anteriores (con historial completo; si no, la foto guardada al cerrarla)
       var guard = {}; try { guard = JSON.parse(getP('zafras') || '{}') || {}; } catch (e) { guard = {}; }
@@ -2109,11 +2127,11 @@
         ant150 = Qp.length ? Qp.filter(function (r) { return r.ok; }).length / Qp.length * 100 : null;
       }
       var flecha = function (a, b) { if (a == null || b == null) return ''; var d = Math.round(a) - Math.round(b); return d > 0 ? ' ▲' + d : d < 0 ? ' ▼' + (-d) : ' ='; };
-      var exN = R.desc + R.antes;
+      var exN = R.desc + R.antes + (R.pase || 0);
       var kpis = '<div class="kpis"><div class="tp"><b>' + (hoy.v == null ? '–' : Math.round(hoy.v) + '%') + '</b><span>Preñez acumulada</span><small>' +
         (hoy.mx != null && Math.round(hoy.mx) > Math.round(hoy.v) ? 'hasta ' + Math.round(hoy.mx) + '% con las servidas sin tacto' : hoy.num + ' de ' + hoy.den) + (ant != null ? '<br>año ant. ' + Math.round(ant) + '%' + (hoy.mx - hoy.v <= 5 ? flecha(hoy.v, ant) : '') : '') + '</small></div>' +
         '<div><b>' + p(R.ok150, R.n150) + '</b><span>Preñadas a 150 días en leche</span><small>' + R.ok150 + ' de ' + R.n150 + (R.pend150 ? ' · ' + R.pend150 + ' sin tacto' : '') + (ant150 != null ? '<br>año ant. ' + Math.round(ant150) + '%' + flecha(R.n150 ? R.ok150 / R.n150 * 100 : null, ant150) : '') + '</small></div>' +
-        '<div><b>' + p(exN, R.n0) + '</b><span>Excluidas</span><small>' + R.desc + ' descarte' + (R.antes ? ' · ' + R.antes + ' se fueron antes de la espera' : '') + '</small></div></div>' +
+        '<div><b>' + p(exN, R.n0) + '</b><span>Excluidas</span><small>' + R.desc + ' descarte' + (R.antes ? ' · ' + R.antes + ' se fueron antes de la espera' : '') + (R.pase ? ' · ' + R.pase + ' pasaron vacías a otra unidad' : '') + '</small></div></div>' +
         '<p class="cap">' + (fin < ref ? 'Zafra terminada el ' + A.fmt(fin) : 'Al ' + A.fmt(ref) + ', semana ' + Math.floor(off / 7) + ' de ' + sem) + '. ' + R.n + ' vacas en la zafra' + (R.salV ? '; ' + R.salV + ' se fueron vacías y cuentan como no preñadas' : '') + '.' + (prev ? ' La zafra anterior, al mismo día de servicios.' : '') + '</p>';
       var leg = '<div class="mleg"><span><i class="pz1"></i>' + zafLbl(ini) + '</span><span><i class="pzm"></i>con servidas sin tacto</span>' + (prev ? '<span><i class="pz0"></i>' + zafLbl(prev.ini) + '</span>' : '') + '</div>';
       // vacas con más de 150 días en leche sin preñar, hoy
@@ -2127,13 +2145,15 @@
       // cierre de zafra: de la más vieja a la actual
       var Zc = D.Zs.slice().reverse();
       var fila = function (tit, f) { return '<tr><td>' + tit + '</td>' + Zc.map(function (z) { return '<td>' + f(z.R, z) + '</td>'; }).join('') + '</tr>'; };
-      var card2 = '<section class="card"><h2>Zafras cerradas</h2>' +
+      var card2 = '<section class="card"><h2>Comparar zafras</h2>' +
         '<table class="tbl rtbl pztbl"><thead><tr><th></th>' + Zc.map(function (z) { return '<th>' + z.lbl + '</th>'; }).join('') + '</tr></thead><tbody>' +
         '<tr class="pzest"><td>Estado</td>' + Zc.map(function (z) { return '<td>' + z.estado + '</td>'; }).join('') + '</tr>' +
         fila('Vacas en la zafra', function (R) { return nf(R.n); }) +
-        fila('<b>Preñez total</b>', function (R) { return '<b>' + p(R.pren, R.n) + '</b><small>' + R.pren + ' de ' + R.n + '</small>'; }) +
-        fila('Vacías', function (R) { return nf(R.vac) + (R.salV ? '<small>' + R.salV + ' se fueron</small>' : ''); }) +
-        fila('Excluidas', function (R) { return p(R.desc + R.antes, R.n0) + '<small>' + (R.desc + R.antes) + '</small>'; }) +
+        // en una zafra abierta, las servidas sin tacto no son vacías: van aparte (y la preñez muestra hasta dónde puede llegar)
+        fila('<b>Preñez total</b>', function (R) { return '<b>' + p(R.pren, R.n) + '</b><small>' + R.pren + ' de ' + R.n + '</small>' + (R.pend > R.n * 0.05 ? '<small>hasta ' + p(R.pren + R.pend, R.n) + '</small>' : ''); }) +
+        fila('No preñadas', function (R) { var v = R.vac - (R.pend || 0); return nf(v) + (R.salV ? '<small>' + R.salV + ' se fueron</small>' : ''); }) +
+        (Zc.some(function (z) { return z.R.pend; }) ? fila('Servidas sin tacto', function (R) { return nf(R.pend || 0); }) : '') +
+        fila('Excluidas', function (R) { var e = R.desc + R.antes + (R.pase || 0); return p(e, R.n0) + '<small>' + e + '</small>'; }) +
         fila('Concepción de la zafra', function (R) { return R.sRes == null ? '–' : p(R.sOk, R.sRes) + '<small>' + R.sOk + ' de ' + R.sRes + ' serv.</small>'; }) +
         fila('Preñadas a 150 días en leche', function (R) { return p(R.ok150, R.n150); }) +
         fila('Parto – 1er servicio (días)', function (R) { return dias(R.ipps) + '<small>en zafra ' + dias(R.ippsT) + '</small>'; }) +
@@ -2143,7 +2163,7 @@
         '<p class="cap"><b>En curso</b> hasta el último servicio que cuenta; <b>provisoria</b> mientras falten tactar servicios; <b>cerrada</b> cuando no quedan servicios sin tacto (o son menos del 5%) y pasaron 35 días del fin. Al cerrarse, sus números se guardan fijos. La pérdida de preñez sigue sumando hasta el parto. ' +
           '<b>Vacas en la zafra:</b> vacas con al menos un parto, en el rodeo al inicio de servicios o paridas después, no preñadas al inicio y paridas al menos ' + pev + ' días (espera voluntaria) antes del último servicio que cuenta. Las vaquillonas entran cuando paren. ' +
           '<b>Preñez acumulada:</b> preñadas por tacto (o por el parto siguiente), ubicadas en la fecha del servicio que las preñó, sobre las vacas de la zafra ya paridas a esa fecha. La línea punteada suma las servidas que todavía no tienen tacto ni repitieron: es lo máximo que puede dar. ' +
-          '<b>Excluidas:</b> marcadas como descarte programado antes del fin de la zafra sin haberse preñado, y las que se fueron antes de cumplir la espera voluntaria. Las que se fueron (venta o muerte) vacías después de la espera cuentan como no preñadas. ' +
+          '<b>Excluidas:</b> marcadas como descarte programado antes del fin de la zafra sin haberse preñado, las que se fueron antes de cumplir la espera voluntaria y, con varias unidades, las que pasaron vacías a otra unidad (cada vaca cuenta en la unidad donde estaba en cada fecha). Las que se fueron (venta o muerte) vacías después de la espera cuentan como no preñadas. ' +
           '<b>Preñadas a 150 días en leche:</b> vacas que cumplieron 150 días en leche en la zafra y se preñaron antes. ' +
           '<b>Parto – 1er servicio:</b> promedio de todas; las paridas antes del inicio esperan a que empiecen los servicios, por eso se muestra aparte el de las paridas dentro de la zafra. ' +
           '<b>Parto – concepción:</b> solo de las preñadas; leelo junto con las vacías. ' +
@@ -2263,9 +2283,18 @@
     /* toros o inseminadores que repiten más que el resto: 20 servicios o más, concepción máxima más de 10 puntos por debajo
        del resto (con 20 servicios o más) y una diferencia que no se explica por casualidad (prueba de dos proporciones, 95%).
        "El resto" son los que andan normal: se marca el peor, se lo saca del resto y se vuelve a comparar, así un toro malo no
-       tapa a otro; la prueba estadística frena el corte cuando ya no hay diferencias reales. Devuelve { nombre: { mx, rmx, n } } */
+       tapa a otro; la prueba estadística frena el corte cuando ya no hay diferencias reales. Devuelve { nombre: { mx, rmx, n } }
+       Además: nunca es aviso una concepción máxima de 50% o más (es buena aunque otro ande mejor), y los toros que parecen de
+       monta (servicio anotado a la preñez: concepción de 85% o más con 10 servicios con resultado) no entran en la comparación. */
+    var CONC_OK = 50;
+    function probMonta(svs) {
+      var G = {}; svs.forEach(function (s) { var k = String(s.toro || '').trim(); if (!k) return; var g = G[k] || (G[k] = { ok: 0, mal: 0 }); if (s.r !== 'pend') g[s.r]++; });
+      var M = {}; Object.keys(G).forEach(function (k) { var g = G[k], d = g.ok + g.mal; if (d >= 10 && g.ok / d >= 0.85) M[k] = Math.round(g.ok / d * 100); });
+      return M;
+    }
     function repitenMas(svs, campo) {
-      var G = {}; svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k) return; var g = G[k] || (G[k] = { ok: 0, pend: 0, mal: 0 }); g[s.r]++; });
+      var mon = campo === 'toro' ? probMonta(svs) : {};
+      var G = {}; svs.forEach(function (s) { var k = String(s[campo] || '').trim(); if (!k || mon[k] != null) return; var g = G[k] || (G[k] = { ok: 0, pend: 0, mal: 0 }); g[s.r]++; });
       var malos = {}, sigue = true;
       while (sigue) {
         sigue = false; var peor = null;
@@ -2274,7 +2303,7 @@
           if (malos[k]) return; var g = G[k], n = g.ok + g.pend + g.mal, rn = R.ok + R.pend + R.mal - n; if (n < 20 || rn < 20) return;
           var x1 = g.ok + g.pend, x2 = R.ok - g.ok + R.pend - g.pend, mx = x1 / n * 100, rmx = x2 / rn * 100;
           var pp = (x1 + x2) / (n + rn), se = Math.sqrt(pp * (1 - pp) * (1 / n + 1 / rn)), z = se > 0 ? (x2 / rn - x1 / n) / se : 0;
-          if (mx < rmx - 10 && z >= 1.96 && (!peor || mx - rmx < peor.mx - peor.rmx)) peor = { k: k, mx: mx, rmx: rmx, n: n };
+          if (mx < CONC_OK && mx < rmx - 10 && z >= 1.96 && (!peor || mx - rmx < peor.mx - peor.rmx)) peor = { k: k, mx: mx, rmx: rmx, n: n };
         });
         if (peor) { malos[peor.k] = peor; sigue = true; }
       }
@@ -2308,7 +2337,8 @@
       return '<div class="tibox">' + cab +
         '<h3 class="vh3">Por toro</h3>' + tabla('toro', 'Toro', 'Sin dato de toro') +
         '<h3 class="vh3">Por inseminador</h3>' + tabla('ins', 'Inseminador', 'Sin dato de inseminador') + avisos.join('') +
-        '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
+        (function () { var M = probMonta(svs), k = Object.keys(M); return k.length ? '<p class="cap">' + k.map(function (t) { return '<b>' + esc(t) + '</b> (' + M[t] + '%)'; }).join(', ') + (k.length === 1 ? ' parece un toro de monta' : ' parecen toros de monta') + ' (servicio anotado a la preñez): no se usa' + (k.length === 1 ? '' : 'n') + ' para comparar.</p>' : ''; })() +
+        '<p class="cap">Concepción: servicios que preñaron / servicios con resultado. Conc. máx.: contando como preñadas las que no repitieron. Solo se avisa si la concepción máxima es menor a ' + CONC_OK + '% y claramente peor que el resto. Con pocos servicios (menos de 20) la diferencia puede ser casualidad.</p></div>';
     }
     function torosHTML(svs) {
       var grupo = function (campo, quien) {
@@ -2517,12 +2547,12 @@
         (despues ? '<p class="cap">Además, ' + despues + ' después de ese período.</p>' : '') + '</section>';
       // orden: lo que pasó (partos, ordeñe y secas), lo que viene (partos, rodeo), y después índice, reproducción y línea de vida
       // agrupadas por tema; un grupo sin tarjetas no muestra su título
-      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p>' + html : ''; };
+      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
         grp('Lo que pasó', partosOcHTML() + vovsHTML()) +
         grp('Lo que viene', probables + proyHTML()) +
         grp('Reproducción', repHTML() + (prenOK() ? prenHTML() : '')) +
-        grp('El rodeo', idxCardHTML() + vidaHTML());
+        grp('El rodeo', idxCardHTML() + (prenOK() ? ccRodeoHTML() : '') + vidaHTML());
     }
     function rodeoHTML() {
       if (state.cat === 'pren') state.cat = 'todas';
@@ -2540,13 +2570,13 @@
       var rod = r.rodeos.length > 1 ? '<section class="card"><h2>Por rodeo</h2><table class="tbl"><thead><tr><th>Rodeo</th><th>' + GL[state.cat] + '</th><th>Preñadas</th></tr></thead><tbody>' + r.rodeos.map(function (x) {
         return '<tr><td>' + esc(x.rod) + '</td><td>' + x.n + '</td><td>' + x.pren + ' <small>' + pct(x.pren, x.n) + '</small></td></tr>';
       }).join('') + '</tbody></table></section>' : '';
-      var aviso = '';
+      // cada categoría muestra solo lo suyo; lo que es de todo el rodeo (partos por mes, ordeñe y secas, índice) queda en Todas.
+      // mismo formato que Todas: grupos con título y tarjetas plegables en una lista
+      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        '<section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
-        (state.cat === 'ternera' ? '' : '<section class="card"><h2>Proyección de partos</h2>' + mesesChart(r.meses) + '<p class="cap">Los meses en blanco todavía dependen de vacas sin tacto; se completan con los próximos respaldos.</p>' + aviso + (r.despues ? '<p class="cap">Además, ' + r.despues + ' después de ese período.</p>' : '') + '</section>') +
-        (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod +
-        (state.cat === 'vaca' || state.cat === 'seca' ? vovsHTML() + idxCardHTML() : '') +
-        (state.cat === 'vaquillona' ? vaqHTML() : '');
+        '<p class="grp">Estado</p><section class="card fijo"><h2>' + nf(r.total) + ' ' + nombreGrupo(r.total) + '</h2><div class="comp" role="img" aria-label="Composición del rodeo por estado">' + seg + '</div><div class="legend">' + leg + '</div></section>' +
+        (state.cat === 'vaquillona' ? grp('Reproducción', vaqHTML()) : '') +
+        grp('El rodeo', (r.leche != null ? '<section class="card"><h2>Producción</h2>' + kv([['Litros por vaca, último control', nf(r.leche, 1) + ' lts'], ['Vacas con control lechero', nf(r.nLeche)], ['Días en lactancia, promedio', r.dLac != null ? nf(r.dLac) : null]]) + '</section>' : '') + rod);
     }
 
     /* ----- ficha ----- */
@@ -2718,7 +2748,7 @@
     function ctrlChart(ct) {
       var pts = ct.filter(function (c) { return c[1] != null; });
       if (pts.length < 2) return '';
-      var W = 300, H = 130, L = 26, Rr = 40, T = 10, B = 22, n = pts.length;
+      var W = 300, H = 140, L = 26, Rr = 40, T = 20, B = 22, n = pts.length;
       var maxL = Math.max.apply(null, pts.map(function (c) { return c[1]; })) * 1.1;
       var csv = pts.map(function (c) { return c[4]; }).filter(function (v) { return v != null; });
       var maxC = Math.max(400, csv.length ? Math.max.apply(null, csv) * 1.1 : 0);
@@ -2732,9 +2762,10 @@
       pts.forEach(function (c, i) {
         var x = X(i), y = Y(c[1]);
         s += '<rect class="bar' + (i === n - 1 ? ' last' : '') + '" x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (H - B - y).toFixed(1) + '" rx="2"><title>' + A.fmt(c[0]) + ': ' + c[1] + ' lts</title></rect>';
+        // litros arriba de cada barra (con muchos controles, la letra se achica para que no se pisen)
+        s += '<text class="val" x="' + x.toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle"' + (n > 8 ? ' style="font-size:' + (n > 10 ? 8.5 : 9.5) + 'px"' : '') + '>' + nf(c[1], c[1] >= 100 ? 0 : 1) + '</text>';
         if (i === 0 || i === n - 1 || n <= 8) s += '<text class="lbl" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + c[0].slice(8, 10) + '/' + c[0].slice(5, 7) + '</text>';
       });
-      s += '<text class="lbl" x="' + (L - 4) + '" y="' + (Y(maxL / 1.1) + 3).toFixed(1) + '" text-anchor="end">' + Math.round(maxL / 1.1) + '</text>';
       var cp = pts.map(function (c, i) { return c[4] != null ? [X(i), YC(Math.min(c[4], maxC))] : null; }).filter(Boolean);
       if (cp.length > 1) s += '<polyline class="cs" points="' + cp.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
       cp.forEach(function (p) { s += '<circle class="csd" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.6"/>'; });
@@ -2756,6 +2787,26 @@
       if (cur.length) out += ctrlChart(cur) + '<div class="scroll"><table class="htbl">' + head + '<tbody>' + rows(cur) + '</tbody></table></div>';
       if (prev.length) out += '<details class="lac"><summary><span class="l"><b>Lactancia anterior</b></span><small>' + prev.length + ' controles</small></summary><div class="scroll"><table class="htbl">' + head + '<tbody>' + rows(prev) + '</tbody></table></div></details>';
       return out;
+    }
+    // condición corporal de la vaca: evolución (con los partos marcados) y los últimos registros
+    function ccHTML(h) {
+      var L = h.ech && h.ech.length ? h.ech : (h.ec ? [h.ec] : []);
+      if (!L.length) return '';
+      var cc = function (v) { return Number(v).toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      var del = function (f) { var p = null; h.pa.forEach(function (q) { if (q[0] <= f) p = q[0]; }); return p ? A.diffDays(f, p) : null; };
+      var g = '';
+      if (L.length > 1) {
+        var W = 300, H = 130, ml = 26, mr = 10, mt = 18, mb = 20, f0 = L[0][0], f1 = L[L.length - 1][0], span = Math.max(1, A.diffDays(f1, f0));
+        var lo = Math.min(2, Math.floor(Math.min.apply(null, L.map(function (x) { return x[1]; })) * 2) / 2), hi = Math.max(4, Math.ceil(Math.max.apply(null, L.map(function (x) { return x[1]; })) * 2) / 2);
+        var X = function (f) { return ml + A.diffDays(f, f0) / span * (W - ml - mr); }, Y = function (v) { return mt + (1 - (v - lo) / (hi - lo)) * (H - mt - mb); };
+        for (var v = lo; v <= hi + 1e-9; v += 0.5) g += '<line class="lgrid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="mlbl" x="' + (ml - 4) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + (v % 1 ? v.toFixed(1).replace('.', ',') : v) + '</text>';
+        h.pa.forEach(function (p) { if (p[0] < f0 || p[0] > f1) return; var x = X(p[0]).toFixed(1); g += '<line x1="' + x + '" x2="' + x + '" y1="' + mt + '" y2="' + (H - mb) + '" stroke="var(--gold)" stroke-dasharray="3 3"/><text class="mlbl" x="' + x + '" y="' + (H - 6) + '" text-anchor="middle">parto</text>'; });
+        g += '<polyline fill="none" stroke="var(--navy)" stroke-width="2" stroke-linejoin="round" points="' + L.map(function (x) { return X(x[0]).toFixed(1) + ',' + Y(x[1]).toFixed(1); }).join(' ') + '"/>';
+        L.forEach(function (x, i) { g += '<circle cx="' + X(x[0]).toFixed(1) + '" cy="' + Y(x[1]).toFixed(1) + '" r="3" fill="var(--navy)"/>' + (L.length <= 10 || i === L.length - 1 ? '<text class="val" x="' + X(x[0]).toFixed(1) + '" y="' + (Y(x[1]) - 6).toFixed(1) + '" text-anchor="middle" style="font-size:9.5px">' + cc(x[1]) + '</text>' : ''); });
+        g = '<svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Condición corporal en el tiempo">' + g + '</svg>';
+      }
+      var filas = L.slice(-8).reverse().map(function (x) { var d = del(x[0]); return '<tr><td>' + A.fmt(x[0]) + '</td><td><b>' + cc(x[1]) + '</b></td><td>' + (d != null ? d : '–') + '</td></tr>'; }).join('');
+      return '<section class="card"><h2>Condición corporal</h2>' + g + '<div class="scroll"><table class="htbl"><thead><tr><th>Fecha</th><th>Condición</th><th>Días en leche</th></tr></thead><tbody>' + filas + '</tbody></table></div></section>';
     }
     function lactHTML(h) {
       if (!h.la.length) return '';
@@ -2784,7 +2835,7 @@
           ['Último tacto', lt ? A.fmt(lt[0]) + (codes[lt[1]] ? ' <small>' + esc(codes[lt[1]][0]) + '</small>' : '') : null]
         ])) +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + bars(h.ct.slice(-10).reverse().map(function (c) { return c[1]; })) + '</section>' : '') +
-        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') + ccHTML(h) : '') +
         (h && h.corto ? '<p class="hint">Baja de hace más de 2 años: la app guarda solo los datos básicos. El historial completo está en ' + SRC() + '.</p>' : h && h.ult && h.pa.length ? '<p class="hint">De las bajas se guardan los últimos 2 años. El historial completo está en SysCaw.</p>' : '') +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null]], 'kvs') + '</section>' +
         '<p class="src">' + SRCbase().replace(/^./, function (c) { return c.toUpperCase(); }) + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>';
@@ -2825,7 +2876,7 @@
         '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (repetidora(a) ? SELLO_REP : '') + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
-        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') : '') +
+        (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') + ccHTML(h) : '') +
         idxFichaHTML(a) +
         '<section class="card"><h2>Identificación</h2>' + kv([['RP', esc(a.rp)], ['Origen', esc(a.nombre)], ['Id electrónica', esc(a.idElec)], ['Nacimiento', h && h.fn ? A.fmt(h.fn) : null], ['Edad al primer parto', h && h.fn && h.pa.length && h.pa[0][1] === 1 ? nf(A.diffDays(h.pa[0][0], h.fn) / 30.44, 1) + ' meses' : null], ['Madre (RP)', madre], ['Padre', h && h.pd ? esc(h.pd) : null], ['Rodeo', esc(a.rod)]], 'kvs') + '</section>' +
         (h ? '<p class="src">Historial ' + (externo(DB.origen) ? 'de la ' : 'del ') + SRCbase() + (DB.fecha ? ' del ' + A.fmt(DB.fecha) : '') + '</p>' : '');
@@ -2842,8 +2893,9 @@
       if (!document.getElementById('shCss')) { var st = document.createElement('style'); st.id = 'shCss'; st.textContent = '.shbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin-top:12px;border:1.5px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font:inherit;font-size:15px;font-weight:700;cursor:pointer}.shopt{display:flex;align-items:center;gap:10px;font-weight:600;margin:4px 0 12px}.shopt input{width:22px;height:22px}'; document.head.appendChild(st); }
       var ico = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
-        if (!sec.querySelector('h2') || sec.querySelector('.shbtn')) return;
-        sec.insertAdjacentHTML('beforeend', '<button class="shbtn" data-a="cardimg">' + ico + 'Compartir</button>');
+        if (!sec.querySelector('h2') || sec.querySelector('.shic')) return;
+        sec.classList.add('consh');
+        sec.insertAdjacentHTML('afterbegin', '<button class="shic" data-a="cardimg" aria-label="Compartir como imagen" title="Compartir">' + ico + '</button>');
       });
       var pan = main.querySelector('.panel');
       if (pan && !main.querySelector('.shbtn')) pan.insertAdjacentHTML('afterend', '<button class="shbtn" data-a="panelimg">' + ico + 'Compartir resumen de visita</button>');
@@ -2889,7 +2941,7 @@
     function shLimpio(sec) {
       var c = sec.cloneNode(true);
       c.classList.add('open'); c.style.cssText = 'border:0;padding:0;margin:0;background:transparent;box-shadow:none';
-      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2,.clclave'), function (x) { x.remove(); });
+      Array.prototype.forEach.call(c.querySelectorAll('.shbtn,.shic,.pdesc,.chev,details.nota,.despbtn,.insbtns,.filters,.secfecha,button.lnk,p.cap,.ralhint,h2,.clclave'), function (x) { x.remove(); });
       Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
       return c;
     }
@@ -2953,13 +3005,42 @@
       var pc = pan.cloneNode(true); pc.style.marginTop = '10px'; d.appendChild(pc);
       shMandar([shHoja('Resumen de visita', 'Visita del ' + A.fmt(today()), '', d, 500)], 'Resumen de visita');
     }
-    function plegarFicha(main) {
+    // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
+    var DESC = {
+      'Partos': 'Vacas y vaquillonas, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
+      'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
+      'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
+      'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
+      'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
+      'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
+      'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas',
+      'venta': 'Las que cumplen tu criterio de venta', 'insem': 'Liquidación por número de servicio'
+    };
+    // en la ficha de la vaca las tarjetas tienen su propia descripción
+    var DESC_FICHA = {
+      'Control lechero': 'Litros de los últimos controles', 'Lactancias': 'Litros y sólidos de cada lactancia',
+      'Historial reproductivo': 'Partos, servicios y tactos', 'Índice del tambo': 'Su lugar entre las vacas del tambo',
+      'Identificación': 'Caravana, nacimiento y origen', 'Condición corporal': 'Cómo fue cambiando, con los partos marcados'
+    };
+    function descDe(k, ficha) {
+      if (ficha) return DESC_FICHA[k] || '';
+      if (k === 'tactar' || k === 'tactarvq') return 'Servidas hace ' + A.DX_MIN + ' días o más, sin tacto';
+      if (/^Preñez de la zafra/.test(k)) return 'Preñez acumulada contra la zafra anterior';
+      if (/^La vaca /.test(k)) return 'La línea de vida del tambo';
+      return DESC[k] || '';
+    }
+    function plegarFicha(main, ficha) {
       Array.prototype.forEach.call(main.querySelectorAll('section.card'), function (sec) {
         if (sec.classList.contains('datos') || sec.classList.contains('fijo')) return;
         var h2 = sec.querySelector('h2'); if (!h2) return;
         var head = h2.parentNode === sec ? h2 : h2.closest('.ixhead') || h2;
         if (head.parentNode !== sec) return;
-        var key = h2.textContent.split(' · ')[0].trim();
+        var key = h2.textContent.split(' · ')[0].trim(), ds = descDe(key, ficha);
+        // título + descripción en un bloque: el título sigue siendo el h2 de siempre
+        if (head === h2) { var w = document.createElement('div'); sec.insertBefore(w, h2); var tb = document.createElement('div'); tb.className = 'pttl'; tb.appendChild(h2); w.appendChild(tb); head = w; }
+        // índice: el título y la descripción quedan juntos, a la izquierda del número
+        if (head !== h2 && !head.querySelector('.pttl')) { var tb2 = document.createElement('div'); tb2.className = 'pttl'; head.insertBefore(tb2, h2); tb2.appendChild(h2); }
+        if (ds) head.querySelector('.pttl').insertAdjacentHTML('beforeend', '<small class="pdesc">' + esc(ds) + '</small>');
         sec.classList.add('plg'); if (FICHA_AB[key]) sec.classList.add('open');
         head.classList.add('plgh'); head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0'); head.setAttribute('aria-expanded', !!FICHA_AB[key]); head.dataset.plg = key;
         head.insertAdjacentHTML('beforeend', '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>');
@@ -2967,6 +3048,14 @@
     }
 
     // las explicaciones largas (cómo se calcula cada cosa) quedan plegadas detrás de un botón
+    function agruparPlegadas(main) {
+      var cards = Array.prototype.filter.call(main.children, function (c) { return c.matches && c.matches('section.card.plg'); });
+      var grupo = null, prev = null;
+      cards.forEach(function (c) {
+        if (!grupo || c.previousElementSibling !== prev) { grupo = document.createElement('div'); grupo.className = 'glist'; c.parentNode.insertBefore(grupo, c); }
+        grupo.appendChild(c); prev = grupo;
+      });
+    }
     function plegarNotas(main) {
       Array.prototype.forEach.call(main.querySelectorAll('p.cap'), function (p) {
         if (p.closest('details.nota') || p.textContent.length < 160) return;
@@ -3190,16 +3279,16 @@
     }
     function lecheHTML() {
       var C = controlLechero(), V = C.V;
-      if (!V.length) return '<h1 class="ptitle">Leche</h1>' + curvasHTML() + (evolHTML() || '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>');
+      if (!V.length) { var ev0 = evolHTML() + curvasHTML(); return '<h1 class="ptitle">Leche</h1>' + (evolHTML() ? '<p class="grp">Evolución</p><div class="glist">' + ev0 + '</div>' : curvasHTML() + '<section class="card"><p class="hint" style="margin:0">Este respaldo no trae controles lecheros.</p></section>'); }
       var lt = prom(V, function (v) { return v.lt; }), sol = prom(V, function (v) { return v.sol; });
       var conPrev = V.filter(function (v) { return v.prev && v.prev[1] > 0; });
       var dif = conPrev.length ? prom(conPrev, function (v) { return v.lt - v.prev[1]; }) : null;
-      var res = '<section class="card fijo"><h2>' + (C.fecha ? 'Control del ' + A.fmt(C.fecha) : 'Último control') + '</h2>' + kv([
-        ['Vacas controladas', nf(V.length)],
-        ['Litros por vaca', nf(lt, 1) + ' L' + (dif != null ? ' <small class="' + (dif >= 0 ? 'up' : 'dn') + '">' + (dif >= 0 ? '+' : '−') + nf(Math.abs(dif), 1) + ' L vs ' + A.fmt(C.ant) + '</small>' : '')],
-        ['Sólidos por vaca', sol != null ? nf(sol, 2) + ' kg <small>' + nf(prom(V, function (v) { return v.sol != null ? v.g : null; }), 2) + '% G · ' + nf(prom(V, function (v) { return v.sol != null ? v.p : null; }), 2) + '% P</small>' : null],
-        ['Días en leche, promedio', nf(prom(V, function (v) { return v.del; }))]
-      ]) + '</section>';
+      var cuadro = function (n, l, x) { return '<div><b>' + n + '</b><span>' + l + '</span>' + (x ? '<small>' + x + '</small>' : '') + '</div>'; };
+      var res = '<section class="card fijo ctl"><h2>' + (C.fecha ? 'Control del ' + A.fmt(C.fecha) : 'Último control') + '</h2>' +
+        (C.ant ? '<p class="ctlsub">Comparado con el del ' + A.fmt(C.ant).slice(0, 5) + '</p>' : '') + '<div class="ctlg">' +
+        cuadro(nf(lt, 1) + ' L', 'litros por vaca', dif != null ? '<em class="' + (dif >= 0 ? 'up' : 'dn') + '">' + (dif >= 0 ? '+' : '−') + nf(Math.abs(dif), 1) + ' L</em>' : '') +
+        (sol != null ? cuadro(nf(sol, 2) + ' kg', 'sólidos por vaca', nf(prom(V, function (v) { return v.sol != null ? v.g : null; }), 2) + '% G · ' + nf(prom(V, function (v) { return v.sol != null ? v.p : null; }), 2) + '% P') : '') +
+        cuadro(nf(prom(V, function (v) { return v.del; })), 'días en leche, prom.') + cuadro(nf(V.length), 'vacas controladas') + '</div></section>';
       var grupo = function (l) { return '<td>' + nf(l.length) + '</td><td>' + nf(prom(l, function (v) { return v.lt; }), 1) + '</td><td>' + (sol != null ? nf(prom(l, function (v) { return v.sol; }), 2) : '–') + '</td>'; };
       var filas = [['1ª lactancia', function (v) { return v.n === 1; }], ['2ª lactancia', function (v) { return v.n === 2; }], ['3ª o más', function (v) { return v.n >= 3; }], ['0 a 100 días', function (v) { return v.del <= 100; }], ['101 a 200 días', function (v) { return v.del > 100 && v.del <= 200; }], ['Más de 200 días', function (v) { return v.del > 200; }]].map(function (f, i) {
         var l = V.filter(f[1]); return l.length ? '<tr' + (i === 3 ? ' class="sep"' : '') + '><td>' + f[0] + '</td>' + grupo(l) + '</tr>' : '';
@@ -3215,7 +3304,8 @@
           return rowHTML(v.a, { right: '<span class="when ' + (d != null && d < 0 ? 'late' : 'ok') + '">' + nf(v.lt, 1) + ' L</span>',
             sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
         }).join('') + '</section>';
-      return '<h1 class="ptitle">Leche</h1>' + res + evolHTML() + curvasHTML() + top5 + tabla + caida;
+      var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
+      return '<h1 class="ptitle">Leche</h1>' + res + grp('Evolución', evolHTML() + curvasHTML()) + grp('Las vacas', top5 + caida + tabla);
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
@@ -3390,7 +3480,7 @@
       });
     }
     function linkDatos() {
-      var fos = DB.origen === 'fosapp' || DB.origen === 'dhm';
+      var fos = soloLink(DB.origen);
       if (externo(DB.origen) && !fos) { toast('Los tambos de ' + SRC() + ' son solo para el modo veterinario.'); return; }
       if (!fos && (!DB.idProd || !DB.idProd.length)) { toast('Cargá el respaldo de SysCaw de este tambo para mandar el link.'); return; }
       if (!root.CompressionStream || !crypto.subtle) { toast('Este navegador no puede armar el link. Usá Chrome.'); return; }
@@ -3398,7 +3488,7 @@
       closeSheet();
       var m = lnkMeta(TAMBOS.activo);
       $('#sheetXTitle').textContent = 'Link con los datos';
-      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (DB.origen === 'fosapp' || DB.origen === 'dhm' ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 10px">' + esc(PERFIL.nombre || 'Este tambo') + ': se suben los datos de hoy (cifrados) y se arma el link. ' + (m ? 'Este tambo ya tiene link: quien lo tenga recibe los datos nuevos al abrir la app con internet.' + (soloLink(DB.origen) ? ' Número para bloquearlo: <b>' + esc(idsLink(m).join(', ')) + '</b>.' : '') : 'El link no cambia: cuando cargues un respaldo nuevo, tocá "Solo actualizar los datos".') + '</p>';
       $('#xbtns').innerHTML = '<button class="btn primary big" data-a="lnkprod">Mandar a productor · app completa</button><button class="btn big" data-a="lnkop">Mandar a operario · solo buscar y ficha</button>' + (m ? '<button class="btn big" data-a="lnkact">Solo actualizar los datos</button>' : '') + '<button class="btn" data-a="lnklista">Links mandados · bloquear uno</button><button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
@@ -3540,7 +3630,6 @@
     function esIOS() { return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
     function esAnclada() { try { return !!navigator.standalone || matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; } }
     function iosTipHTML() {
-      return ''; // aviso de iPhone: por ahora solo en la versión de prueba
       var l = '', x = ''; try { l = localStorage.getItem('libreta:ultLink') || ''; x = localStorage.getItem('libreta:iostip') || ''; } catch (e) {}
       if (!l || x === '1' || !esIOS() || esAnclada()) return '';
       return '<style>.iostip{background:var(--surface);border:2px solid var(--gold);border-radius:14px;padding:12px 14px;margin:0 0 14px;font-size:15px;line-height:1.4}.iostip p{margin:4px 0}.iostip ol{margin:4px 0 10px;padding-left:22px}.iostip li{margin:2px 0}.iostipb{display:flex;gap:8px}.iostipb .btn{flex:1}</style><div class="iostip"><b>¿La vas a anclar al inicio del iPhone?</b><p>La app anclada no ve lo que abriste en Safari. Hacelo así:</p><ol><li>Tocá <b>Copiar link</b>.</li><li>En Safari: Compartir → <b>Agregar a inicio</b>.</li><li>Abrila desde el ícono y tocá <b>¿Te mandaron un link? Pegalo acá</b>.</li></ol>' +
@@ -4192,7 +4281,7 @@
       var g = null; try { g = JSON.parse(localStorage.getItem(state.xmode === 'parches' ? 'libreta:xfp' : 'libreta:xf')); } catch (e) {}
       state.xf = g || (state.xmode === 'parches' ? { ord: true, sec: false, vaq: true, sinDesc: true, smin: 18, smax: 24, psv: 45, vac: true }
         : { ord: true, sec: false, vaq: true, sinDesc: true, sdx: A.DX_MIN, psv: null, celo: false, secar: false });
-      $('#sheetXTitle').textContent = state.xmode === 'parches' ? 'Listado de parches' : 'Armar lista';
+      $('#sheetXTitle').textContent = state.xmode === 'parches' ? 'Listado de parches' : 'Lista para revisación';
       $('#xbtns').innerHTML = '<button class="btn primary big" id="btnXok" data-a="xok">Ver lista y exportar</button><button class="btn" data-a="xcancel">Cancelar</button>';
       xOpts(); $('#sheetX').hidden = false;
     }
@@ -4237,7 +4326,7 @@
     }
     function xCompartir() {
       var o = state.xout; if (!o) return;
-      var falla = function () { root.XLSX.writeFile(o.wb, o.nombre); toast('Este teléfono no deja compartir Excel: quedó guardado en Descargas. Podés mandarlo desde ahí o usar "Compartir como CSV".'); };
+      var falla = function () { if (o.blob) bajarBlob(o.blob, o.nombre); else root.XLSX.writeFile(o.wb, o.nombre); toast('Este teléfono no deja compartir Excel: quedó guardado en Descargas. Podés mandarlo desde ahí o usar "Compartir como CSV".'); };
       if (!o.file || !(navigator.canShare && navigator.canShare({ files: [o.file] }))) { falla(); return; }
       navigator.share({ files: [o.file], title: o.nombre }).catch(function (e) { if (!e || e.name !== 'AbortError') falla(); });
     }
@@ -4246,7 +4335,169 @@
       if (navigator.canShare && navigator.canShare({ files: [o.csv] })) navigator.share({ files: [o.csv], title: o.csv.name }).catch(function (e) { if (!e || e.name !== 'AbortError') toast('No se pudo compartir. Usá "Guardar Excel en el teléfono".'); });
       else toast('Este teléfono no deja compartir archivos. Usá "Guardar Excel en el teléfono".');
     }
-    function xGuardar() { var o = state.xout; if (!o) return; root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
+    function bajarBlob(blob, nombre) { var u = URL.createObjectURL(blob), l = document.createElement('a'); l.href = u; l.download = nombre; document.body.appendChild(l); l.click(); setTimeout(function () { URL.revokeObjectURL(u); l.remove(); }, 4000); }
+    function xGuardar() { var o = state.xout; if (!o) return; if (o.blob) bajarBlob(o.blob, o.nombre); else root.XLSX.writeFile(o.wb, o.nombre); toast('Guardado en Descargas: ' + o.nombre); }
+    /* ----- planilla de tacto (modo veterinario): las vacas en ordeñe por caravana, en tres columnas para imprimir y anotar en el corral.
+       Preñada: fecha probable de parto · servida: PARCHE (menos de 35 días) o REVISAR (35 o más) con los días de servida ·
+       con tacto sin preñez y sin servicio después: el resultado con los días de parida · sin servicio ni tacto: PARIDA con los días de parida ·
+       descarte programado: DESCARTE. Se arma un .xlsx a mano (con formato: caravana en negrita, anchos, saltos de página). ----- */
+    var PLT_FILAS = 45, PLT_LTS = 14, PLT_PARIDA = 30;
+    // preñada con celo o servicio después del tacto que la dio preñada: alerta (en las dos planillas)
+    function prenConEvento(a) {
+      if (a.estado !== 'prenada' || !a.tFecha) return null;
+      var h = DB.hist ? DB.hist[a.rp] : null, ult = null; if (!h) return null;
+      h.ev.forEach(function (e) { if (e[0] > a.tFecha && (e[1] === 'S' || e[1] === 'C')) ult = e; });
+      return ult;
+    }
+    /* devuelve [texto, número, alerta] o null si la vaca no va (planilla simple: sin preñadas, descartes ni paridas de menos de 30 días;
+       de las preñadas solo las que tienen celo o servicio después del tacto y las que hay que secar, por fecha o con menos de 14 litros) */
+    function planillaFila(a, ref, simple, secar) {
+      var dl = a.pFecha ? A.diffDays(ref, a.pFecha) : '';
+      var ev = prenConEvento(a);
+      if (ev && !(simple && a.rech)) return [ev[1] === 'S' ? 'PREÑ+SERV' : 'PREÑ+CELO', A.diffDays(ref, ev[0]), true];
+      if (a.rech) return simple ? null : ['DESCARTE', ''];
+      if (a.estado === 'prenada') {
+        var pp = A.derive(a, ref).partoProb || a.partoProb;
+        if (simple) {
+          if (secar && secar[a.rp]) return ['SECAR', secar[a.rp].dp];
+          var lt = (a.pr || [])[0]; if (typeof lt === 'number' && lt < PLT_LTS) return ['SECAR LTS', Math.round(lt * 10) / 10];
+          return null;
+        }
+        return [pp ? pp.slice(8, 10) + '-' + pp.slice(5, 7) + '-' + pp.slice(2, 4) : 'Preñada', ''];
+      }
+      if (/^a/i.test(a.r1 || '') && dl !== '' && dl <= 30) return ['ABORTO', dl];
+      if (a.estado === 'servida' && a.sFecha) { var ds = A.diffDays(ref, a.sFecha); return [ds >= A.DX_MIN ? 'REVISAR' : 'PARCHE', ds]; }
+      if (a.result && a.tFecha && (!a.pFecha || a.tFecha >= a.pFecha)) return [a.result, dl];
+      if (simple && dl !== '' && dl < PLT_PARIDA) return null;
+      return ['PARIDA', dl];
+    }
+    function planillaElegir() {
+      $('#sheetXTitle').textContent = 'Planilla de tacto';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Vacas en ordeñe por caravana, en tres columnas para imprimir y anotar en el corral.</p>' +
+        '<p class="cap"><b>Completa:</b> todas las vacas en ordeñe. <b>Para bastón:</b> ID de trazabilidad (858 0000 + los 8 números del ID electrónico), caravana y lo que dice la planilla completa, para cargar en el lector. <b>Simple:</b> sin preñadas, descartes ni paridas de menos de ' + PLT_PARIDA + ' días; de las preñadas solo van las que hay que secar (por la fecha de Para secar, el ' + A.fmt(fechaSecado()) + ', o con menos de ' + PLT_LTS + ' litros) y las que tienen celo o servicio después del tacto, que salen marcadas en rojo.</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="plt" data-m="simple">Planilla simple</button><button class="btn big" data-a="plt" data-m="completa">Planilla completa</button><button class="btn big" data-a="plt" data-m="baston">Planilla para bastón</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function crc32(u) { var c, t = crc32.t; if (!t) { t = crc32.t = []; for (var n = 0; n < 256; n++) { c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } } c = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) c = t[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+    // zip sin comprimir (alcanza para un .xlsx chico)
+    function zipStore(files) {
+      var enc = new TextEncoder(), partes = [], cd = [], off = 0;
+      var le = function (n, b) { var a = []; for (var i = 0; i < b; i++) a.push((n >>> (8 * i)) & 255); return a; };
+      files.forEach(function (f) {
+        var nm = enc.encode(f[0]), d = enc.encode(f[1]), crc = crc32(d);
+        var h = [].concat([0x50, 0x4b, 3, 4], le(20, 2), le(0, 2), le(0, 2), le(0, 4), le(crc, 4), le(d.length, 4), le(d.length, 4), le(nm.length, 2), le(0, 2));
+        partes.push(new Uint8Array(h), nm, d);
+        cd.push(new Uint8Array([].concat([0x50, 0x4b, 1, 2], le(20, 2), le(20, 2), le(0, 2), le(0, 2), le(0, 4), le(crc, 4), le(d.length, 4), le(d.length, 4), le(nm.length, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 4), le(off, 4))), nm);
+        off += h.length + nm.length + d.length;
+      });
+      var cdl = 0; cd.forEach(function (x) { cdl += x.length; });
+      var fin = new Uint8Array([].concat([0x50, 0x4b, 5, 6], le(0, 2), le(0, 2), le(files.length, 2), le(files.length, 2), le(cdl, 4), le(off, 4), le(0, 2)));
+      return new Blob(partes.concat(cd, [fin]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
+    // .xlsx de una hoja (encabezado en negrita); los números van como número y el resto como texto
+    function xlsxSimple(nombreHoja, head, filas, anchos) {
+      var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+      var col = function (i) { return String.fromCharCode(65 + i); };
+      var celda = function (v, r, c, st) { return v === '' || v == null ? '' : typeof v === 'number' ? '<c r="' + col(c) + r + '"' + (st ? ' s="' + st + '"' : '') + '><v>' + v + '</v></c>' : '<c r="' + col(c) + r + '"' + (st ? ' s="' + st + '"' : '') + ' t="inlineStr"><is><t>' + X(v) + '</t></is></c>'; };
+      var rows = ['<row r="1">' + head.map(function (h, c) { return celda(h, 1, c, 1); }).join('') + '</row>'].concat(filas.map(function (f, i) { return '<row r="' + (i + 2) + '">' + f.map(function (v, c) { return celda(v, i + 2, c, 0); }).join('') + '</row>'; }));
+      var hoja = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>' + anchos.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols><sheetData>' + rows.join('') + '</sheetData></worksheet>';
+      var estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      return zipStore([
+        ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+        ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+        ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + X(nombreHoja) + '" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+        ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+        ['xl/styles.xml', estilos], ['xl/worksheets/sheet1.xml', hoja]
+      ]);
+    }
+    // ID de trazabilidad para el bastón: 858 0000 + los últimos 8 números del ID electrónico
+    function idTraz(a) { var d = String(a.idElec || '').replace(/\D/g, ''); return d.length >= 8 ? '8580000' + d.slice(-8) : ''; }
+    function planillaBaston() {
+      var ref = today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca'; }).sort(numRp);
+      if (!L.length) { toast('No hay vacas en ordeñe en este tambo.'); return; }
+      var desc = function (a) { var f = planillaFila(a, ref, false, {}); return (/^\d\d-\d\d-\d\d$/.test(f[0]) ? 'PARTO ' : '') + f[0] + (f[1] !== '' ? ' ' + String(f[1]).replace('.', ',') : ''); };
+      var filas = L.map(function (a) { return [idTraz(a), /^\d+$/.test(a.rp) ? +a.rp : a.rp, desc(a)]; }), sinId = filas.filter(function (f) { return !f[0]; }).length;
+      var blob = xlsxSimple('Baston', ['ID', 'Caravana', 'Tacto'], filas, [20, 11, 18]);
+      var nombre = ('Baston ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx', file = null;
+      try { file = new File([blob], nombre, { type: blob.type }); } catch (e) {}
+      state.xout = { blob: blob, file: file, csv: null, nombre: nombre };
+      $('#sheetXTitle').textContent = 'Planilla para bastón · ' + L.length + ' vacas';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Columna A: ID de trazabilidad (858 0000 + los 8 números del ID electrónico) · B: caravana · C: lo que dice la planilla completa (parto de las preñadas, REVISAR, PARCHE, PARIDA, DESCARTE…).</p>' +
+        (sinId ? '<p class="ralerta">⚠ ' + sinId + (sinId === 1 ? ' vaca no tiene' : ' vacas no tienen') + ' ID electrónico en el respaldo: van sin ID y el bastón no las va a reconocer.</p>' : '') +
+        '<div class="xprev">' + filas.map(function (f) { return '<div><b>' + esc(String(f[1])) + '</b><span>' + esc((f[0] || 'sin ID') + ' · ' + f[2]) + '</span></div>'; }).join('') + '</div><p class="cap">Archivo: ' + esc(nombre) + '</p>';
+      var puede = !!(navigator.share && file);
+      $('#xbtns').innerHTML = (puede ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button>' : '') + '<button class="btn' + (puede ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function planillaTacto(modo) {
+      if (modo === 'baston') { planillaBaston(); return; }
+      var simple = modo === 'simple', ref = today(), secar = {};
+      if (simple) listaSecado(fechaSecado()).forEach(function (x) { secar[x.a.rp] = x; });
+      var F = {}, L = DB.animales.filter(function (a) { if (a.cat !== 'vaca') return false; var f = planillaFila(a, ref, simple, secar); if (!f) return false; F[a.rp] = f; return true; }).sort(numRp);
+      if (!L.length) { toast('No hay vacas para la planilla.'); return; }
+      var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+      var col = function (i) { return String.fromCharCode(65 + i); };
+      // 45 vacas por columna, 135 por hoja; la hoja se escala al papel (alto y ancho)
+      var FP = PLT_FILAS;
+      var pags = Math.ceil(L.length / (FP * 3)), filas = [];
+      var HT = 16.5; // 45 filas llenan una hoja A4
+      for (var pg = 0; pg < pags; pg++) for (var r = 0; r < FP; r++) {
+        var celdas = [], hay = false;
+        for (var c = 0; c < 3; c++) {
+          var a = L[pg * FP * 3 + c * FP + r]; if (!a) continue; hay = true;
+          var f = F[a.rp], fila = pg * FP + r + 1, b = c * 4;
+          celdas.push(/^\d+$/.test(a.rp) ? '<c r="' + col(b) + fila + '" s="1"><v>' + (+a.rp) + '</v></c>' : '<c r="' + col(b) + fila + '" s="1" t="inlineStr"><is><t>' + X(a.rp) + '</t></is></c>');
+          celdas.push('<c r="' + col(b + 1) + fila + '" s="' + (f[2] ? 5 : 2) + '" t="inlineStr"><is><t>' + X(f[0]) + '</t></is></c>');
+          if (f[1] !== '') celdas.push('<c r="' + col(b + 2) + fila + '" s="' + (f[2] ? 6 : 3) + '"><v>' + f[1] + '</v></c>');
+          celdas.push('<c r="' + col(b + 3) + fila + '" s="4"/>');
+        }
+        if (hay) filas.push('<row r="' + (pg * FP + r + 1) + '" ht="' + HT + '" customHeight="1">' + celdas.join('') + '</row>');
+      }
+      // ancho de la caravana según el largo (4 cifras como SysCaw; 5 o más en DelPro)
+      var lmax = 0; L.forEach(function (a) { if (a.rp.length > lmax) lmax = a.rp.length; });
+      var ws = [Math.max(6.33, lmax * 1.45 + 0.6), 12, 4.5, 12], cols = '';
+      for (var k = 0; k < 12; k++) cols += '<col min="' + (k + 1) + '" max="' + (k + 1) + '" width="' + ws[k % 4] + '" customWidth="1"/>';
+      var cortes = ''; for (pg = 1; pg < pags; pg++) cortes += '<brk id="' + pg * FP + '" max="16383" man="1"/>';
+      var tit = (simple ? 'Tacto simple · ' : 'Tacto · ') + (PERFIL.nombre || 'Tambo') + ' · ' + A.fmt(ref);
+      var hoja = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><cols>' + cols + '</cols><sheetData>' + filas.join('') + '</sheetData>' +
+        '<pageMargins left="0.4" right="0.3" top="0.6" bottom="0.4" header="0.25" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="' + pags + '"/>' +
+        '<headerFooter><oddHeader>' + X('&C&"-,Bold"' + tit) + '</oddHeader><oddFooter>' + X('&CPágina &P de &N') + '</oddFooter></headerFooter>' +
+        (cortes ? '<rowBreaks count="' + (pags - 1) + '" manualBreakCount="' + (pags - 1) + '">' + cortes + '</rowBreaks>' : '') + '</worksheet>';
+      var estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+        '<fonts count="3"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="13"/><name val="Calibri"/></font><font><b/><sz val="10"/><color rgb="FFC00000"/><name val="Calibri"/></font></fonts>' +
+        '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+        '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFB0B0B0"/></bottom><diagonal/></border></borders>' +
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+        '<cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+        '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment horizontal="center" vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+        '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment vertical="center"/></xf>' +
+        '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs>' +
+        '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      var blob = zipStore([
+        ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+        ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+        ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Tacto" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+        ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+        ['xl/styles.xml', estilos],
+        ['xl/worksheets/sheet1.xml', hoja]
+      ]);
+      var nombre = ((simple ? 'Tacto simple ' : 'Tacto ') + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx', file = null;
+      try { file = new File([blob], nombre, { type: blob.type }); } catch (e) {}
+      state.xout = { blob: blob, file: file, csv: null, nombre: nombre };
+      var cu = {}, nAl = 0; L.forEach(function (a) { var f = F[a.rp][0]; if (F[a.rp][2]) nAl++; var k = /^\d\d-/.test(f) ? 'Preñadas' : f === 'PARCHE' ? 'Parche' : f === 'REVISAR' ? 'Revisar' : f === 'PARIDA' ? 'Paridas' : f === 'DESCARTE' ? 'Descarte' : f === 'SECAR' || f === 'SECAR LTS' ? 'Para secar' : /^PREÑ\+/.test(f) ? 'Preñadas con celo o servicio' : 'Con tacto sin preñez'; cu[k] = (cu[k] || 0) + 1; });
+      $('#sheetXTitle').textContent = (simple ? 'Planilla simple · ' : 'Planilla completa · ') + L.length + ' vacas';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Vacas en ordeñe por caravana, en tres columnas para imprimir (' + pags + (pags === 1 ? ' hoja' : ' hojas') + ').' + (simple ? ' Sin preñadas, descartes ni paridas de menos de ' + PLT_PARIDA + ' días.' : '') + '</p>' +
+        (nAl ? '<p class="ralerta">⚠ ' + nAl + (nAl === 1 ? ' vaca preñada tiene' : ' vacas preñadas tienen') + ' celo o servicio después del tacto (en rojo en la planilla).</p>' : '') +
+        '<details class="nota"><summary>Qué dice cada vaca</summary><p class="cap">' + (simple ? '' : 'Preñada: fecha probable de parto · ') + 'REVISAR: servida hace ' + A.DX_MIN + ' días o más · PARCHE: servida hace menos de ' + A.DX_MIN + ' días (el número son los días de servida) · PARIDA: sin servicio ni tacto, con los días de parida · con tacto sin preñez: el resultado y los días de parida · ' + (simple ? 'SECAR: preñada para secar el ' + A.fmt(fechaSecado()) + ' (días al parto) · SECAR LTS: preñada con menos de ' + PLT_LTS + ' litros en el último control · ' : 'DESCARTE · ') + 'PREÑ+CELO / PREÑ+SERV: preñada con celo o servicio después del tacto (días desde ese celo o servicio). Al lado de cada vaca queda una columna en blanco para anotar.</p></details>' +
+        '<p class="cap">' + ['Revisar', 'Parche', 'Paridas', 'Con tacto sin preñez', 'Para secar', 'Preñadas con celo o servicio', 'Preñadas', 'Descarte'].filter(function (k) { return cu[k]; }).map(function (k) { return '<b>' + cu[k] + '</b> ' + k.toLowerCase(); }).join(' · ') + '</p>' +
+        '<div class="xprev">' + L.map(function (a) { var f = F[a.rp]; return '<div><b>' + esc(a.rp) + '</b><span' + (f[2] ? ' style="color:var(--vacia);font-weight:700"' : '') + '>' + esc(f[0] + (f[1] !== '' ? ' ' + String(f[1]).replace('.', ',') : '')) + '</span></div>'; }).join('') + '</div><p class="cap">Archivo: ' + esc(nombre) + '</p>';
+      var puede = !!(navigator.share && file);
+      $('#xbtns').innerHTML = (puede ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button>' : '') + '<button class="btn' + (puede ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
+    }
 
     /* ----- render ----- */
     var NAVS = [
@@ -4309,7 +4560,7 @@
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main); plegarNotas(main); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main); return; }
         state.rp = null;
       }
       var err = iosTipHTML() + (state.error ? '<p class="error" role="alert">' + esc(state.error) + '</p>' : '');
@@ -4404,7 +4655,9 @@
       else if (a === 'pedircod') { closeSheet(); pedirCodigo(); }
       else if (a === 'exptactar') abrirExport();
       else if (a === 'expparches') abrirExport('parches');
-      else if (a === 'xok') exportarTactar();
+      else if (a === 'expplanilla') planillaElegir();
+      else if (a === 'plt') planillaTacto(b.dataset.m);
+      else if (a === 'xok') { busy(true, 'Armando el Excel…'); cargarXlsx().then(function () { busy(false); exportarTactar(); }, function (er) { busy(false); toast(er.message); }); }
       else if (a === 'xshare') xCompartir();
       else if (a === 'vtacfg') vtaSheet();
       else if (a === 'vtaok') { setP('vta', JSON.stringify(state.vtaDraft)); $('#sheetX').hidden = true; render(); toast('Criterio de venta guardado'); }
@@ -4457,7 +4710,7 @@
       if (e.target.dataset && e.target.dataset.vn) { var w = parseInt(e.target.value, 10); state.vtaDraft[e.target.dataset.vn] = w > 0 ? w : null; vtaCuenta(); return; }
       if (e.target.dataset && e.target.dataset.xn) { var v = parseInt(e.target.value, 10); state.xf[e.target.dataset.xn] = v > 0 ? v : null; xActualizarCuenta(); return; }
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
-      if (e.target.id === 'qTambo') { var k = normNom(e.target.value); document.querySelectorAll('#ilist .itambo').forEach(function (b) { b.hidden = !!k && b.dataset.nom.indexOf(k) < 0; }); }
+      if (e.target.id === 'qTambo') { var k = normNom(e.target.value), vis = 0; document.querySelectorAll('#ilist .itambo').forEach(function (b) { b.hidden = !!k && b.dataset.nom.indexOf(k) < 0; if (!b.hidden) vis++; }); var nd = $('#inada'); if (nd) nd.hidden = vis > 0; var il = $('#ilist'); if (il) il.hidden = !vis; }
     });
     document.addEventListener('keydown', function (e) {
       if (e.target.id === 'q' && e.key === 'Enter') {
