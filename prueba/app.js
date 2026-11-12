@@ -3575,10 +3575,19 @@
           linksMandados(function (L) { var hh = new Date(); L.unshift({ l: linkId(tok), n: nombre, r: rol === 'op' ? 'op' : 'prod', f: today(), h: pad2(hh.getHours()) + ':' + pad2(hh.getMinutes()), para: para }); });
           var txt = 'Hola. Este es el link de la *Libreta de vacas* de ' + nombre + (rol === 'op' ? ' (operario)' : '') + ', con los datos ya cargados:\n\n' + link +
             '\n\nTocalo y se abre lista para usar. Cuando haya datos nuevos, se actualiza sola al abrirla con internet.\n\nDr. Mauro Torterolo';
-          if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
-          toast('Link listo. Funciona en 1 o 2 minutos (lo que tarda en publicarse).');
+          // el teléfono solo deja abrir "Compartir" justo después de tocar un botón: como la subida tarda, el link se muestra
+          // en una hoja con sus botones (compartir, WhatsApp, copiar) en vez de intentar compartirlo solo
+          mostrarLinkListo(txt, link, rol);
         });
       }).catch(function (e) { busy(false); toast('No pude subir los datos: ' + (e && e.message || e)); });
+    }
+    function mostrarLinkListo(txt, link, rol) {
+      state.linkTxt = txt; state.linkUrl = link;
+      $('#sheetXTitle').textContent = 'Link listo · ' + (rol === 'op' ? 'operario' : 'productor');
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 8px">Mandalo ahora. Empieza a funcionar en 1 o 2 minutos (lo que tarda en publicarse).</p><div class="xprev" style="white-space:pre-wrap;word-break:break-all;font-size:13px">' + esc(txt) + '</div>';
+      $('#xbtns').innerHTML = (navigator.share ? '<button class="btn primary big" data-a="lnkshare">Compartir (WhatsApp, mail…)</button>' : '') +
+        '<button class="btn' + (navigator.share ? '' : ' primary big') + '" data-a="lnkwa">Mandar por WhatsApp</button><button class="btn" data-a="lnkcopy">Copiar el link</button><button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
     }
     // bajar y descifrar los datos de un link
     function bajarLibreta(id, k) {
@@ -4758,6 +4767,9 @@
       else if (a === 'vtaok') { setP('vta', JSON.stringify(state.vtaDraft)); $('#sheetX').hidden = true; render(); toast('Criterio de venta guardado'); }
       else if (a === 'xsharecsv') xCompartirCSV();
       else if (a === 'xsave') xGuardar();
+      else if (a === 'lnkshare') { navigator.share({ text: state.linkTxt }).catch(function () {}); }
+      else if (a === 'lnkwa') { window.open('https://wa.me/?text=' + encodeURIComponent(state.linkTxt || ''), '_blank'); }
+      else if (a === 'lnkcopy') { (navigator.clipboard ? navigator.clipboard.writeText(state.linkTxt || '') : Promise.reject()).then(function () { toast('Copiado. Pegalo en WhatsApp.'); }, function () { prompt('Copiá el mensaje:', state.linkTxt || ''); }); }
       else if (a === 'xcancel') $('#sheetX').hidden = true;
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
