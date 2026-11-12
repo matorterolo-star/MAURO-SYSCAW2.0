@@ -849,7 +849,7 @@
     // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
     function cargarDelpro() {
       if (root.Delpro) return Promise.resolve(root.Delpro);
-      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=3'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=4'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
     }
     // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
     function esDelpro(buf) {
