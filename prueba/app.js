@@ -4339,7 +4339,7 @@
        Preñada: fecha probable de parto · servida: PARCHE (menos de 35 días) o REVISAR (35 o más) con los días de servida ·
        con tacto sin preñez y sin servicio después: el resultado con los días de parida · sin servicio ni tacto: PARIDA con los días de parida ·
        descarte programado: DESCARTE. Se arma un .xlsx a mano (con formato: caravana en negrita, anchos, saltos de página). ----- */
-    var PLT_FILAS = 54, PLT_LTS = 14, PLT_PARIDA = 30;
+    var PLT_FILAS = 45, PLT_LTS = 14, PLT_PARIDA = 30;
     // preñada con celo o servicio después del tacto que la dio preñada: alerta (en las dos planillas)
     function prenConEvento(a) {
       if (a.estado !== 'prenada' || !a.tFecha) return null;
@@ -4372,8 +4372,8 @@
     function planillaElegir() {
       $('#sheetXTitle').textContent = 'Planilla de tacto';
       $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Vacas en ordeñe por caravana, en tres columnas para imprimir y anotar en el corral.</p>' +
-        '<p class="cap"><b>Completa:</b> todas las vacas en ordeñe. <b>Simple:</b> sin preñadas, descartes ni paridas de menos de ' + PLT_PARIDA + ' días; de las preñadas solo van las que hay que secar (por la fecha de Para secar, el ' + A.fmt(fechaSecado()) + ', o con menos de ' + PLT_LTS + ' litros) y las que tienen celo o servicio después del tacto, que salen marcadas en rojo.</p>';
-      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="plt" data-m="simple">Planilla simple</button><button class="btn big" data-a="plt" data-m="completa">Planilla completa</button><button class="btn" data-a="xcancel">Cancelar</button>';
+        '<p class="cap"><b>Completa:</b> todas las vacas en ordeñe. <b>Para bastón:</b> ID de trazabilidad (858 0000 + los 8 números del ID electrónico), caravana y lo que dice la planilla completa, para cargar en el lector. <b>Simple:</b> sin preñadas, descartes ni paridas de menos de ' + PLT_PARIDA + ' días; de las preñadas solo van las que hay que secar (por la fecha de Para secar, el ' + A.fmt(fechaSecado()) + ', o con menos de ' + PLT_LTS + ' litros) y las que tienen celo o servicio después del tacto, que salen marcadas en rojo.</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="plt" data-m="simple">Planilla simple</button><button class="btn big" data-a="plt" data-m="completa">Planilla completa</button><button class="btn big" data-a="plt" data-m="baston">Planilla para bastón</button><button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
     function crc32(u) { var c, t = crc32.t; if (!t) { t = crc32.t = []; for (var n = 0; n < 256; n++) { c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } } c = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) c = t[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
@@ -4392,18 +4392,53 @@
       var fin = new Uint8Array([].concat([0x50, 0x4b, 5, 6], le(0, 2), le(0, 2), le(files.length, 2), le(files.length, 2), le(cdl, 4), le(off, 4), le(0, 2)));
       return new Blob(partes.concat(cd, [fin]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
+    // .xlsx de una hoja (encabezado en negrita); los números van como número y el resto como texto
+    function xlsxSimple(nombreHoja, head, filas, anchos) {
+      var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+      var col = function (i) { return String.fromCharCode(65 + i); };
+      var celda = function (v, r, c, st) { return v === '' || v == null ? '' : typeof v === 'number' ? '<c r="' + col(c) + r + '"' + (st ? ' s="' + st + '"' : '') + '><v>' + v + '</v></c>' : '<c r="' + col(c) + r + '"' + (st ? ' s="' + st + '"' : '') + ' t="inlineStr"><is><t>' + X(v) + '</t></is></c>'; };
+      var rows = ['<row r="1">' + head.map(function (h, c) { return celda(h, 1, c, 1); }).join('') + '</row>'].concat(filas.map(function (f, i) { return '<row r="' + (i + 2) + '">' + f.map(function (v, c) { return celda(v, i + 2, c, 0); }).join('') + '</row>'; }));
+      var hoja = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>' + anchos.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols><sheetData>' + rows.join('') + '</sheetData></worksheet>';
+      var estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      return zipStore([
+        ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+        ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+        ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + X(nombreHoja) + '" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+        ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+        ['xl/styles.xml', estilos], ['xl/worksheets/sheet1.xml', hoja]
+      ]);
+    }
+    // ID de trazabilidad para el bastón: 858 0000 + los últimos 8 números del ID electrónico
+    function idTraz(a) { var d = String(a.idElec || '').replace(/\D/g, ''); return d.length >= 8 ? '8580000' + d.slice(-8) : ''; }
+    function planillaBaston() {
+      var ref = today(), L = DB.animales.filter(function (a) { return a.cat === 'vaca'; }).sort(numRp);
+      if (!L.length) { toast('No hay vacas en ordeñe en este tambo.'); return; }
+      var desc = function (a) { var f = planillaFila(a, ref, false, {}); return (/^\d\d-\d\d-\d\d$/.test(f[0]) ? 'PARTO ' : '') + f[0] + (f[1] !== '' ? ' ' + String(f[1]).replace('.', ',') : ''); };
+      var filas = L.map(function (a) { return [idTraz(a), /^\d+$/.test(a.rp) ? +a.rp : a.rp, desc(a)]; }), sinId = filas.filter(function (f) { return !f[0]; }).length;
+      var blob = xlsxSimple('Baston', ['ID', 'Caravana', 'Tacto'], filas, [20, 11, 18]);
+      var nombre = ('Baston ' + (PERFIL.nombre || '') + ' ' + ref).replace(/[\\/:*?"<>|]+/g, '').trim() + '.xlsx', file = null;
+      try { file = new File([blob], nombre, { type: blob.type }); } catch (e) {}
+      state.xout = { blob: blob, file: file, csv: null, nombre: nombre };
+      $('#sheetXTitle').textContent = 'Planilla para bastón · ' + L.length + ' vacas';
+      $('#xopts').innerHTML = '<p class="cap" style="margin:0 0 6px">Columna A: ID de trazabilidad (858 0000 + los 8 números del ID electrónico) · B: caravana · C: lo que dice la planilla completa (parto de las preñadas, REVISAR, PARCHE, PARIDA, DESCARTE…).</p>' +
+        (sinId ? '<p class="ralerta">⚠ ' + sinId + (sinId === 1 ? ' vaca no tiene' : ' vacas no tienen') + ' ID electrónico en el respaldo: van sin ID y el bastón no las va a reconocer.</p>' : '') +
+        '<div class="xprev">' + filas.map(function (f) { return '<div><b>' + esc(String(f[1])) + '</b><span>' + esc((f[0] || 'sin ID') + ' · ' + f[2]) + '</span></div>'; }).join('') + '</div><p class="cap">Archivo: ' + esc(nombre) + '</p>';
+      var puede = !!(navigator.share && file);
+      $('#xbtns').innerHTML = (puede ? '<button class="btn primary big" data-a="xshare">Compartir Excel (WhatsApp, mail…)</button>' : '') + '<button class="btn' + (puede ? '' : ' primary big') + '" data-a="xsave">Guardar Excel en el teléfono</button><button class="btn" data-a="xcancel">Cerrar</button>';
+      $('#sheetX').hidden = false;
+    }
     function planillaTacto(modo) {
+      if (modo === 'baston') { planillaBaston(); return; }
       var simple = modo === 'simple', ref = today(), secar = {};
       if (simple) listaSecado(fechaSecado()).forEach(function (x) { secar[x.a.rp] = x; });
       var F = {}, L = DB.animales.filter(function (a) { if (a.cat !== 'vaca') return false; var f = planillaFila(a, ref, simple, secar); if (!f) return false; F[a.rp] = f; return true; }).sort(numRp);
       if (!L.length) { toast('No hay vacas para la planilla.'); return; }
       var X = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
       var col = function (i) { return String.fromCharCode(65 + i); };
-      /* filas por hoja: si entra en una hoja (hasta 180 vacas), las tres columnas parejas; si no, hojas de 54 filas.
-         La hoja se escala para llenar el papel (alto y ancho), así no queda media hoja en blanco. */
-      var FP = L.length <= 180 ? Math.ceil(L.length / 3) : PLT_FILAS;
+      // 45 vacas por columna, 135 por hoja; la hoja se escala al papel (alto y ancho)
+      var FP = PLT_FILAS;
       var pags = Math.ceil(L.length / (FP * 3)), filas = [];
-      var HT = Math.min(22, Math.max(16, Math.floor(740 / FP))); // con pocas vacas, filas más altas para usar la hoja
+      var HT = 16.5; // 45 filas llenan una hoja A4
       for (var pg = 0; pg < pags; pg++) for (var r = 0; r < FP; r++) {
         var celdas = [], hay = false;
         for (var c = 0; c < 3; c++) {
