@@ -1316,6 +1316,13 @@
     /* ----- pestaña Tareas ----- */
     var SECS = [45, 50, 60, 65];
     var VENT = [[7, '7 días'], [30, '30 días'], [90, '90 días'], [183, '6 meses'], [365, '12 meses']];
+    // preñada con el parto probable vencido hace más de 30 días (solo modo veterinario): dato a revisar con el productor
+    var ATRASO_DIAS = 30;
+    function partoAtrasado(a) {
+      if (a.estado !== 'prenada' || (a.cat !== 'vaca' && a.cat !== 'seca')) return null;
+      var hoy = today(), pp = A.derive(a, hoy).partoProb || a.partoProb; if (!pp) return null;
+      var d = A.diffDays(hoy, pp); return d > ATRASO_DIAS ? { pp: pp, d: d } : null;
+    }
     function secTareas(key, titulo, nota, items, mapRow, vacio) {
       var abierta = !!state.abiertas[key], lim = abierta ? items.length : 12;
       // cada lista arranca plegada: título y cantidad; se despliega tocando el título
@@ -1529,7 +1536,13 @@
         }, 'Ninguna vaca para secar el ' + A.fmt(fs) + '.') +
         secTareas('partos', 'Próximos partos', chips + '<p class="secnote">Partos probables en los próximos ' + vtxt + '.</p>', t.partos, function (x) {
           return rowHTML(x.a, { right: '<span class="when">' + A.rel(x.dias) + '</span>', sub: 'Parto probable ' + A.fmt(x.fecha) });
-        }, 'Ningún parto probable en los próximos ' + vtxt + '.')) +
+        }, 'Ningún parto probable en los próximos ' + vtxt + '.') +
+        (esVet() ? (function () {
+          var L = DB.animales.map(function (a) { var pa = partoAtrasado(a); return pa ? { a: a, pp: pa.pp, d: pa.d } : null; }).filter(Boolean).sort(function (x, y) { return y.d - x.d; });
+          return secTareas('atrasados', 'Partos atrasados', '<p class="secnote">Preñadas con el parto probable vencido hace más de ' + ATRASO_DIAS + ' días. Puede faltar cargar un parto, un aborto o la baja: revisarlo con el productor.</p>', L, function (x) {
+            return rowHTML(x.a, { right: '<span class="when late">' + x.d + ' días</span>', sub: 'Parto probable ' + A.fmt(x.pp) + (x.a.tFecha ? ' · tacto ' + A.fmt(x.a.tFecha) : '') });
+          }, 'No hay partos atrasados.');
+        })() : '')) +
         grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Vacas en ordeñe por caravana, para anotar en el corral') : '')) +
         grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
@@ -2873,7 +2886,7 @@
       var madre = h && h.ma ? (byRp(h.ma) ? '<button class="lnk" data-rp="' + esc(h.ma) + '">' + esc(h.ma) + '</button>' : esc(h.ma)) : null;
       return '<button class="backbtn" data-a="back"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Volver</button>' +
         '<header class="fh"><div class="fhtag">' + tagSVG(a.rp, 118) + '</div><div class="fhinfo"><div class="nm">' + esc(a.nombre || 'Sin nombre') + '</div>' +
-        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (repetidora(a) ? SELLO_REP : '') + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + '</div></div>' + idxBadge(a) + '</header>' +
+        '<div class="fhchips">' + (a.cat && a.cat !== 'vaca' ? '<span class="chip cat">' + CATL[a.cat] + '</span>' : '') + chip(a) + (repetidora(a) ? SELLO_REP : '') + (a.rech ? '<span class="chip descarte">Descarte' + (a.rechDet || a.rech ? ': ' + esc(a.rechDet || a.rech) : ' programado') + '</span>' : '') + (!esOperario() && paraVenta(a) ? '<span class="chip venta2">Para venta</span>' : '') + (function () { var pa = esVet() ? partoAtrasado(a) : null; return pa ? '<span class="chip venta2">Parto atrasado · ' + pa.d + ' días</span>' : ''; })() + '</div></div>' + idxBadge(a) + '</header>' +
         (datos ? '<section class="card datos">' + datos + '</section>' : '') +
         (h && h.ct.length ? '<section class="card"><h2>Control lechero</h2>' + prodHistHTML(a, h) + '</section>' : (bars(a.pr || []) ? '<section class="card"><h2>Control lechero</h2>' + bars(a.pr) + '</section>' : '')) +
         (h ? lactHTML(h) + (h.pa.length || h.ev.length || h.ta.length ? histHTML(a, h) : '') + ccHTML(h) : '') +
@@ -3013,7 +3026,7 @@
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
       'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
       'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
-      'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas',
+      'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas', 'atrasados': 'Preñadas con el parto vencido hace más de 30 días',
       'venta': 'Las que cumplen tu criterio de venta', 'insem': 'Liquidación por número de servicio'
     };
     // en la ficha de la vaca las tarjetas tienen su propia descripción
