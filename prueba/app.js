@@ -4413,9 +4413,9 @@
         if (a.rech) return;
         if (a.cat === 'vaca') {
           var ev = prenConEvento(a);
-          if (ev) R.tocar.push({ a: a, t: ev[1] === 'S' ? 'Preñada + servicio' : 'Preñada + celo', d: A.diffDays(ref, ev[0]), al: true });
-          else if (a.estado === 'servida' && a.sFecha) { var ds = A.diffDays(ref, a.sFecha); if (ds >= A.DX_MIN) R.tocar.push({ a: a, t: 'Servida', d: ds, u: 'días de servida' }); }
-          else if (a.estado !== 'prenada' && a.result && a.tFecha && (!a.pFecha || a.tFecha >= a.pFecha)) R.tocar.push({ a: a, t: a.result, d: dl, u: 'días de parida' });
+          if (ev) R.tocar.push({ a: a, k: 'pren', t: ev[1] === 'S' ? 'Preñada + servicio' : 'Preñada + celo', d: A.diffDays(ref, ev[0]), u: 'días', al: true });
+          else if (a.estado === 'servida' && a.sFecha) { var ds = A.diffDays(ref, a.sFecha); if (ds >= A.DX_MIN) R.tocar.push({ a: a, k: 'serv', t: 'Servida · diagnóstico de preñez', d: ds, u: 'días de servida' }); }
+          else if (a.estado !== 'prenada' && a.result && a.tFecha && (!a.pFecha || a.tFecha >= a.pFecha)) R.tocar.push({ a: a, k: 'vac', t: a.result + ' · sin servicio', d: dl, u: 'días de parida' });
           else if (a.estado !== 'prenada' && dl != null && dl >= PLT_PARIDA) R.liberar.push({ a: a, t: 'Parida', d: dl, u: 'días de parida' });
         }
         if (a.cat === 'vaquillona' && a.estado === 'servida' && a.sFecha) { var dv = A.diffDays(ref, a.sFecha); if (dv >= A.DX_MIN) R.vaq.push({ a: a, t: 'Servida', d: dv, u: 'días de servida' }); }
@@ -4429,6 +4429,9 @@
       });
       var ord = function (x, y) { return y.d - x.d; };
       ['tocar', 'liberar', 'vaq', 'atras', 'repe'].forEach(function (k) { R[k].sort(ord); });
+      // a tocar: primero las servidas (diagnóstico de preñez), después las vacías sin servicio, al final preñadas con celo o servicio
+      var KO = { serv: 0, vac: 1, pren: 2 }; R.tocar.sort(function (x, y) { return KO[x.k] - KO[y.k] || y.d - x.d; });
+      R.nServ = R.tocar.filter(function (x) { return x.k === 'serv'; }).length; R.nVac = R.tocar.filter(function (x) { return x.k === 'vac'; }).length; R.nPren = R.tocar.length - R.nServ - R.nVac;
       R.secar.sort(function (x, y) { return x.d - y.d; }); R.partos.sort(function (x, y) { return x.d - y.d; });
       return R;
     }
@@ -4448,7 +4451,7 @@
       var al = [R.atras.length ? R.atras.length + (R.atras.length === 1 ? ' parto atrasado' : ' partos atrasados') : '', R.repe.length ? R.repe.length + (R.repe.length === 1 ? ' repetidora' : ' repetidoras') : ''].filter(Boolean).join(' · ') || 'Sin alertas';
       var P = panelOK() ? panelDatos() : null, le = P && P.le, d4 = le && le.prev ? (le.v / le.prev - 1) * 100 : null;
       return '<div class="voy">' + volver + '<h1 class="ptitle">Voy mañana</h1><p class="voysub">' + dsem.replace(/^./, function (x) { return x.toUpperCase(); }) + ' ' + A.fmt(R.ref).slice(0, 5) + (ult > '0000' ? ' · último tacto hace ' + A.diffDays(R.ref, ult) + ' días' : '') + '</p>' +
-        '<div class="vg">' + c('a', 'tocar', R.tocar.length, 'A tocar', 'vacas en ordeñe') + c('b', 'liberar', R.liberar.length, 'A liberar', 'paridas +' + PLT_PARIDA + ' días') +
+        '<div class="vg">' + c('a', 'tocar', R.tocar.length, 'A tocar', '<b class="vk">' + R.nServ + '</b> por servicio<br><b class="vk">' + R.nVac + '</b> sin servicio' + (R.nPren ? '<br><b class="vk">' + R.nPren + '</b> preñada' + (R.nPren > 1 ? 's' : '') + ' con celo o serv.' : '')) + c('b', 'liberar', R.liberar.length, 'A liberar', 'paridas +' + PLT_PARIDA + ' días') +
         c('c', 'vaq', R.vaq.length, 'Vaquillonas', 'a tocar') + c(nAl ? 'd' : 'c', 'alertas', nAl, 'Alertas', al) + '</div>' +
         (le ? '<button class="vf" data-a="voyleche"><span>Leche por vaca <b>' + nf(le.v, 1) + ' L</b></span>' + (d4 != null ? '<span class="' + (d4 < 0 ? 'dn' : 'up') + '">' + (d4 < 0 ? '▼ ' : '▲ +') + nf(Math.abs(d4), 0) + '% vs ' + le.mes + ' ' + (le.anio - 1) + '</span>' : '') + '</button>' : '') +
         '<button class="vf" data-voy="prox"><span>Próximos 30 días</span><span><b>' + R.secar.length + '</b> ' + (R.secar.length === 1 ? 'secado' : 'secados') + ' · <b>' + R.partos.length + '</b> ' + (R.partos.length === 1 ? 'parto' : 'partos') + '</span></button>' +
