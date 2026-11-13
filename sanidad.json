@@ -1,0 +1,66 @@
+{
+ "planes": {
+  "164/3": {
+   "t": "GCP - PEREZ ABEL",
+   "f": "2026-11-13",
+   "items": [
+    {
+     "n": "Clostridiales",
+     "t": "pre",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ],
+     "d1": 60,
+     "d2": 21,
+     "x": "Clostrisan · revisar dosis"
+    },
+    {
+     "n": "Diarrea neonatal",
+     "t": "pre",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ],
+     "d1": 60,
+     "d2": 21,
+     "x": "Scourguard · vaquillonas: 2 dosis"
+    },
+    {
+     "n": "Reproductivas",
+     "t": "fecha",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ],
+     "f": [
+      "15/04"
+     ],
+     "x": "Bioabortogen / Transvac / Gestavac · antes de la zafra"
+    },
+    {
+     "n": "Respiratorias",
+     "t": "edad",
+     "g": [
+      "ternera"
+     ],
+     "d1": 2,
+     "d2": 4,
+     "x": "Neumosan · 2 dosis"
+    },
+    {
+     "n": "Brucelosis RB51",
+     "t": "fecha",
+     "g": [
+      "vaca"
+     ],
+     "f": [
+      "15/01",
+      "15/04"
+     ],
+     "x": "RB51 · una dosis"
+    }
+   ]
+  }
+ }
+}
