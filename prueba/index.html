@@ -690,6 +690,33 @@ details.lac summary .l{flex:1}
 .cprng{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0 4px;font-size:14px;color:var(--muted);font-weight:600}.cprng input{width:58px;font:inherit;font-weight:700;color:var(--ink);padding:6px 8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);text-align:center}
 .tbl tr.cpk td{font-weight:800;color:var(--vacia)}
 .vpac.eq{fill:var(--muted)}.vpatbl td span.eq{color:var(--muted);font-weight:700}.kpis .vpak.up b{color:var(--prenada)}.kpis .vpak.dn b{color:var(--vacia)}.kpis .vpak.eq b{color:var(--ink)}
+
+/* ===== Estilo deportivo (prueba): fondo carbón, titulares lima, números celestes, letra angosta ===== */
+@font-face{font-family:'BC';src:url(fonts/bc-500.woff2) format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'BC';src:url(fonts/bc-600.woff2) format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'BC';src:url(fonts/bc-800.woff2) format('woff2');font-weight:700 900;font-display:swap}
+body.deporte{color-scheme:dark;--bg:#2A2D33;--surface:#34383F;--ink:#F3F5F8;--muted:#A6ADBA;--line:#474C55;--navy:#1F2227;--on-navy:#FFFFFF;--gold:#D4F22C;--link:#3FD0E8;
+  --prenada:#62E08E;--servida:#C9A2FF;--vacia:#FF6E6E;--ciclando:#3FD0E8;--apta:#FFC53D;--sin:#A6ADBA;--otro:#A6ADBA;--descarte:#FF6E6E;--bar:#59606C;--bar-last:#D4F22C;--dep-num:#3FD0E8;--dep-lima:#D4F22C}
+body.deporte .top{background:#1F2227;border-bottom:4px solid var(--dep-lima)}
+body.deporte .top h1,body.deporte .ptitle,body.deporte .card h2,body.deporte .sec h2,body.deporte .grp,body.deporte .vh3,body.deporte .nb span,body.deporte .chip,body.deporte .fchip,body.deporte .btn,body.deporte .count,body.deporte .pth,body.deporte .lrow h2,body.deporte .voyent b{font-family:'BC',var(--sans)}
+body.deporte .top h1{text-transform:uppercase;letter-spacing:.01em;font-weight:800}
+body.deporte .ptitle{display:inline-block;text-transform:uppercase;font-weight:800;font-style:normal;letter-spacing:.02em;color:#1F2227;background:var(--dep-lima);padding:4px 22px 3px 14px;transform:skewX(-12deg);border-radius:2px;margin-left:6px}
+body.deporte .grp{color:var(--dep-lima);font-size:15px;letter-spacing:.06em;font-weight:800;background:#1F2227;padding:7px 12px;margin:22px 0 4px;border-radius:2px}
+body.deporte .card,body.deporte .ptile,body.deporte .sec,body.deporte .glist{border-radius:6px}
+body.deporte .card h2,body.deporte .sec h2,body.deporte .lrow h2{text-transform:uppercase;letter-spacing:.03em;font-weight:800}
+body.deporte .kpis b,body.deporte .pv,body.deporte .mval,body.deporte .ixb,body.deporte .ctlg b,body.deporte .vh1 b,body.deporte .vt b{font-family:'BC',var(--sans);color:var(--dep-num);fill:var(--dep-num);font-weight:800;letter-spacing:0}
+body.deporte .kpis div.ok b{color:var(--prenada)}body.deporte .kpis div.mal b,body.deporte .kpis .vpak.dn b{color:var(--vacia)}body.deporte .kpis .vpak.up b{color:var(--prenada)}
+body.deporte .kpis div{background:#2A2D33;border-radius:4px}
+body.deporte .nav{background:#1F2227;border-top:3px solid var(--dep-lima)}
+body.deporte .nb{color:#8D95A3;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+body.deporte .nb[aria-current="page"]{color:var(--dep-lima)}
+body.deporte .fchip[aria-pressed="true"],body.deporte .btn.primary{background:var(--dep-lima);border-color:var(--dep-lima);color:#1F2227}
+body.deporte .count{background:#1F2227;color:var(--dep-lima)}
+body.deporte .voyent{background:#1F2227;border-left:6px solid var(--dep-lima)}
+body.deporte .tbl thead th{color:var(--dep-lima);text-transform:uppercase;font-family:'BC',var(--sans);letter-spacing:.04em;font-size:13.5px}
+body.deporte .tbl td{border-color:#41464F}
+body.deporte .pres.ok{background:#21332A}body.deporte .pres.mal{background:#3D2424}body.deporte .pres.at{background:#3A3420}
+body.deporte .mchart .mbar,body.deporte .mchart .pord{fill:#3FD0E8}body.deporte .mleg .pord{background:#3FD0E8}body.deporte .sellorep{color:#FF6E6E;border-color:#FF6E6E}
 </style>
 </head>
 <body>
@@ -744,6 +771,7 @@ details.lac summary .l{flex:1}
     </div>
     <div class="sheetbtns scerrar"><button class="btn" data-a="cerrar" id="btnCerrar">Cancelar</button></div>
     <p class="cap actinfo" id="actInfo"></p>
+    <button class="vetlnk" data-a="tema" id="btnTema">Estilo deportivo (prueba)</button>
     <button class="vetlnk" data-a="vet" id="btnVet">Modo veterinario</button>
     <p class="cap actinfo">© Dr. Mauro Torterolo · Libreta de vacas. Uso exclusivo de sus clientes.</p>
   </div>
@@ -791,6 +819,6 @@ details.lac summary .l{flex:1}
 <script src="fosapp.js?v=p221"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p240"></script>
+<script src="app.js?v=p241"></script>
 </body>
 </html>

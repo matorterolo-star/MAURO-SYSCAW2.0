@@ -5334,6 +5334,7 @@
       else if (a === 'shtab') shDesdeSheet('t');
       else if (a === 'shtodo') shDesdeSheet('todo');
       else if (a === 'fichaimg') compartirFicha();
+      else if (a === 'tema') { var on = !document.body.classList.contains('deporte'); try { localStorage.setItem('libreta:tema', on ? 'deporte' : 'clasico'); } catch (e) {} aplicarTema(); }
       else if (a === 'fichaimg1') fichaImagen(false);
       else if (a === 'fichaimg2') fichaImagen(true);
       else if (a === 'panelimg') compartirPanel();
@@ -5399,6 +5400,15 @@
     root.addEventListener('online', sanFetch);
     root.addEventListener('online', revisarBloqueos);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisarBloqueos(); });
+    // estilo deportivo (prueba): prendido por defecto en la versión de prueba; se cambia en Ajustes
+    function aplicarTema() {
+      var t = null; try { t = localStorage.getItem('libreta:tema'); } catch (e) {}
+      var on = t ? t === 'deporte' : /\/prueba\//.test(location.pathname);
+      document.body.classList.toggle('deporte', on);
+      var b = document.getElementById('btnTema'); if (b) b.textContent = on ? 'Estilo deportivo: activado · volver al clásico' : 'Probar el estilo deportivo';
+      var mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', on ? '#1F2227' : '#12274A');
+    }
+    aplicarTema();
     var desdeHash = function () { var r = rpDeHash(); if (r) state.rp = r; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
