@@ -2,63 +2,204 @@
  "planes": {
   "164/3": {
    "t": "GCP - PEREZ ABEL",
-   "f": "2026-11-13",
+   "f": "2026-11-14",
    "items": [
     {
-     "n": "Clostridiales",
+     "n": "Sanidad",
+     "t": "mes",
+     "m": [
+      2
+     ],
+     "g": [
+      "vaca"
+     ]
+    },
+    {
+     "n": "Aftosa",
+     "t": "mes",
+     "m": [
+      3
+     ],
+     "g": [
+      "vaca"
+     ]
+    },
+    {
+     "n": "Leptospirosis",
+     "t": "mes",
+     "m": [
+      4,
+      8
+     ],
+     "g": [
+      "vaca"
+     ]
+    },
+    {
+     "n": "Querato",
+     "t": "mes",
+     "m": [
+      9
+     ],
+     "g": [
+      "vaca"
+     ]
+    },
+    {
+     "n": "Confirmación de preñez: Leptospirosis",
+     "t": "tac",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ]
+    },
+    {
+     "n": "Secas: Clostridial + Saguaypicida",
      "t": "pre",
-     "g": [
-      "vaca",
-      "vaquillona"
-     ],
-     "d1": 60,
-     "d2": 21,
-     "x": "Clostrisan · revisar dosis"
-    },
-    {
-     "n": "Diarrea neonatal",
-     "t": "pre",
-     "g": [
-      "vaca",
-      "vaquillona"
-     ],
-     "d1": 60,
-     "d2": 21,
-     "x": "Scourguard · vaquillonas: 2 dosis"
-    },
-    {
-     "n": "Reproductivas",
-     "t": "fecha",
-     "g": [
-      "vaca",
-      "vaquillona"
-     ],
-     "f": [
-      "15/04"
-     ],
-     "x": "Bioabortogen / Transvac / Gestavac · antes de la zafra"
-    },
-    {
-     "n": "Respiratorias",
-     "t": "edad",
-     "g": [
-      "ternera"
-     ],
-     "d1": 2,
-     "d2": 4,
-     "x": "Neumosan · 2 dosis"
-    },
-    {
-     "n": "Brucelosis RB51",
-     "t": "fecha",
+     "d1": 65,
+     "d2": 55,
      "g": [
       "vaca"
      ],
-     "f": [
-      "15/01",
-      "15/04"
+     "x": "Al secar"
+    },
+    {
+     "n": "Preparto: Diar 7 + Saguaypicida",
+     "t": "pre",
+     "d1": 30,
+     "d2": 21,
+     "g": [
+      "vaca",
+      "vaquillona"
      ],
-     "x": "RB51 · una dosis"
+     "x": "Al entrar al preparto"
+    },
+    {
+     "n": "Vaquillonas: Sanidad + Aftosa",
+     "t": "mes",
+     "m": [
+      2
+     ],
+     "g": [
+      "vaquillona"
+     ]
+    },
+    {
+     "n": "Vaquillonas: Antiparasitario + Saguaypicida",
+     "t": "mes",
+     "m": [
+      3,
+      9
+     ],
+     "g": [
+      "vaquillona"
+     ]
+    },
+    {
+     "n": "Vaquillonas: Clostridial + Leptospirosis",
+     "t": "mes",
+     "m": [
+      4,
+      8
+     ],
+     "g": [
+      "vaquillona"
+     ]
+    },
+    {
+     "n": "Vaquillonas: Aftosa",
+     "t": "mes",
+     "m": [
+      5
+     ],
+     "g": [
+      "vaquillona"
+     ],
+     "x": "Según campaña"
+    },
+    {
+     "n": "Vaquillonas: Querato",
+     "t": "mes",
+     "m": [
+      10
+     ],
+     "g": [
+      "vaquillona"
+     ]
+    },
+    {
+     "n": "Vaquillonas: Leptospirosis",
+     "t": "mes",
+     "m": [
+      12
+     ],
+     "g": [
+      "vaquillona"
+     ]
+    },
+    {
+     "n": "Recría: Aftosa",
+     "t": "mes",
+     "m": [
+      2,
+      5
+     ],
+     "g": [
+      "ternera"
+     ],
+     "x": "Según campaña"
+    },
+    {
+     "n": "Recría: Clostridial + Leptospirosis",
+     "t": "mes",
+     "m": [
+      3,
+      8
+     ],
+     "g": [
+      "ternera"
+     ]
+    },
+    {
+     "n": "Recría: Antiparasitario + Saguaypicida",
+     "t": "mes",
+     "m": [
+      4,
+      9
+     ],
+     "g": [
+      "ternera"
+     ]
+    },
+    {
+     "n": "Recría: Querato",
+     "t": "mes",
+     "m": [
+      10
+     ],
+     "g": [
+      "ternera"
+     ]
+    },
+    {
+     "n": "Recría: Leptospirosis",
+     "t": "mes",
+     "m": [
+      12
+     ],
+     "g": [
+      "ternera"
+     ]
+    },
+    {
+     "n": "Desleche: Leptospira + Clostridial + Antiparasitario",
+     "t": "edad",
+     "d1": 2,
+     "d2": 3,
+     "g": [
+      "ternera"
+     ],
+     "x": "Al deslechar"
     }
    ]
   }
