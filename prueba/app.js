@@ -890,7 +890,7 @@
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
           if ((!d.tambo || externo(d.origen)) && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
-          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], curvas: d.curvas || null, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
+          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], vovsH: d.vovsH || null, ctrls: d.ctrls || [], curvas: d.curvas || null, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
           if (!r) return;
@@ -938,6 +938,7 @@
         if (vivo[b.key]) return;
         N.bajasT.push(b); N.hist[b.key] = hv; out.bajas++;
       });
+      if (!N.vovsH && V.vovsH) N.vovsH = V.vovsH;
       var cv = {}; (N.ctrls || []).forEach(function (c) { cv[c[0] + '|' + c[1]] = 1; });
       (V.ctrls || []).forEach(function (c) { if (!cv[c[0] + '|' + c[1]]) N.ctrls.push(c); });
       N.ctrls.sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; });
@@ -2608,6 +2609,17 @@
     // Vacas por año: promedio de vacas en ordeñe, secas y vaca masa de cada año, con el resumen de cada control lechero
     // (SysCaw lo guarda desde que el tambo usa el programa, más allá de los 2-3 años de historial de animales)
     function vacasAnio() {
+      var H = DB.vovsH, mes = {}, fuente = 'ctrl';
+      if (H && H.u) {
+        fuente = 'anim';
+        var y0 = +H.desde.slice(0, 4);
+        Object.keys(H.u).forEach(function (u) {
+          if (DB.sel && DB.sel.length && DB.sel.indexOf(+u) < 0 && DB.sel.indexOf(u) < 0) return;
+          H.u[u].forEach(function (x, i) { var k = (y0 + Math.floor(i / 12)) + '-' + pad2(i % 12 + 1), m = mes[k] || (mes[k] = { v: 0, n: 1, s: 0, ns: 1 }); m.v += x[0]; m.s += x[1]; });
+        });
+        Object.keys(mes).forEach(function (k) { if (!mes[k].v && !mes[k].s) delete mes[k]; });
+        return vacasAnioDe(mes, fuente);
+      }
       var C = (DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; });
       if (C.length < 6) return null;
       // rondas de control: una fecha por control (si hay varias unidades, se suman)
@@ -2618,11 +2630,14 @@
         if (!cur || A.diffDays(c[0], cur.ini) > 7 || cur.us[u]) { cur = { ini: c[0], f: c[0], us: {}, v: 0, s: 0, sok: true }; R.push(cur); }
         cur.us[u] = 1; cur.f = c[0]; cur.v += c[2]; if (c[5] == null) cur.sok = false; else cur.s += c[5];
       });
-      var mes = {};
       R.forEach(function (r) { var k = r.f.slice(0, 7), m = mes[k] || (mes[k] = { v: 0, n: 0, s: 0, ns: 0 }); m.v += r.v; m.n++; if (r.sok) { m.s += r.s; m.ns++; } });
-      var ks = Object.keys(mes).sort();
+      var k0 = Object.keys(mes).sort();
       // el primer mes con registros suele estar incompleto
-      if (ks.length > 1 && mes[ks[0]].v / mes[ks[0]].n < 0.7 * mes[ks[1]].v / mes[ks[1]].n) { delete mes[ks[0]]; ks.shift(); }
+      if (k0.length > 1 && mes[k0[0]].v / mes[k0[0]].n < 0.7 * mes[k0[1]].v / mes[k0[1]].n) delete mes[k0[0]];
+      return vacasAnioDe(mes, fuente);
+    }
+    function vacasAnioDe(mes, fuente) {
+      var ks = Object.keys(mes).sort();
       if (!ks.length) return null;
       var ult = ks[ks.length - 1], yU = +ult.slice(0, 4), mU = +ult.slice(5, 7);
       var anio = function (y, hasta) {
@@ -2641,6 +2656,7 @@
         var inc = !parcial && a.meses < 10;
         out.push({ y: y, o: a.o, s: a.s, m: a.m, meses: a.meses, parcial: parcial, incompleto: inc, cO: ant && ant.o ? (a.o / ant.o - 1) * 100 : null, cM: ant && ant.m && a.m != null ? (a.m / ant.m - 1) * 100 : null, mU: mU });
       }
+      if (out.length) out.fuente = fuente;
       return out.length ? out : null;
     }
     function vacasAnioHTML() {
@@ -2673,7 +2689,7 @@
         (hayS ? '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' : '') +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Promedio de vacas por año">' + sv + '</svg>' +
         '<table class="tbl vpatbl"><thead><tr><th>Año</th><th>Ordeñe</th>' + (hayS ? '<th>Secas</th><th>Masa</th>' : '') + '<th>Crec. ordeñe</th>' + (hayS ? '<th>Crec. masa</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control (' + SRC() + ' guarda el resumen de todos los controles), primero por mes y después por año. Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. Historia desde ' + pri.y + '.' + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año desde": crecimiento promedio anual entre el primer año y el último completo.</p></details></section>';
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas del respaldo de ' + SRC() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + (DB.fuente === 'syscaw' ? ' Volvé a cargar el respaldo para calcularlo con los animales, sin depender del control lechero.' : '')) + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. Historia desde ' + pri.y + '.' + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año desde": crecimiento promedio anual entre el primer año y el último completo.</p></details></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
@@ -3884,7 +3900,7 @@
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], curvas: o.curvas || null, config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], vovsH: o.vovsH || null, ctrls: o.ctrls || [], curvas: o.curvas || null, config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
