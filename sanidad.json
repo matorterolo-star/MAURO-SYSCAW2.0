@@ -199,6 +199,18 @@
      "m": [
       4
      ]
+    },
+    {
+     "n": "Caravana Mosca",
+     "t": "mes",
+     "g": [
+      "vaca",
+      "vaquillona",
+      "ternera"
+     ],
+     "m": [
+      11
+     ]
     }
    ]
   }
