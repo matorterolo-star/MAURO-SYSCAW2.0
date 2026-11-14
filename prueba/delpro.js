@@ -177,6 +177,7 @@
     });
 
     var fantasmas = [], animales = [], hist = {}, bajas = [], vacio = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [] }, usados = {};
+    var pa2 = function (P) { return P.filter(function (p) { return !/^A/.test(p[2] || ''); }).map(function (p) { return [p[0], p[5] || null]; }); }, VL = [];
     var rpDe = function (id) { var a = A[id]; return a ? a.num || a.reg || null : null; };
     Object.keys(A).forEach(function (id) {
       var a = A[id]; if (!hembra(id) || a.type === 200) return;
@@ -184,7 +185,7 @@
       if (pi) { ma = rpDe(pi.ma) || null; var b = A[pi.pa]; pd = b ? b.nom || b.bull || b.num || null : null; if (pd && /^unknown/i.test(pd)) pd = null; }
       var rp = a.num || a.reg || a.tag || ('ID ' + id);
       if (a.exit) {
-        var s = salida[id] || {}, bF = s.f || a.exit; if (!bF || bF < desdeHist) return;
+        var s = salida[id] || {}, bF = s.f || a.exit; if (x.pa.length) VL.push({ u: 0, pa: pa2(x.pa), baja: bF, activa: false, seca: false }); if (!bF || bF < desdeHist) return;
         // tipo 8: salida del sistema sin venta ni muerte (p.ej. la recría que se sacó de DelPro el 21/10/2025): transferencia
         var t = s.t || a.exitT, tipoB = t === 6 ? 'venta' : t === 7 ? 'muerte' : t === 8 ? 'transferencia' : 'baja';
         var key = 'd' + id, catB = x.pa.length ? 'vaca' : 'vaquillona';
@@ -197,6 +198,7 @@
       // activa en DelPro pero con más de 3 años y ningún registro en 2 años (nunca se le dio la baja): no va a la libreta
       var ultA = '0000'; [x.pa, x.ev, x.ta, x.ct].forEach(function (L) { L.forEach(function (e) { if (e[0] > ultA) ultA = e[0]; }); });
       if ((!a.fn || a.fn < addDays(ref, -1096)) && ultA < desdeHist) { fantasmas.push(rp); return; }
+      if (x.pa.length) VL.push({ u: 0, pa: pa2(x.pa), baja: null, activa: true, seca: false });
       var rp0 = rp, k2 = 2; while (usados[rp]) rp = rp0 + ' #' + k2++; usados[rp] = 1;
       var lp = x.pa.length ? x.pa[x.pa.length - 1] : null, lpf = lp ? lp[0] : '0000';
       // DelPro llama "Heifer" a toda la recría: menos de 6 meses es ternera
@@ -234,7 +236,7 @@
     if (!tambo && info.backup) { var m = /^([^_]+)_/.exec(info.backup); if (m) tambo = m[1].replace(/([a-z])([A-Z])/g, '$1 $2'); }
     // número para identificar (y bloquear) los links de este tambo: DP + el nombre del tambo en DelPro
     var nro = String(tambo || '').normalize('NFD').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
-    return { idProd: nro.length >= 3 ? ['DP' + nro] : [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'delpro', unidades: [], fechaBackup: fch(info.fecha_backup), fantasmas: fantasmas };
+    return { vovsH: root.SysCaw && root.SysCaw.vovsHist ? root.SysCaw.vovsHist(VL, ref) : null, idProd: nro.length >= 3 ? ['DP' + nro] : [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'delpro', unidades: [], fechaBackup: fch(info.fecha_backup), fantasmas: fantasmas };
   }
 
   function fromFile(buf, nombre) {

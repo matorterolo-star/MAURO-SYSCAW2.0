@@ -137,9 +137,11 @@
     H.forEach(function (a) { G[a.g].ta.forEach(function (t) { if (!codes[t[1]]) codes[t[1]] = ['Estado ' + t[1], 'Estado ' + t[1] + ' (FOSAPP)', '']; }); });
 
     var animales = [], hist = {}, bajas = [];
+    var pa2 = function (P) { return P.filter(function (p) { return !/^A/.test(p[2] || ''); }).map(function (p) { return [p[0], p[5] || null]; }); }, VL = [];
     H.forEach(function (a) {
       var g = G[a.g], rp = a.rp; if (!rp) return;
       var activo = a.est !== 3 && a.est !== 5 && !(g.baja && a.est !== 1);
+      if (g.pa.length) VL.push({ u: 0, pa: pa2(g.pa), baja: activo ? null : (g.baja ? g.baja[0] : null), activa: activo, seca: a.ub === 'SECA' });
       if (!activo) {
         var cz = g.baja ? g.baja[1] : null, tipo = cz && causaTipo[cz] === 2 ? 'muerte' : cz && causaTipo[cz] === 1 ? 'venta' : a.est === 5 ? 'muerte' : a.est === 3 ? 'venta' : 'baja';
         var key = 'f' + a.g.slice(0, 8), bF = g.baja ? g.baja[0] : null;
@@ -187,7 +189,7 @@
     var c = {}; animales.forEach(function (x) { c[x.cat] = (c[x.cat] || 0) + 1; });
     var config = {}; if (+par.PEV > 0) config.pev = +par.PEV;
     if (+par.MESSERV1INI >= 1 && +par.MESSERV1INI <= 12) config.iniMes = +par.MESSERV1INI;
-    return { idProd: prod[0] != null ? ['F' + prod[0]] : [], ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: nom(prod[1]) || info.tambo, conteoCat: c, origen: 'fosapp' };
+    return { vovsH: root.SysCaw && root.SysCaw.vovsHist ? root.SysCaw.vovsHist(VL, ref) : null, idProd: prod[0] != null ? ['F' + prod[0]] : [], ctrls: ctrls, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: nom(prod[1]) || info.tambo, conteoCat: c, origen: 'fosapp' };
   }
 
   // nombre del archivo de FOSAPP: DB3112026.zip = 3/11/2026

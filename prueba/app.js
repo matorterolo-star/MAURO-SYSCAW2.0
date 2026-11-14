@@ -834,7 +834,7 @@
     function cargarSigea() {
       if (root.Sigea) return Promise.resolve(root.Sigea);
       return new Promise(function (ok, mal) {
-        var s = document.createElement('script'); s.src = 'sigea.js?v=1';
+        var s = document.createElement('script'); s.src = 'sigea.js?v=2';
         s.onload = function () { root.Sigea ? ok(root.Sigea) : mal(new Error('no se pudo cargar el lector de SIGEA')); };
         s.onerror = function () { mal(new Error('no se pudo descargar el lector de SIGEA (hace falta internet la primera vez)')); };
         document.head.appendChild(s);
@@ -844,12 +844,12 @@
     function cargarDhm() {
       if (root.Dhm && root.MDBReader) return Promise.resolve(root.Dhm);
       var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
-      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=4'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
+      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=5'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
     }
     // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
     function cargarDelpro() {
       if (root.Delpro) return Promise.resolve(root.Delpro);
-      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=4'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=5'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
     }
     // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
     function esDelpro(buf) {
@@ -2689,7 +2689,7 @@
         (hayS ? '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' : '') +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Promedio de vacas por año">' + sv + '</svg>' +
         '<table class="tbl vpatbl"><thead><tr><th>Año</th><th>Ordeñe</th>' + (hayS ? '<th>Secas</th><th>Masa</th>' : '') + '<th>Crec. ordeñe</th>' + (hayS ? '<th>Crec. masa</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas del respaldo de ' + SRC() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + (DB.fuente === 'syscaw' ? ' Volvé a cargar el respaldo para calcularlo con los animales, sin depender del control lechero.' : '')) + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. Historia desde ' + pri.y + '.' + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año desde": crecimiento promedio anual entre el primer año y el último completo.</p></details></section>';
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas ' + (/^base/.test(SRCbase()) ? 'de la ' : 'del ') + SRCbase() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + ' Volvé a cargar la base o el respaldo del tambo para calcularlo con los animales, sin depender del control lechero.') + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. Historia desde ' + pri.y + '.' + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año desde": crecimiento promedio anual entre el primer año y el último completo.</p></details></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });

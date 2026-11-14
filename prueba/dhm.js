@@ -253,6 +253,7 @@
     });
 
     var animales = [], hist = {}, bajas = [], vacio = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [] }, usados = {};
+    var pa2 = function (P) { return P.filter(function (p) { return !/^A/.test(p[2] || ''); }).map(function (p) { return [p[0], p[5] || null]; }); }, VL = [];
     // caravana única: si hembras de distintas unidades comparten el RP, se agrega la unidad
     var uDeRp = {}; anim.forEach(function (a) { if (mio[a.Ani_IdAnimal] && a.Ean_IdEstadoAnimal === 1) { var r = rpDe(a.Ani_IdAnimal); if (r) (uDeRp[r] = uDeRp[r] || {})[a.Est_IdEstablecimiento] = 1; } });
     var corto = {}; us.forEach(function (u) { var m = /\b(T\d+)\s*$/i.exec(u.nombre); corto[u.id] = m ? m[1].toUpperCase() : 'U' + u.id; });
@@ -262,6 +263,7 @@
       var rp = rpDe(id) || tx(a.Ani_CaravanaSENASA) || tx(a.Ani_RC) || tx(a.Ani_IdElectronico) || ('ID ' + id);
       var lp = x.pa.length ? x.pa[x.pa.length - 1] : null, lpf = lp ? lp[0] : '0000';
       var ma = a.Ani_IdMadre > 0 ? rpDe(a.Ani_IdMadre) : tx(a.Ani_RPMadreX) || null, pd = a.Ani_IdPadre > 0 ? (tx(pid(a.Ani_IdPadre)) || null) : tx(a.Ani_ApodoPadreX) || null;
+      if (x.pa.length) VL.push({ u: a.Est_IdEstablecimiento, pa: pa2(x.pa), baja: a.Ean_IdEstadoAnimal !== 1 ? ((desc[id] || {}).f || fch(a.Ani_FechaDescarte)) : null, activa: a.Ean_IdEstadoAnimal === 1, seca: false });
       if (a.Ean_IdEstadoAnimal !== 1) {
         // bajas: solo las de los últimos 2 años
         var b = desc[id] || {}, bF = b.f || fch(a.Ani_FechaDescarte); if (!bF || bF < desdeHist) return;
@@ -313,7 +315,7 @@
     var elegidas = us.filter(function (u) { return sel[u.id]; });
     // nombre del tambo: el de la unidad, o la parte común de los nombres ("El Teson (MFajardo) T1" y "… T2" → "El Teson (MFajardo)")
     var tambo = elegidas.length === 1 ? elegidas[0].nombre : (function () { var ns = elegidas.map(function (u) { return u.nombre; }), p = ns[0] || ''; ns.forEach(function (n) { while (p && n.indexOf(p) !== 0) p = p.slice(0, -1); }); return p.replace(/[\s\-·,]+(T|U)?$/i, '').trim() || null; })();
-    return { idProd: elegidas.map(function (u) { return u.nro; }), ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'dhm', unidades: elegidas, deducidas: nDed, fantasmas: fantasmas };
+    return { vovsH: root.SysCaw && root.SysCaw.vovsHist ? root.SysCaw.vovsHist(VL, ref) : null, idProd: elegidas.map(function (u) { return u.nro; }), ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: tambo, conteoCat: cc, origen: 'dhm', unidades: elegidas, deducidas: nDed, fantasmas: fantasmas };
   }
 
   // opts.elegir(unidades) -> Promise<[ids]>: se llama si la base trae más de un establecimiento con hembras activas.

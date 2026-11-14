@@ -209,6 +209,7 @@
     var ctrls = Object.keys(porF).sort().filter(function (f) { return porF[f].v >= 5; }).map(function (f) { var y = porF[f]; return [f, 0, y.v, Math.round(y.l), y.nd ? Math.round(y.d / y.nd) : null, null]; });
 
     var animales = [], hist = {}, bajas = [], vacio = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [] };
+    var pa2 = function (P) { return P.filter(function (p) { return !/^A/.test(p[2] || ''); }).map(function (p) { return [p[0], p[5] || null]; }); }, VL = [];
     anim.forEach(function (a) {
       var id = a.IDANIMAL; if (!esH(id)) return;
       var c = cata[id] || {}, x = G[id] || vacio, n0 = nac[id] || {}, fn = fch(n0.FECHA);
@@ -217,7 +218,7 @@
       var ma = n0.IDMADRE ? (rpDe[n0.IDMADRE] || null) : null, pd = n0.IDPADRE ? (rep[n0.IDPADRE] || rpDe[n0.IDPADRE] || null) : null;
       if (a.TI_EXISTENCIA !== 1) {
         var b = bajaDe[id]; if (!b) return; // nunca estuvo en el tambo
-        var bF = fch(b.FECHA), bc = bajaCausa[b.ID_ANIMAL_BAJA];
+        var bF = fch(b.FECHA), bc = bajaCausa[b.ID_ANIMAL_BAJA]; if (x.pa.length) VL.push({ u: 0, pa: pa2(x.pa), baja: bF, activa: false, seca: false });
         var tipo = b.TI_BAJA === 1 ? 'venta' : b.TI_BAJA === 2 ? 'muerte' : 'baja';
         var causa = bc && causaNom[bc.TI_CAUSA] ? causaNom[bc.TI_CAUSA] : frase(b.DESCRIPCION) || null;
         var key = 'm' + id, cat = x.pa.length ? 'vaca' : 'vaquillona';
@@ -231,6 +232,7 @@
       }
       var h = hemb[id], cat;
       if (lp) cat = (h ? h.ENLACTANCIA === 1 : !(lp[5] && lp[5] > lpf)) ? 'vaca' : 'seca';
+      if (x.pa.length) VL.push({ u: 0, pa: pa2(x.pa), baja: null, activa: true, seca: cat === 'seca' });
       else cat = x.ev.some(function (e) { return e[1] === 'S'; }) || (fn && diffDays(ref, fn) >= 365) ? 'vaquillona' : 'ternera';
       var evs = x.ev.filter(function (e) { return e[0] > lpf; }), servs = evs.filter(function (e) { return e[1] === 'S'; });
       var le = evs.length ? evs[evs.length - 1] : null;
@@ -259,7 +261,7 @@
     animales.sort(function (p, q) { return p.rp.localeCompare(q.rp, 'es', { numeric: true }); });
     bajas.sort(function (p, q) { return (q.bFecha || '') < (p.bFecha || '') ? -1 : 1; });
     var cc = {}; animales.forEach(function (x) { cc[x.cat] = (cc[x.cat] || 0) + 1; });
-    return { idProd: [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: cc, origen: 'sigea' };
+    return { vovsH: root.SysCaw && root.SysCaw.vovsHist ? root.SysCaw.vovsHist(VL, ref) : null, idProd: [], ctrls: ctrls, config: {}, animales: animales, bajas: bajas, hist: hist, codes: CODES, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: cc, origen: 'sigea' };
   }
 
   function fromFile(buf, nombre) {

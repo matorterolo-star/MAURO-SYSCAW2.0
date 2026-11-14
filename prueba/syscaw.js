@@ -31,6 +31,52 @@
   function addDays(s, n) { var d = new Date(P(s) + n * 864e5); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
   function okDate(d) { return d && d > '1900' && d < '2100' ? d : null; }
 
+  // vacas en ordeñe y secas mes a mes, por unidad, con la vida de todas las vacas:
+  // L = [{ u, pa: [[fecha parto, fecha cierre]], baja, activa, seca }] (sin abortos). Promedio de los días de cada mes.
+  // Si falta el secado: 60 días antes del parto siguiente; seca activa sin secado: desde 30 días antes de la fecha del respaldo.
+  // El primer año con partos anotados queda afuera (las vacas que ya estaban no tienen su parto cargado).
+  function vovsHist(L, ref) {
+    try {
+      var acc = {}, prim = null, ymI = function (s) { return +s.slice(0, 4) * 12 + (+s.slice(5, 7) - 1); };
+      var sumar = function (u, k, a, b) {
+        if (!a || !b || b <= a) return;
+        var A0 = ymI(a), B0 = ymI(b), U = acc[u] || (acc[u] = {});
+        for (var m = A0; m <= B0; m++) {
+          var y = Math.floor(m / 12), mm = m % 12 + 1, ini = y + '-' + pad(mm) + '-01', fin = mm === 12 ? (y + 1) + '-01-01' : y + '-' + pad(mm + 1) + '-01';
+          var d0 = a > ini ? a : ini, d1 = b < fin ? b : fin, n = diffDays(d1, d0); if (n <= 0) continue;
+          var c = U[m] || (U[m] = [0, 0]); c[k] += n;
+        }
+      };
+      L.forEach(function (x) {
+        var fb = x.baja && x.baja <= ref ? x.baja : null, E = fb || addDays(ref, 1);
+        if (!fb && !x.activa) return; // fuera del rodeo sin fecha de baja: no se sabe hasta cuándo estuvo
+        var P = (x.pa || []).filter(function (p) { return p[0]; }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+        P.forEach(function (p, i) {
+          var s = p[0], np = P[i + 1] ? P[i + 1][0] : null, c = p[1];
+          if (s >= E) return;
+          if (!prim || s < prim) prim = s;
+          if (!c || c <= s || (np && c >= np)) c = np ? addDays(np, -60) : (x.activa && x.seca ? addDays(ref, -30) : null);
+          if (c && c <= s) c = addDays(s, 1);
+          var finL = c && c < E ? c : E, finS = np && np < E ? np : E;
+          sumar(x.u == null ? 0 : x.u, 0, s, finL);
+          if (c && c < finS) sumar(x.u == null ? 0 : x.u, 1, c, finS);
+        });
+      });
+      if (!prim) return null;
+      var desde = (+prim.slice(0, 4) + 1) * 12, hasta = ymI(ref), out = {};
+      if (desde > hasta) return null;
+      Object.keys(acc).forEach(function (u) {
+        var arr = [];
+        for (var m = desde; m <= hasta; m++) {
+          var y = Math.floor(m / 12), mm = m % 12 + 1, dm = m === hasta ? +ref.slice(8, 10) : diffDays(mm === 12 ? (y + 1) + '-01-01' : y + '-' + pad(mm + 1) + '-01', y + '-' + pad(mm) + '-01');
+          var c = acc[u][m] || [0, 0]; arr.push([Math.round(c[0] / dm * 10) / 10, Math.round(c[1] / dm * 10) / 10]);
+        }
+        out[u] = arr;
+      });
+      return { desde: Math.floor(desde / 12) + '-01', hasta: ref.slice(0, 7), u: out };
+    } catch (e) { return null; }
+  }
+
   function infoFromName(name) {
     var base = String(name || '').replace(/\.rar$/i, '').replace(/^[0-9a-f]{8}-/i, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
     var m = base.match(/(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/), fecha = null;
@@ -290,52 +336,16 @@
     // número de productor de SysCaw: identifica al tambo para la activación
     var idProd = [];
     try { if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: ['IdProd'], array: true }).rows.forEach(function (r) { if (r[0] != null && idProd.indexOf(r[0]) < 0) idProd.push(r[0]); }); } catch (e) { idProd = []; }
-    // historia de vacas en ordeñe y secas, mes a mes, con TODAS las vacas del respaldo (también las dadas de baja hace años):
-    // promedio de los días de cada mes, por unidad. Sirve para "Vacas por año" aunque el tambo no haga control lechero.
-    var vovsH = null;
-    try {
-      var PAt = {};
-      T.partos.forEach(function (r) { var f = okDate(r[1]); if (f && r[4] > 0) (PAt[r[0]] = PAt[r[0]] || []).push([f, okDate(r[7])]); });
-      var acc = {}, prim = null, ymI = function (s) { return +s.slice(0, 4) * 12 + (+s.slice(5, 7) - 1); };
-      var sumar = function (u, k, a, b) { // días de [a, b) en cada mes
-        if (!a || !b || b <= a) return;
-        var A0 = ymI(a), B0 = ymI(b), U = acc[u] || (acc[u] = {});
-        for (var m = A0; m <= B0; m++) {
-          var y = Math.floor(m / 12), mm = m % 12 + 1, ini = y + '-' + pad(mm) + '-01', fin = mm === 12 ? (y + 1) + '-01-01' : y + '-' + pad(mm + 1) + '-01';
-          var d0 = a > ini ? a : ini, d1 = b < fin ? b : fin, n = diffDays(d1, d0); if (n <= 0) continue;
-          var c = U[m] || (U[m] = [0, 0]); c[k] += n;
-        }
-      };
-      Object.keys(PAt).forEach(function (id) {
-        var a = byId[id]; if (!a || (sel && !sel[a[11]])) return;
-        var u = a[11] == null ? 0 : a[11], L = PAt[id].sort(function (x, y) { return x[0] < y[0] ? -1 : 1; });
-        var fb = okDate(a[9]), E = fb && fb < ref ? fb : addDays(ref, 1), activa = !fb && !!CAT[a[6]];
-        if (!fb && !activa) return; // fuera del rodeo sin fecha de baja: no se sabe hasta cuándo estuvo
-        L.forEach(function (p, i) {
-          var s = p[0], np = L[i + 1] ? L[i + 1][0] : null, c = p[1];
-          if (s >= E) return;
-          if (!prim || s < prim) prim = s;
-          if (!c || c <= s || (np && c >= np)) c = np ? addDays(np, -60) : (activa && CAT[a[6]] === 'seca' ? addDays(ref, -30) : null);
-          if (c && c <= s) c = addDays(s, 1);
-          var finL = c && c < E ? c : E, finS = np && np < E ? np : E;
-          sumar(u, 0, s, finL);
-          if (c && c < finS) sumar(u, 1, c, finS);
-        });
-      });
-      if (prim) {
-        // el primer año con partos cargados queda afuera: las vacas que ya estaban en el tambo no tienen su parto anotado
-        var desde = (+prim.slice(0, 4) + 1) * 12, hasta = ymI(ref), out = {};
-        Object.keys(acc).forEach(function (u) {
-          var arr = [];
-          for (var m = desde; m <= hasta; m++) {
-            var y = Math.floor(m / 12), mm = m % 12 + 1, dm = m === hasta ? +ref.slice(8, 10) : diffDays(mm === 12 ? (y + 1) + '-01-01' : y + '-' + pad(mm + 1) + '-01', y + '-' + pad(mm) + '-01');
-            var c = acc[u][m] || [0, 0]; arr.push([Math.round(c[0] / dm * 10) / 10, Math.round(c[1] / dm * 10) / 10]);
-          }
-          out[u] = arr;
-        });
-        if (desde <= hasta) vovsH = { desde: Math.floor(desde / 12) + '-01', hasta: ref.slice(0, 7), u: out };
-      }
-    } catch (e) { vovsH = null; }
+    // historia de vacas en ordeñe y secas (todas las vacas del respaldo, también las dadas de baja hace años)
+    var VL = [];
+    var PAt = {};
+    T.partos.forEach(function (r) { var f = okDate(r[1]); if (f && r[4] > 0) (PAt[r[0]] = PAt[r[0]] || []).push([f, okDate(r[7])]); });
+    Object.keys(PAt).forEach(function (id) {
+      var a = byId[id]; if (!a || (sel && !sel[a[11]])) return;
+      var fb = okDate(a[9]);
+      VL.push({ u: a[11] == null ? 0 : a[11], pa: PAt[id], baja: fb, activa: !fb && !!CAT[a[6]], seca: CAT[a[6]] === 'seca' });
+    });
+    var vovsH = vovsHist(VL, ref);
     return { idProd: idProd, vovsH: vovsH, ctrls: ctrls, curvas: curvas, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
   }
 
@@ -377,6 +387,6 @@
     return d;
   }
 
-  var api = { build: build, curvaLact: curvaLact, curvaProy: curvaProy, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
+  var api = { vovsHist: vovsHist, build: build, curvaLact: curvaLact, curvaProy: curvaProy, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SysCaw = api;
 })(typeof window !== 'undefined' ? window : this);
