@@ -3192,6 +3192,16 @@
         var t = (sec.querySelector('h2') || {}).textContent || ''; if (!/^(Control lechero|Historial reproductivo)/.test(t)) return;
         var c = sec.cloneNode(true); c.classList.add('open');
         Array.prototype.forEach.call(c.querySelectorAll('.shic,.chev,.pdesc,details.nota,.despbtn,button.lnk,details:not([open])'), function (x) { x.remove(); });
+        if (/^Control lechero/.test(t)) {
+          // solo el gráfico: sin tablas ni la leyenda de células somáticas
+          Array.prototype.forEach.call(c.querySelectorAll('table,.scroll,details,p.cap'), function (x) { x.remove(); });
+          Array.prototype.forEach.call(c.querySelectorAll('.clegend span'), function (x) { if (/CS/.test(x.textContent)) x.remove(); });
+          Array.prototype.forEach.call(c.querySelectorAll('svg.bars .cs, svg.bars .csd, svg.bars line[stroke-dasharray], svg.bars .cs200'), function (x) { x.remove(); });
+          Array.prototype.forEach.call(c.querySelectorAll('svg.bars text.lbl'), function (x) { if (x.textContent.trim() === '200') x.remove(); });
+        } else {
+          // historial reproductivo: solo la última lactancia
+          var lacs = c.querySelectorAll('details.lac'); Array.prototype.forEach.call(lacs, function (x, k) { if (k > 0) x.remove(); else x.setAttribute('open', ''); });
+        }
         c.style.cssText = 'margin:12px 0 0;border:1px solid #D3DBE7;border-radius:14px;padding:12px 14px;background:#fff'; d.appendChild(c);
       });
       var rp = state.rp || '', w = shHoja('Vaca ' + rp, '', '', d, 0);
