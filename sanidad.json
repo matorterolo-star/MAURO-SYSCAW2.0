@@ -7,42 +7,32 @@
     {
      "n": "Sanidad",
      "t": "mes",
+     "g": [
+      "vaca"
+     ],
      "m": [
       2
-     ],
-     "g": [
-      "vaca"
-     ]
-    },
-    {
-     "n": "Aftosa",
-     "t": "mes",
-     "m": [
-      3
-     ],
-     "g": [
-      "vaca"
      ]
     },
     {
      "n": "Leptospirosis",
      "t": "mes",
+     "g": [
+      "vaca"
+     ],
      "m": [
       4,
       8
-     ],
-     "g": [
-      "vaca"
      ]
     },
     {
      "n": "Querato",
      "t": "mes",
-     "m": [
-      9
-     ],
      "g": [
       "vaca"
+     ],
+     "m": [
+      9
      ]
     },
     {
@@ -56,149 +46,149 @@
     {
      "n": "Secas: Clostridial + Saguaypicida",
      "t": "pre",
-     "d1": 65,
-     "d2": 55,
      "g": [
       "vaca"
      ],
+     "d1": 65,
+     "d2": 55,
      "x": "Al secar"
     },
     {
      "n": "Preparto: Diar 7 + Saguaypicida",
      "t": "pre",
-     "d1": 30,
-     "d2": 21,
      "g": [
       "vaca",
       "vaquillona"
      ],
+     "d1": 30,
+     "d2": 21,
      "x": "Al entrar al preparto"
     },
     {
      "n": "Vaquillonas: Sanidad + Aftosa",
      "t": "mes",
-     "m": [
-      2
-     ],
      "g": [
       "vaquillona"
+     ],
+     "m": [
+      2
      ]
     },
     {
      "n": "Vaquillonas: Antiparasitario + Saguaypicida",
      "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
      "m": [
       3,
       9
-     ],
-     "g": [
-      "vaquillona"
      ]
     },
     {
      "n": "Vaquillonas: Clostridial + Leptospirosis",
      "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
      "m": [
       4,
       8
-     ],
-     "g": [
-      "vaquillona"
      ]
     },
     {
      "n": "Vaquillonas: Aftosa",
      "t": "mes",
-     "m": [
-      5
-     ],
      "g": [
       "vaquillona"
+     ],
+     "m": [
+      5
      ],
      "x": "Según campaña"
     },
     {
      "n": "Vaquillonas: Querato",
      "t": "mes",
-     "m": [
-      10
-     ],
      "g": [
       "vaquillona"
+     ],
+     "m": [
+      10
      ]
     },
     {
      "n": "Vaquillonas: Leptospirosis",
      "t": "mes",
-     "m": [
-      12
-     ],
      "g": [
       "vaquillona"
+     ],
+     "m": [
+      12
      ]
     },
     {
      "n": "Recría: Aftosa",
      "t": "mes",
+     "g": [
+      "ternera"
+     ],
      "m": [
       2,
       5
-     ],
-     "g": [
-      "ternera"
      ],
      "x": "Según campaña"
     },
     {
      "n": "Recría: Clostridial + Leptospirosis",
      "t": "mes",
+     "g": [
+      "ternera"
+     ],
      "m": [
       3,
       8
-     ],
-     "g": [
-      "ternera"
      ]
     },
     {
      "n": "Recría: Antiparasitario + Saguaypicida",
      "t": "mes",
+     "g": [
+      "ternera"
+     ],
      "m": [
       4,
       9
-     ],
-     "g": [
-      "ternera"
      ]
     },
     {
      "n": "Recría: Querato",
      "t": "mes",
-     "m": [
-      10
-     ],
      "g": [
       "ternera"
+     ],
+     "m": [
+      10
      ]
     },
     {
      "n": "Recría: Leptospirosis",
      "t": "mes",
-     "m": [
-      12
-     ],
      "g": [
       "ternera"
+     ],
+     "m": [
+      12
      ]
     },
     {
      "n": "Desleche: Leptospira + Clostridial + Antiparasitario",
      "t": "edad",
-     "d1": 2,
-     "d2": 3,
      "g": [
       "ternera"
      ],
+     "d1": 2,
+     "d2": 3,
      "x": "Al deslechar"
     }
    ]
