@@ -1908,12 +1908,11 @@
         t4 = tile(s3, 'tactar', 'Último tacto', dt + '<small> ' + (dt === 1 ? 'día' : 'días') + '</small>', 'Desde el ' + A.fmt(R.ultTacto).slice(0, 5) + (R.ultTactoN ? ' · ' + R.ultTactoN + ' vacas' : ''),
           R.nTactar != null ? n0(R.nTactar) + ' para tactar' : '');
       }
-      var SS = sanSemana();
       var hayMal = avisos.some(function (x) { return x[0] === 'mal'; });
       var res = avisos.length
         ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
         : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
-      var sanBtn = SS ? '<button class="voyent" data-a="sanir"><span><b>Sanidad esta semana</b><small>' + esc(SS.map(function (o) { return o.it.n; }).join(' · ')) + '</small></span><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' : '';
+      var SM = sanMes(), sanBtn = SM ? '<button class="voyent" data-a="sanir"><span><b>Sanidad de ' + SM.mes + '</b><small>' + esc(SM.txt) + '</small></span><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' : '';
       return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' + sanBtn +
         '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: último día en que se tactaron 5 vacas en ordeñe o más (no cuentan vaquillonas, secas ni registros sueltos, como un aborto cargado como tacto); amarillo desde 21 días, rojo con más de 30.</p>';
     }
@@ -3575,19 +3574,32 @@
       if (!cols.length) return '';
       // texto vertical en SVG (de abajo hacia arriba, como la planilla): sale igual en la pantalla y en la imagen para compartir
       var vert = function (t, fs) { return '<svg class="bsvg" xmlns="http://www.w3.org/2000/svg"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-family="Inter, system-ui, sans-serif" font-size="' + fs + '" font-weight="800" letter-spacing=".4" style="transform-box:fill-box;transform-origin:center;transform:rotate(-90deg)">' + esc(t) + '</text></svg>'; };
-      var mh = +today().slice(5, 7);
+      var mh = +today().slice(5, 7), vet = esVet();
       var head = '<tr><th class="mcol"></th>' + cols.map(function (c) { return c.b ? '<th class="bcol">' + vert(c.b.t, 10) + '</th>' : '<th>' + MC[c.k] + '</th>'; }).join('') + '</tr>';
       var filas = '';
       for (var i = 1; i <= 12; i++) {
         filas += '<tr' + (i === mh ? ' class="hoy"' : '') + '><th>' + A.MESES[i - 1].replace(/^./, function (c) { return c.toUpperCase(); }) + '</th>' + cols.map(function (c) {
           if (c.b) return i === 1 ? '<td class="band" rowspan="12" data-a="sanver" data-i="' + c.b.i + '" role="button">' + vert(c.b.v.join(' · '), 11) + '</td>' : '';
-          var v = celdas[c.k + i]; return '<td>' + (v ? v.join('') : '') + '</td>';
+          var v = celdas[c.k + i]; return '<td' + (vet ? ' class="sadd" data-a="sannuevo" data-m="' + i + '" data-g="' + c.k + '"' : '') + '>' + (v ? v.join('') : '') + '</td>';
         }).join('') + '</tr>';
       }
       var cont = '<div class="calwrap"><h2 class="sr">Calendario sanitario</h2><div class="scal"><table><thead>' + head + '</thead><tbody>' + filas + '</tbody></table></div>' +
-        '<p class="cap">El mes actual va marcado. Las franjas se dan en cada evento. Tocá una vacuna para ver los animales.</p></div>' +
-        (esVet() ? '<button class="btn share" data-a="sancalimg"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Compartir como imagen</button>' : '');
-      return secTareas('sancal', 'Calendario sanitario', cont, [], null, '', '');
+        '<p class="cap">El mes actual va marcado. Las franjas se dan en cada evento. ' + (vet ? 'Tocá un evento para editarlo o borrarlo, o una casilla vacía para agregar uno.' : 'Tocá una vacuna para ver los animales.') + '</p></div>';
+      if (vet) cont = '<button class="shic" data-a="sancalimg" aria-label="Compartir como imagen" title="Compartir"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' + cont;
+      return secTareas('sancal', 'Calendario sanitario', cont, [], null, '', '').replace('<section class="sec', '<section class="sec sancalsec');
+    }
+    // lo que el calendario tiene en el mes actual (por mes o fecha fija), por columna
+    function sanMes() {
+      if (esOperario()) return null;
+      var P = sanPlan(); if (!P) return null;
+      var hoy = today(), mh = +hoy.slice(5, 7), C = { vaca: 'Tambo', vaquillona: 'Vaquillonas', ternera: 'Recría' }, por = {};
+      P.items.forEach(function (it) {
+        var ok = it.t === 'mes' ? (it.m || []).indexOf(mh) >= 0 : it.t === 'fecha' ? (it.f || []).map(sanDdmm).filter(Boolean).some(function (dm) { return dm[1] === mh; }) : false;
+        if (!ok) return;
+        (it.g && it.g.length ? it.g : ['vaca']).forEach(function (g) { var c = C[g === 'seca' ? 'vaca' : g]; (por[c] = por[c] || []).push(sanEtq(it.n)); });
+      });
+      var L = ['Tambo', 'Vaquillonas', 'Recría'].filter(function (c) { return por[c]; }).map(function (c) { return c + ': ' + por[c].join(', '); });
+      return L.length ? { mes: MESL[mh - 1], txt: L.join(' · ') } : null;
     }
     function sanTareasHTML() {
       var P = sanPlan(), vet = esVet();
@@ -3596,7 +3608,8 @@
       var orden = function (o) { return o.L && o.L.length ? -1000 + (o.nEnt ? -100 : 0) : o.dias != null ? Math.max(o.dias, 0) : 9999; };
       var secs = sanCalc(P).map(function (o, i) { return { o: o, i: i }; }).sort(function (x, y) { return orden(x.o) - orden(y.o) || x.i - y.i; }).map(function (z) {
         var o = z.o, i = z.i;
-        var it = o.it, key = 'san' + i, nota = '<p class="secnote"><b>' + esc(sanQuien(it)) + '</b> · ' + esc(sanVentTxt(it)) + (it.x ? '<br>' + esc(it.x) : '') + '</p>';
+        var it = o.it, key = 'san' + i; state.desp = state.desp || {}; if (state.desp[key] === undefined) state.desp[key] = true;
+        var nota = '<p class="secnote"><b>' + esc(sanQuien(it)) + '</b> · ' + esc(sanVentTxt(it)) + (it.x ? '<br>' + esc(it.x) : '') + '</p>';
         if (it.t === 'tac') return secTareas(key, esc(it.n), nota + '<p class="secnote">Se da en la visita de tacto. Hoy hay ' + nf(o.nServ) + ' servidas para confirmar.</p>', [], null, '', 'tacto');
         if (it.t === 'mes') {
           var tm = o.prox ? (o.act ? 'Este mes (' + MESL[+o.prox.slice(5, 7) - 1] + ')' : 'Próximo: ' + MESL[+o.prox.slice(5, 7) - 1] + ' · faltan ' + o.dias + ' días') : 'Sin meses';
@@ -3617,24 +3630,31 @@
         '<p class="cap" style="margin:6px 4px 0">Plan sanitario del Dr. Mauro Torterolo' + (P.f ? ', actualizado el ' + A.fmt(P.f) : '') + '. La lista muestra quiénes están en fecha según su etapa; lo aplicado no se registra.' + (vet ? ' <button class="lnk" data-a="saned">Editar plan</button>' : '') + '</p>';
     }
     /* ----- editor del plan (modo veterinario) ----- */
+    // un evento solo (desde el calendario): i = índice en el plan; nuevo = evento a agregar
+    function sanEditarUno(i, nuevo) {
+      var P = sanPlan(); state.sanDraft = P ? JSON.parse(JSON.stringify(P.items)) : [];
+      if (nuevo) { state.sanDraft.push(nuevo); i = state.sanDraft.length - 1; state.sanNuevo = true; } else state.sanNuevo = false;
+      state.sanUno = i; sanEditor();
+    }
     function sanEditor(nuevo) {
-      if (nuevo) { var P = sanPlan(); state.sanDraft = P ? JSON.parse(JSON.stringify(P.items)) : []; }
-      var D = state.sanDraft, k = sanKey();
-      $('#sheetXTitle').textContent = 'Plan sanitario';
+      if (nuevo) { var P = sanPlan(); state.sanDraft = P ? JSON.parse(JSON.stringify(P.items)) : []; state.sanUno = null; }
+      var D = state.sanDraft, k = sanKey(), uno = state.sanUno != null;
+      $('#sheetXTitle').textContent = uno ? (state.sanNuevo ? 'Nuevo evento' : 'Editar evento') : 'Plan sanitario';
       var num = function (i, f, v) { return '<input type="number" inputmode="numeric" min="0" max="999" data-sf="' + i + '.' + f + '" value="' + (v == null ? '' : v) + '">'; };
       $('#xopts').innerHTML = (k ? '' : '<p class="hint">Este tambo no tiene número de productor: no se le puede asignar un plan.</p>') +
-        '<p class="cap" style="margin:0 0 8px">Para ' + esc(PERFIL.nombre || 'este tambo') + (DB.sel && DB.sel.length ? ' (solo las unidades elegidas)' : '') + '. Al guardar se sube y al productor le llega la próxima vez que abra la app con internet.</p>' +
+        (uno ? '' : '<p class="cap" style="margin:0 0 8px">Para ' + esc(PERFIL.nombre || 'este tambo') + (DB.sel && DB.sel.length ? ' (solo las unidades elegidas)' : '') + '. Al guardar se sube y al productor le llega la próxima vez que abra la app con internet.</p>') +
         D.map(function (it, i) {
+          if (uno && i !== state.sanUno) return '';
           var g = it.g || [], tipo = '<select data-sf="' + i + '.t">' + Object.keys(SANT).map(function (t) { return '<option value="' + t + '"' + (it.t === t ? ' selected' : '') + '>' + SANT[t] + '</option>'; }).join('') + '</select>';
           var vent = it.t === 'tac' ? '<p class="cap" style="margin:6px 0">Se da en el tacto, a las que den preñadas. Aparece como recordatorio en Voy mañana.</p>' : it.t === 'mes' ? '<div class="filters sanmes">' + A.MESES.map(function (x, k) { return '<button class="fchip" data-smo="' + i + '.' + (k + 1) + '" aria-pressed="' + ((it.m || []).indexOf(k + 1) >= 0) + '">' + x + '</button>'; }).join('') + '</div>' : it.t === 'fecha' ? '<label class="xnum">Fechas (dd/mm) <input type="text" data-sf="' + i + '.f" value="' + esc((it.f || []).join(' y ')) + '" placeholder="15/04 y 15/10"></label>'
             : '<label class="xnum">De ' + num(i, 'd1', it.d1) + ' a ' + num(i, 'd2', it.d2) + ' ' + (it.t === 'edad' ? 'meses de edad' : it.t === 'pre' ? 'días antes del parto' : it.t === 'tac' ? 'días después del tacto positivo' : 'días de paridas') + '</label>';
           var grs = (it.t === 'pos' ? ['vaca'] : it.t === 'pre' || it.t === 'tac' ? ['vaca', 'vaquillona'] : ['vaca', 'vaquillona', 'ternera']).map(function (x) { return '<button class="fchip" data-sgr="' + i + '.' + x + '" aria-pressed="' + (g.indexOf(x) >= 0) + '">' + SANG[x] + '</button>'; }).join('');
-          return '<div class="sanit"><div class="sanhd"><input type="text" class="sann" data-sf="' + i + '.n" value="' + esc(it.n || '') + '" placeholder="Vacuna o tratamiento"><button class="sandel" data-a="sandel" data-i="' + i + '" aria-label="Quitar">✕</button></div>' +
+          return '<div class="sanit"><div class="sanhd"><input type="text" class="sann" data-sf="' + i + '.n" value="' + esc(it.n || '') + '" placeholder="Vacuna o tratamiento">' + (uno ? '' : '<button class="sandel" data-a="sandel" data-i="' + i + '" aria-label="Quitar">✕</button>') + '</div>' +
             '<label class="xnum">' + tipo + '</label>' + vent + '<div class="filters">' + grs + '</div>' +
             '<input type="text" class="sanx" data-sf="' + i + '.x" value="' + esc(it.x || '') + '" placeholder="Producto y dosis (opcional)"></div>';
         }).join('') +
-        '<div class="filters" style="margin-top:10px"><button class="fchip plain" data-a="sanadd">+ Agregar</button>' + '<button class="fchip plain" data-a="sanbase">Cargar el plan base</button>' + '</div>';
-      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="sanok"' + (k ? '' : ' disabled') + '>Guardar y enviar</button><button class="btn" data-a="xcancel">Cancelar</button>';
+        (uno ? '' : '<div class="filters" style="margin-top:10px"><button class="fchip plain" data-a="sanadd">+ Agregar</button>' + '<button class="fchip plain" data-a="sanbase">Cargar el plan base</button>' + '</div>');
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="sanok"' + (k ? '' : ' disabled') + '>Guardar y enviar</button>' + (uno && !state.sanNuevo ? '<button class="btn sanborrar" data-a="sanborrar">Borrar evento</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
       $('#sheetX').hidden = false;
     }
     function sanInput(el) {
@@ -3669,7 +3689,7 @@
         return fetch(url, { method: 'PUT', headers: H, body: JSON.stringify(body) }).then(function (r) {
           if (!r.ok) throw new Error('No pude guardar el plan (' + r.status + ').');
           SANJ = o; try { localStorage.setItem('libreta:sanj', JSON.stringify(o)); } catch (e) {}
-          state.sanc = null; busy(false); $('#sheetX').hidden = true; render();
+          state.sanc = null; state.sanUno = null; busy(false); $('#sheetX').hidden = true; render();
           toast(items.length ? 'Plan guardado. Al productor le llega en 1 o 2 minutos.' : 'Plan quitado.');
         });
       }).catch(function (e) { busy(false); toast(e && e.message || 'No se pudo.'); });
@@ -5082,14 +5102,17 @@
       else if (a === 'lnkwa') { window.open('https://wa.me/?text=' + encodeURIComponent(state.linkTxt || ''), '_blank'); }
       else if (a === 'lnkcopy') { (navigator.clipboard ? navigator.clipboard.writeText(state.linkTxt || '') : Promise.reject()).then(function () { toast('Copiado. Pegalo en WhatsApp.'); }, function () { prompt('Copiá el mensaje:', state.linkTxt || ''); }); }
       else if (a === 'xcancel') $('#sheetX').hidden = true;
-      else if (a === 'saned') sanEditor(true);
-      else if (a === 'sanadd') { state.sanDraft.push({ n: '', t: 'mes', m: [], g: ['vaca'] }); sanEditor(); }
+      else if (a === 'saned') { state.sanUno = null; sanEditor(true); }
+      else if (a === 'sanadd' && state.sanUno == null) { state.sanDraft.push({ n: '', t: 'mes', m: [], g: ['vaca'] }); sanEditor(); }
       else if (a === 'sanbase') { if (state.sanDraft.length && !confirm('¿Reemplazar lo que hay por el plan base?')) return; state.sanDraft = sanBase(); sanEditor(); }
       else if (a === 'sandel') { state.sanDraft.splice(+b.dataset.i, 1); sanEditor(); }
       else if (a === 'sanok') sanGuardar();
       else if (a === 'sancalimg') { var cw = document.querySelector('.calwrap'); if (cw) compartirCard(cw); }
+      else if (a === 'sanver' && esVet()) sanEditarUno(+b.dataset.i);
+      else if (a === 'sannuevo') { var gk = b.dataset.g; sanEditarUno(null, { n: '', t: 'mes', m: [+b.dataset.m], g: [gk] }); }
+      else if (a === 'sanborrar') { if (state.sanUno != null && confirm('¿Borrar este evento del plan?')) { state.sanDraft.splice(state.sanUno, 1); state.sanUno = null; sanGuardar(); } }
       else if (a === 'sanver') { var k = 'san' + b.dataset.i; state.desp = state.desp || {}; state.desp[k] = true; render(); setTimeout(function () { var h = document.querySelector('[data-desp="' + k + '"]'); if (h) { h.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); h.closest('section').classList.add('sanflash'); } }, 30); }
-      else if (a === 'sanir') { state.desp = state.desp || {}; (sanSemana() || []).forEach(function (o) { state.desp['san' + sanPlan().items.indexOf(o.it)] = true; }); setTab('tareas'); setTimeout(function () { var g = $('#sangrp'); if (g) g.scrollIntoView(); }, 50); }
+      else if (a === 'sanir') { state.desp = state.desp || {}; state.desp.sancal = true; setTab('tareas'); setTimeout(function () { var g = $('#sangrp'); if (g) g.scrollIntoView(); }, 50); }
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
       else if (a === 'pobvista') { state.pobVista = b.dataset.pv; render(); window.scrollTo(0, 0); }
