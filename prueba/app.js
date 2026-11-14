@@ -3627,28 +3627,27 @@
         if (antes !== JSON.stringify(o)) { state.sanc = null; render(); }
       }).catch(function () {});
     }
-    // plantilla base: punto de partida para editar en cada tambo (revisar productos, dosis y días)
+    // plantilla base (plan de Pérez, unidad 164/1): punto de partida para editar en cada tambo (revisar productos, dosis y días)
     function sanBase() {
       return [
         { n: 'Sanidad', t: 'mes', m: [2], g: ['vaca'] },
-        { n: 'Aftosa', t: 'mes', m: [3], g: ['vaca'] },
-        { n: 'Leptospirosis', t: 'mes', m: [4, 8], g: ['vaca'] },
+        { n: 'Aftosa', t: 'mes', m: [4], g: ['vaca'] },
         { n: 'Querato', t: 'mes', m: [9], g: ['vaca'] },
-        { n: 'Confirmación de preñez: Leptospirosis', t: 'tac', g: ['vaca', 'vaquillona'] },
-        { n: 'Secas: Clostridial + Saguaypicida', t: 'pre', d1: 65, d2: 55, g: ['vaca'], x: 'Al secar' },
-        { n: 'Preparto: Diar 7 + Saguaypicida', t: 'pre', d1: 30, d2: 21, g: ['vaca', 'vaquillona'], x: 'Al entrar al preparto' },
-        { n: 'Vaquillonas: Sanidad + Aftosa', t: 'mes', m: [2], g: ['vaquillona'] },
+        { n: 'Confirmación de preñez: Gestavac', t: 'tac', g: ['vaca', 'vaquillona'] },
+        { n: 'Secas: Ultrachoice + Saguaypicida + Diar 7', t: 'pre', d1: 65, d2: 55, g: ['vaca', 'vaquillona'], x: 'Al secar' },
+        { n: 'Preparto: Diar 7', t: 'pre', d1: 30, d2: 21, g: ['vaca', 'vaquillona'], x: 'Al entrar al preparto' },
+        { n: 'Vaquillonas: Sanidad', t: 'mes', m: [2], g: ['vaquillona'] },
         { n: 'Vaquillonas: Antiparasitario + Saguaypicida', t: 'mes', m: [3, 9], g: ['vaquillona'] },
-        { n: 'Vaquillonas: Clostridial + Leptospirosis', t: 'mes', m: [4, 8], g: ['vaquillona'] },
-        { n: 'Vaquillonas: Aftosa', t: 'mes', m: [5], g: ['vaquillona'], x: 'Según campaña' },
-        { n: 'Vaquillonas: Querato', t: 'mes', m: [10], g: ['vaquillona'] },
-        { n: 'Vaquillonas: Leptospirosis', t: 'mes', m: [12], g: ['vaquillona'] },
-        { n: 'Recría: Aftosa', t: 'mes', m: [2, 5], g: ['ternera'], x: 'Según campaña' },
-        { n: 'Recría: Clostridial + Leptospirosis', t: 'mes', m: [3, 8], g: ['ternera'] },
-        { n: 'Recría: Antiparasitario + Saguaypicida', t: 'mes', m: [4, 9], g: ['ternera'] },
-        { n: 'Recría: Querato', t: 'mes', m: [10], g: ['ternera'] },
-        { n: 'Recría: Leptospirosis', t: 'mes', m: [12], g: ['ternera'] },
-        { n: 'Desleche: Leptospira + Clostridial + Antiparasitario', t: 'edad', d1: 2, d2: 3, g: ['ternera'], x: 'Al deslechar' }
+        { n: 'Vaquillonas: Ultrachoice + Reproductiva', t: 'mes', m: [4, 5], g: ['vaquillona'] },
+        { n: 'Recría: Aftosa', t: 'mes', m: [11], g: ['ternera'], x: 'Según campaña' },
+        { n: 'Recría: Antiparasitario + Saguaypicida', t: 'mes', m: [9], g: ['ternera'] },
+        { n: 'Recría: Querato', t: 'mes', m: [9], g: ['ternera'] },
+        { n: 'Desleche: Neumosan + Ultrachoice', t: 'edad', d1: 2, d2: 3, g: ['ternera'], x: 'Al deslechar' },
+        { n: 'Caravana Mosca', t: 'mes', m: [11], g: ['vaca', 'vaquillona', 'ternera'] },
+        { n: 'Reproductiva', t: 'mes', m: [5, 10], g: ['vaca'] },
+        { n: 'Querato', t: 'mes', m: [9], g: ['vaquillona'] },
+        { n: 'Ultrachoice', t: 'mes', m: [8], g: ['ternera'] },
+        { n: 'Rb51 Gen año anterior', t: 'mes', m: [1, 4], g: ['vaquillona'] }
       ];
     }
     var addM = function (f, m) { return A.addDays(f, Math.round(m * 30.44)); };
