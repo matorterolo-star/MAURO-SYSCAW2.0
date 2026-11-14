@@ -47,6 +47,18 @@
           var c = U[m] || (U[m] = [0, 0]); c[k] += n;
         }
       };
+      // pases entre unidades: cada tramo se suma en la unidad donde estaba la vaca ese día
+      // (x.mv = [[fecha, unidad destino, unidad origen]], ordenado; antes del primer pase, la de origen)
+      var uEn = function (x, D) {
+        var mv = x.mv; if (!mv || !mv.length) return x.u == null ? 0 : x.u;
+        var u = null; mv.forEach(function (m) { if (m[0] <= D) u = m[1]; });
+        return u != null ? u : (mv[0][2] != null ? mv[0][2] : (x.u == null ? 0 : x.u));
+      };
+      var porUnidad = function (x, k, a, b) {
+        if (!a || !b || b <= a) return;
+        var cortes = (x.mv || []).map(function (m) { return m[0]; }).filter(function (f) { return f > a && f < b; });
+        var p = a; cortes.concat([b]).forEach(function (q) { if (q > p) { sumar(uEn(x, p), k, p, q); p = q; } });
+      };
       L.forEach(function (x) {
         var fb = x.baja && x.baja <= ref ? x.baja : null, E = fb || addDays(ref, 1);
         if (!fb && !x.activa) return; // fuera del rodeo sin fecha de baja: no se sabe hasta cuándo estuvo
@@ -58,8 +70,8 @@
           if (!c || c <= s || (np && c >= np)) c = np ? addDays(np, -60) : (x.activa && x.seca ? addDays(ref, -30) : null);
           if (c && c <= s) c = addDays(s, 1);
           var finL = c && c < E ? c : E, finS = np && np < E ? np : E;
-          sumar(x.u == null ? 0 : x.u, 0, s, finL);
-          if (c && c < finS) sumar(x.u == null ? 0 : x.u, 1, c, finS);
+          porUnidad(x, 0, s, finL);
+          if (c && c < finS) porUnidad(x, 1, c, finS);
         });
       });
       if (!prim) return null;
@@ -198,9 +210,10 @@
       var t = r[2] === 1 ? 'C' : 'S'; g.ev.push([f, t, t === 'S' ? (toro[r[3]] || '') : '', t === 'S' ? (insServ[r[0] + '|' + r[1]] || null) : null]); if (f > maxF) maxF = f;
     });
     // pases entre unidades (últimos 3 años): para saber en qué unidad estaba cada animal en cada fecha
-    var mvBy = {};
-    try { if (files[OPCIONALES.pases]) PX.readTable(files[OPCIONALES.pases], { fields: ['ID', 'Fecha', 'Tambo', 'Origen'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && f >= '2023-01-01' && r[2] != null) (mvBy[r[0]] = mvBy[r[0]] || []).push([f, r[2], r[3]]); }); } catch (e) { mvBy = {}; }
+    var mvBy = {}, mvAll = {};
+    try { if (files[OPCIONALES.pases]) PX.readTable(files[OPCIONALES.pases], { fields: ['ID', 'Fecha', 'Tambo', 'Origen'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && r[2] != null) (mvAll[r[0]] = mvAll[r[0]] || []).push([f, r[2], r[3]]); if (f && f >= '2023-01-01' && r[2] != null) (mvBy[r[0]] = mvBy[r[0]] || []).push([f, r[2], r[3]]); }); } catch (e) { mvBy = {}; }
     Object.keys(mvBy).forEach(function (k) { mvBy[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
+    Object.keys(mvAll).forEach(function (k) { mvAll[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
     // condición corporal: la última de cada animal y su historial de los últimos 3 años (como el resto del historial)
     var ecBy = {}, ecH = {};
     try { if (files[OPCIONALES.estcorp]) PX.readTable(files[OPCIONALES.estcorp], { fields: ['ID', 'Fecha', 'ECorp'], array: true }).rows.forEach(function (r) {
@@ -341,9 +354,9 @@
     var PAt = {};
     T.partos.forEach(function (r) { var f = okDate(r[1]); if (f && r[4] > 0) (PAt[r[0]] = PAt[r[0]] || []).push([f, okDate(r[7])]); });
     Object.keys(PAt).forEach(function (id) {
-      var a = byId[id]; if (!a || (sel && !sel[a[11]])) return;
+      var a = byId[id]; if (!a) return; // todas las unidades: la app filtra por unidad, y con los pases cada día cuenta donde estaba
       var fb = okDate(a[9]);
-      VL.push({ u: a[11] == null ? 0 : a[11], pa: PAt[id], baja: fb, activa: !fb && !!CAT[a[6]], seca: CAT[a[6]] === 'seca' });
+      VL.push({ u: a[11] == null ? 0 : a[11], mv: mvAll[id] || null, pa: PAt[id], baja: fb, activa: !fb && !!CAT[a[6]], seca: CAT[a[6]] === 'seca' });
     });
     var vovsH = vovsHist(VL, ref);
     return { idProd: idProd, vovsH: vovsH, ctrls: ctrls, curvas: curvas, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };

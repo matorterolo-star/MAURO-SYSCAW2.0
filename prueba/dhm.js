@@ -215,6 +215,9 @@
     // pases entre unidades (últimos 3 años)
     var mvBy = {}; T('DHM_MovimientosAnimales', ['Ani_IdAnimal', 'Man_Fecha', 'Man_EstablecimientoOrigen', 'Man_EstablecimientoDestino']).forEach(function (m) { var f = fch(m.Man_Fecha); if (!mio[m.Ani_IdAnimal] || !f || f < '2023-01-01' || !(m.Man_EstablecimientoDestino > 0)) return; (mvBy[m.Ani_IdAnimal] = mvBy[m.Ani_IdAnimal] || []).push([f, m.Man_EstablecimientoDestino, m.Man_EstablecimientoOrigen > 0 ? m.Man_EstablecimientoOrigen : null]); });
     Object.keys(mvBy).forEach(function (k) { mvBy[k].sort(cmp); });
+    // pases completos (sin límite de fecha), para la historia de vacas por año
+    var mvAll = {}; T('DHM_MovimientosAnimales', ['Ani_IdAnimal', 'Man_Fecha', 'Man_EstablecimientoOrigen', 'Man_EstablecimientoDestino']).forEach(function (m) { var f = fch(m.Man_Fecha); if (!f || !(m.Man_EstablecimientoDestino > 0)) return; (mvAll[m.Ani_IdAnimal] = mvAll[m.Ani_IdAnimal] || []).push([f, m.Man_EstablecimientoDestino, m.Man_EstablecimientoOrigen > 0 ? m.Man_EstablecimientoOrigen : null]); });
+    Object.keys(mvAll).forEach(function (k) { mvAll[k].sort(cmp); });
 
     var ref = maxF, desdeHist = addDays(ref, -730);
     // hembras que siguen activas en DHM pero no tienen ningún registro en 2 años (nunca se les dio la baja): no van a la libreta
@@ -263,7 +266,7 @@
       var rp = rpDe(id) || tx(a.Ani_CaravanaSENASA) || tx(a.Ani_RC) || tx(a.Ani_IdElectronico) || ('ID ' + id);
       var lp = x.pa.length ? x.pa[x.pa.length - 1] : null, lpf = lp ? lp[0] : '0000';
       var ma = a.Ani_IdMadre > 0 ? rpDe(a.Ani_IdMadre) : tx(a.Ani_RPMadreX) || null, pd = a.Ani_IdPadre > 0 ? (tx(pid(a.Ani_IdPadre)) || null) : tx(a.Ani_ApodoPadreX) || null;
-      if (x.pa.length) VL.push({ u: a.Est_IdEstablecimiento, pa: pa2(x.pa), baja: a.Ean_IdEstadoAnimal !== 1 ? ((desc[id] || {}).f || fch(a.Ani_FechaDescarte)) : null, activa: a.Ean_IdEstadoAnimal === 1, seca: false });
+      if (x.pa.length) VL.push({ u: a.Est_IdEstablecimiento, mv: mvAll[id] || null, pa: pa2(x.pa), baja: a.Ean_IdEstadoAnimal !== 1 ? ((desc[id] || {}).f || fch(a.Ani_FechaDescarte)) : null, activa: a.Ean_IdEstadoAnimal === 1, seca: false });
       if (a.Ean_IdEstadoAnimal !== 1) {
         // bajas: solo las de los últimos 2 años
         var b = desc[id] || {}, bF = b.f || fch(a.Ani_FechaDescarte); if (!bF || bF < desdeHist) return;
