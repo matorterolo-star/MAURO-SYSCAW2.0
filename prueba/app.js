@@ -3091,7 +3091,7 @@
     }
     // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
     var DESC = {
-      'Partos': 'Vacas y vaquillonas, mes a mes', 'Salidas tempranas': 'Vendidas o muertas antes de los 60 días de paridas', 'Calendario sanitario': 'El plan del año, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
+      'Partos': 'Vacas y vaquillonas, mes a mes', 'Salidas tempranas': 'Vendidas o muertas antes de los 60 días de paridas', 'Calendario sanitario': 'El plan del año, mes a mes', 'sancal': 'El plan del año, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
@@ -3452,7 +3452,7 @@
         { n: 'Leptospirosis', t: 'mes', m: [4, 8], g: ['vaca'] },
         { n: 'Querato', t: 'mes', m: [9], g: ['vaca'] },
         { n: 'Confirmación de preñez: Leptospirosis', t: 'tac', g: ['vaca', 'vaquillona'] },
-        { n: 'Secado: Clostridial + Saguaypicida', t: 'pre', d1: 65, d2: 55, g: ['vaca'], x: 'Al secar' },
+        { n: 'Secas: Clostridial + Saguaypicida', t: 'pre', d1: 65, d2: 55, g: ['vaca'], x: 'Al secar' },
         { n: 'Preparto: Diar 7 + Saguaypicida', t: 'pre', d1: 30, d2: 21, g: ['vaca', 'vaquillona'], x: 'Al entrar al preparto' },
         { n: 'Vaquillonas: Sanidad + Aftosa', t: 'mes', m: [2], g: ['vaquillona'] },
         { n: 'Vaquillonas: Antiparasitario + Saguaypicida', t: 'mes', m: [3, 9], g: ['vaquillona'] },
@@ -3544,8 +3544,13 @@
       return /antiparasit|saguay/.test(t) ? 'cb' : /clostrid/.test(t) ? 'cg' : /querato/.test(t) ? 'co' : /lepto/.test(t) ? 'cy' : /aftosa|sanidad/.test(t) ? 'cl' : 'cx';
     }
     function sanEtq(n) { return String(n || '').replace(/^(vaquillonas|recr[ií]a|tambo|vacas)\s*:\s*/i, ''); }
+    // cortes fijos de las palabras largas (la imagen para compartir no hace guiones solos)
+    function sanCorte(t) {
+      var C = { leptospirosis: 'Lepto-|spirosis', antiparasitario: 'Antipara-|sitario', saguaypicida: 'Saguay-|picida', clostridiales: 'Clostri-|diales', reproductivas: 'Reproduc-|tivas', respiratorias: 'Respira-|torias' };
+      return t.replace(/[A-Za-zÁÉÍÓÚáéíóúñÑ]{12,}/g, function (w) { var c = C[w.toLowerCase()]; if (!c) return w; var p = c.split('|'); return (w.charAt(0) === w.charAt(0).toUpperCase() ? p[0] : p[0].toLowerCase()) + '<br>' + p[1]; });
+    }
     function sanCalHTML(P) {
-      var cols = [['vaca', 'Tambo'], ['vaquillona', 'Vaquillonas'], ['ternera', 'Recría']], celdas = {}, bandas = [];
+      var MC = { vaca: 'TAMBO', vaquillona: 'VAQUILLONAS', ternera: 'RECRÍA' }, celdas = {}, bandas = {}, ordenB = [], usadas = {};
       P.items.forEach(function (it, ix) {
         var g = it.g && it.g.length ? it.g : ['vaca'], meses = [];
         if (it.t === 'mes') meses = (it.m || []).map(function (m) { return [m, '']; });
@@ -3553,23 +3558,36 @@
         else {
           var m = /^([^:]+):\s*(.+)$/.exec(it.n || ''), tit = m ? m[1] : (it.t === 'tac' ? 'Tacto' : it.t === 'pre' ? 'Preparto' : it.t === 'pos' ? 'Posparto' : 'Por edad');
           if (it.t === 'tac' && /confirmaci/i.test(tit)) tit = 'Tacto';
-          bandas.push({ i: ix, t: tit, v: (m ? m[2] : it.n).replace(/\s*\+\s*/g, ' – ') });
+          tit = tit.toUpperCase();
+          if (!bandas[tit]) { bandas[tit] = { t: tit, i: ix, v: [], fin: g.length === 1 && g[0] === 'ternera' }; ordenB.push(tit); }
+          bandas[tit].v.push((m ? m[2] : it.n).replace(/\s*\+\s*/g, ' – ').toUpperCase());
           return;
         }
-        meses.forEach(function (x) { g.forEach(function (k) { var c = k === 'seca' ? 'vaca' : k, key = c + x[0]; (celdas[key] = celdas[key] || []).push('<span class="' + sanColor(it.n) + '" data-a="sanver" data-i="' + ix + '" role="button">' + esc(x[1] + sanEtq(it.n)).split(/\s*\+\s*/).join('<br>') + '</span>'); }); });
+        meses.forEach(function (x) { g.forEach(function (k) { var c = k === 'seca' ? 'vaca' : k, key = c + x[0]; usadas[c] = 1; (celdas[key] = celdas[key] || []).push('<span class="' + sanColor(it.n) + '" data-a="sanver" data-i="' + ix + '" role="button">' + sanCorte(esc(x[1] + sanEtq(it.n))).split(/\s*\+\s*/).join('/<br>') + '</span>'); }); });
       });
-      var usadas = cols.filter(function (c) { for (var i = 1; i <= 12; i++) if (celdas[c[0] + i]) return true; return false; });
-      if (!usadas.length && !bandas.length) return '';
+      // orden de la planilla: TAMBO, eventos de las vacas, VAQUILLONAS, RECRÍA, eventos de la recría
+      var B = ordenB.map(function (k) { return bandas[k]; }), cols = [];
+      if (usadas.vaca) cols.push({ k: 'vaca' });
+      B.filter(function (b) { return !b.fin; }).forEach(function (b) { cols.push({ b: b }); });
+      if (usadas.vaquillona) cols.push({ k: 'vaquillona' });
+      if (usadas.ternera) cols.push({ k: 'ternera' });
+      B.filter(function (b) { return b.fin; }).forEach(function (b) { cols.push({ b: b }); });
+      if (!cols.length) return '';
+      // texto vertical en SVG (de abajo hacia arriba, como la planilla): sale igual en la pantalla y en la imagen para compartir
+      var vert = function (t, fs) { return '<svg class="bsvg" xmlns="http://www.w3.org/2000/svg"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-family="Inter, system-ui, sans-serif" font-size="' + fs + '" font-weight="800" letter-spacing=".4" style="transform-box:fill-box;transform-origin:center;transform:rotate(-90deg)">' + esc(t) + '</text></svg>'; };
       var mh = +today().slice(5, 7);
-      var head = '<tr><th></th>' + usadas.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr>';
+      var head = '<tr><th class="mcol"></th>' + cols.map(function (c) { return c.b ? '<th class="bcol">' + vert(c.b.t, 10) + '</th>' : '<th>' + MC[c.k] + '</th>'; }).join('') + '</tr>';
       var filas = '';
       for (var i = 1; i <= 12; i++) {
-        filas += '<tr' + (i === mh ? ' class="hoy"' : '') + '><th>' + A.MESES[i - 1].replace(/^./, function (c) { return c.toUpperCase(); }) + '</th>' + usadas.map(function (c) { var v = celdas[c[0] + i]; return '<td>' + (v ? v.join('') : '') + '</td>'; }).join('') +
-          '</tr>';
+        filas += '<tr' + (i === mh ? ' class="hoy"' : '') + '><th>' + A.MESES[i - 1].replace(/^./, function (c) { return c.toUpperCase(); }) + '</th>' + cols.map(function (c) {
+          if (c.b) return i === 1 ? '<td class="band" rowspan="12" data-a="sanver" data-i="' + c.b.i + '" role="button">' + vert(c.b.v.join(' · '), 11) + '</td>' : '';
+          var v = celdas[c.k + i]; return '<td>' + (v ? v.join('') : '') + '</td>';
+        }).join('') + '</tr>';
       }
-      return '<section class="card"><h2>Calendario sanitario</h2>' + (usadas.length ? '<div class="scal"><table>' + '<thead>' + head + '</thead><tbody>' + filas + '</tbody></table></div>' : '') +
-        (bandas.length ? '<p class="scalev">En cada evento, todo el año</p><div class="sband">' + bandas.map(function (b) { return '<button data-a="sanver" data-i="' + b.i + '"><b>' + esc(b.t) + '</b><span>' + esc(b.v) + '</span></button>'; }).join('') + '</div>' : '') +
-        '<p class="cap">Mes a mes por categoría; el mes actual va marcado. Abajo, lo que se da en cada evento. Tocá una vacuna para ver los animales.</p></section>';
+      var cont = '<div class="calwrap"><h2 class="sr">Calendario sanitario</h2><div class="scal"><table><thead>' + head + '</thead><tbody>' + filas + '</tbody></table></div>' +
+        '<p class="cap">El mes actual va marcado. Las franjas se dan en cada evento. Tocá una vacuna para ver los animales.</p></div>' +
+        (esVet() ? '<button class="btn share" data-a="sancalimg"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Compartir como imagen</button>' : '');
+      return secTareas('sancal', 'Calendario sanitario', cont, [], null, '', '');
     }
     function sanTareasHTML() {
       var P = sanPlan(), vet = esVet();
@@ -5069,6 +5087,7 @@
       else if (a === 'sanbase') { if (state.sanDraft.length && !confirm('¿Reemplazar lo que hay por el plan base?')) return; state.sanDraft = sanBase(); sanEditor(); }
       else if (a === 'sandel') { state.sanDraft.splice(+b.dataset.i, 1); sanEditor(); }
       else if (a === 'sanok') sanGuardar();
+      else if (a === 'sancalimg') { var cw = document.querySelector('.calwrap'); if (cw) compartirCard(cw); }
       else if (a === 'sanver') { var k = 'san' + b.dataset.i; state.desp = state.desp || {}; state.desp[k] = true; render(); setTimeout(function () { var h = document.querySelector('[data-desp="' + k + '"]'); if (h) { h.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); h.closest('section').classList.add('sanflash'); } }, 30); }
       else if (a === 'sanir') { state.desp = state.desp || {}; (sanSemana() || []).forEach(function (o) { state.desp['san' + sanPlan().items.indexOf(o.it)] = true; }); setTab('tareas'); setTimeout(function () { var g = $('#sangrp'); if (g) g.scrollIntoView(); }, 50); }
       else if (a === 'informe') abrirInforme();
