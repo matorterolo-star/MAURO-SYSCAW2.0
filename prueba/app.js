@@ -1929,8 +1929,10 @@
       var vista = state.cpVista || 'tacto'; if (vista === 'tacto' && !ut) vista = 'zafra';
       var corte = vista === 'tacto' ? ut : null;
       var mn = +(getP('cpmin') || 34), mx = +(getP('cpmax') || 45); if (!(mn > 25)) mn = 34; if (!(mx >= mn)) mx = mn + 11;
+      var M2 = Math.max(66, mx + 11); // dos ciclos perdidos hasta ~66 días; más largo, probable pérdida embrionaria o anestro
       var B = [['Menos de 18 días', function (d) { return d < 18; }], ['18 a 24 días (un ciclo)', function (d) { return d >= 18 && d <= 24; }], ['25 a ' + (mn - 1) + ' días', function (d) { return d >= 25 && d < mn; }],
-        [mn + ' a ' + mx + ' días (celo perdido)', function (d) { return d >= mn && d <= mx; }, 1], ['Más de ' + mx + ' días', function (d) { return d > mx; }]];
+        [mn + ' a ' + mx + ' días (un celo perdido)', function (d) { return d >= mn && d <= mx; }, 1], [(mx + 1) + ' a ' + M2 + ' días (dos celos perdidos)', function (d) { return d > mx && d <= M2; }, 2],
+        ['Más de ' + M2 + ' días (pérdida embrionaria o anestro)', function (d) { return d > M2; }]];
       var cnt = B.map(function () { return [0, 0]; }), tot = [0, 0], perd = [], vacas = {};
       var an = DB.animales.map(function (a) { return { a: a, h: DB.hist[a.rp] }; }).concat((DB.bajas || []).map(function (b) { return { a: b, h: DB.hist[b.key], baja: true }; }));
       an.forEach(function (x) {
@@ -1943,28 +1945,28 @@
           if (corte && e2 <= corte) continue; // desde el último tacto: las que repitieron después de la visita
           var q = 0;
           tot[q]++;
-          B.forEach(function (b, k) { if (b[1](d)) { cnt[k][q]++; if (b[2]) { perd.push({ x: x, e1: E[i - 1], e2: E[i], d: d, q: q }); vacas[(x.baja ? 'b' : '') + (x.a.key || x.a.rp)] = 1; } } });
+          B.forEach(function (b, k) { if (b[1](d)) { cnt[k][q]++; if (b[2]) { perd.push({ x: x, e1: E[i - 1], e2: E[i], d: d, q: q, n: b[2] }); vacas[(x.baja ? 'b' : '') + (x.a.key || x.a.rp)] = 1; } } });
         }
       });
       if (vista === 'zafra' && tot[0] < 10) return '';
-      var nP = cnt[3][0] + cnt[3][1], T = tot[0] + tot[1], pc = function (n, d) { return d ? nf(n / d * 100, 1) + '%' : '–'; };
-      CLAVE['Celos perdidos'] = nP + ' intervalos de ' + mn + ' a ' + mx + ' días (' + pc(nP, T) + ' de ' + T + ') · ' + Object.keys(vacas).length + ' animales';
+      var nP = cnt[3][0] + cnt[3][1] + cnt[4][0] + cnt[4][1], T = tot[0] + tot[1], pc = function (n, d) { return d ? nf(n / d * 100, 1) + '%' : '–'; };
+      CLAVE['Celos perdidos'] = nP + ' intervalos de ' + mn + ' a ' + M2 + ' días (' + pc(nP, T) + ' de ' + T + ') · ' + Object.keys(vacas).length + ' animales';
       var hayQ = false;
       var filas = B.map(function (b, k) { return '<tr' + (b[2] ? ' class="cpk"' : '') + '><td>' + b[0] + '</td><td>' + nf(cnt[k][0]) + ' <small>' + pc(cnt[k][0], tot[0]) + '</small></td>' + (hayQ ? '<td>' + nf(cnt[k][1]) + ' <small>' + pc(cnt[k][1], tot[1]) + '</small></td>' : '') + '</tr>'; }).join('') +
         '<tr class="sep"><td><b>Total intervalos</b></td><td><b>' + nf(tot[0]) + '</b></td>' + (hayQ ? '<td><b>' + nf(tot[1]) + '</b></td>' : '') + '</tr>';
       var L = perd.filter(function (p) { return !p.x.baja; }).sort(function (a, b) { return a.e2[0] < b.e2[0] ? 1 : -1; });
       var ab = !!state.abiertas.cperd, lista = L.slice(0, ab ? L.length : 8).map(function (p) {
         var t = function (e) { return (e[1] === 'C' ? 'Celo ' : 'Serv. ') + A.fmt(e[0]).slice(0, 5); };
-        return rowHTML(p.x.a, { right: '<span class="when late">' + p.d + ' días</span>', sub: t(p.e1) + ' → ' + t(p.e2) });
+        return rowHTML(p.x.a, { right: '<span class="when late">' + p.d + ' días</span>', sub: t(p.e1) + ' → ' + t(p.e2) + ' · ' + (p.n === 2 ? 'dos celos' : 'un celo') });
       }).join('') + (L.length > 8 ? '<button class="btn more" data-a="ver" data-k="cperd">' + (ab ? 'Ver menos' : 'Ver las ' + L.length) + '</button>' : '');
       return '<section class="card"><h2>Celos perdidos</h2>' +
         '<div class="filters cpv">' + [['tacto', 'Desde el último tacto'], ['zafra', 'Toda la zafra']].map(function (v) { return '<button class="fchip plain" data-cpv="' + v[0] + '" aria-pressed="' + (vista === v[0]) + '"' + (v[0] === 'tacto' && !ut ? ' disabled' : '') + '>' + v[1] + '</button>'; }).join('') + '</div>' +
         '<p class="secnote" style="margin:6px 0 0">' + (vista === 'tacto' ? 'Repeticiones después del tacto del ' + A.fmt(ut) + '.' : 'Toda la zafra, desde el ' + A.fmt(ini) + '.') + ' Solo vacas (sin vaquillonas).</p>' +
-        (T ? '' : '<p class="hint">Todavía no hay repeticiones después del último tacto.</p>') + '<div class="kpis kpis2"><div><b>' + pc(nP, T) + '</b><span>Intervalos de ' + mn + ' a ' + mx + ' días · ' + nP + ' de ' + T + '</span></div><div><b>' + Object.keys(vacas).length + '</b><span>Vacas con un celo perdido</span></div></div>' +
+        (T ? '' : '<p class="hint">Todavía no hay repeticiones después del último tacto.</p>') + '<div class="kpis kpis2"><div><b>' + pc(nP, T) + '</b><span>Con celo perdido (' + mn + ' a ' + M2 + ' días) · ' + nP + ' de ' + T + '</span></div><div><b>' + Object.keys(vacas).length + '</b><span>Vacas con celo perdido</span></div></div>' +
         '<div class="cprng">Celo perdido de <input type="number" inputmode="numeric" id="cpmin" value="' + mn + '" min="26" max="60"> a <input type="number" inputmode="numeric" id="cpmax" value="' + mx + '" min="27" max="70"> días</div>' +
         '<table class="tbl"><thead><tr><th>Días entre celos o servicios</th><th>Vacas</th>' + (hayQ ? '<th>Vaquill.</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
         (L.length ? '<h3 class="vh3">Con celo perdido</h3>' + lista : '') +
-        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Zafra: desde el ' + A.fmt(ini) + ' (el mismo inicio de los ciclos de 21 días) hasta el ' + A.fmt(ref) + '. Desde el último tacto: solo los celos o servicios después del tacto' + (ut ? ' del ' + A.fmt(ut) : '') + ' (el día más reciente con 5 vacas o más tactadas en ordeñe), contando los días desde el celo o servicio anterior. Solo vacas: las vaquillonas (lactancia 0) no entran. Para cada vaca, los días entre un celo o servicio y el siguiente, sin parto en el medio; también cuentan las vacas que después se vendieron o murieron (no van en la lista). Un intervalo de ' + mn + ' a ' + mx + ' días son dos ciclos: el celo de los 21 días no se vio o no se anotó. El rango se cambia arriba.</p></details></section>';
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Zafra: desde el ' + A.fmt(ini) + ' (el mismo inicio de los ciclos de 21 días) hasta el ' + A.fmt(ref) + '. Desde el último tacto: solo los celos o servicios después del tacto' + (ut ? ' del ' + A.fmt(ut) : '') + ' (el día más reciente con 5 vacas o más tactadas en ordeñe), contando los días desde el celo o servicio anterior. Solo vacas: las vaquillonas (lactancia 0) no entran. Para cada vaca, los días entre un celo o servicio y el siguiente, sin parto en el medio; también cuentan las vacas que después se vendieron o murieron (no van en la lista). Un intervalo de ' + mn + ' a ' + mx + ' días son dos ciclos: el celo de los 21 días no se vio o no se anotó. De ' + (mx + 1) + ' a ' + M2 + ' días son tres ciclos: dos celos sin ver; los dos cuentan como celo perdido. Más de ' + M2 + ' días ya no se toma como celo perdido: suele ser una pérdida embrionaria o una vaca en anestro (revisar al tacto). El rango del celo perdido se cambia arriba.</p></details></section>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
