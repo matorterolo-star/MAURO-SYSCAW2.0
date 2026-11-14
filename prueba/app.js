@@ -3114,11 +3114,17 @@
       Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
       return c;
     }
+    // html2canvas no entiende color-mix(): en la copia para la imagen se quitan esas propiedades (incluidas las de @supports)
+    function sinColorMix(doc) {
+      var limpiar = function (rs) { for (var q = rs.length - 1; q >= 0; q--) { var r = rs[q]; if (r.cssRules && !r.style) { limpiar(r.cssRules); continue; } if (!r.style) continue; for (var k = r.style.length - 1; k >= 0; k--) { var pr = r.style[k]; if (/color-mix/.test(r.style.getPropertyValue(pr))) r.style.removeProperty(pr); } } };
+      Array.prototype.forEach.call(doc.styleSheets, function (sh) { try { limpiar(sh.cssRules); } catch (e) {} });
+      Array.prototype.forEach.call(doc.querySelectorAll('[style*="color-mix"]'), function (el) { el.style.cssText = el.style.cssText.replace(/[a-z-]+\s*:\s*color-mix\([^;]*\)\s*;?/g, ''); });
+    }
     function shImagen(w) {
       document.body.appendChild(w);
       return cargarH2C().then(function (h2c) {
         return h2c(w, { scale: 2.7, backgroundColor: '#EEF2F7', logging: false,
-          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } });
+          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); sinColorMix(doc); } });
       }).then(function (cv) { w.remove(); return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); }, function (e) { w.remove(); throw e; });
     }
     // que: 'g' gráfico, 't' tabla, 'gt' las dos, 'todo' la tarjeta entera
@@ -3165,6 +3171,32 @@
       var sec = state.shSec; if (!sec || !document.body.contains(sec)) { toast('Volvé a tocar Compartir.'); return; }
       var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim();
       shMandar(shArmar(sec, que), tit);
+    }
+    // ficha de una vaca como imagen: encabezado (caravana, estado, sellos) + datos; con historial suma control lechero e historial reproductivo
+    function compartirFicha() {
+      $('#sheetXTitle').textContent = 'Compartir · Ficha';
+      $('#xopts').innerHTML = '<label class="shopt"><input type="checkbox" id="shNom"' + (shNombre() ? ' checked' : '') + '> Con el nombre del tambo</label>' +
+        '<p class="cap" style="margin:0 0 6px">Sin nombre sale como "Tambo" (para mandar a colegas).</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="fichaimg1">Solo la ficha</button><button class="btn big" data-a="fichaimg2">Ficha con historial</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function fichaImagen(conHist) {
+      var ck = $('#shNom'); if (ck) try { localStorage.setItem('libreta:shnom', ck.checked ? '1' : '0'); } catch (e) {}
+      $('#sheetX').hidden = true;
+      var main = $('#main'), fh = main && main.querySelector('header.fh'), dat = main && main.querySelector('section.card.datos'); if (!fh) return;
+      var d = document.createElement('div'), h = fh.cloneNode(true);
+      Array.prototype.forEach.call(h.querySelectorAll('.shic'), function (x) { x.remove(); });
+      h.style.margin = '0 0 12px'; d.appendChild(h);
+      if (dat) { var c = dat.cloneNode(true); c.style.cssText = 'margin:0;box-shadow:none'; d.appendChild(c); }
+      if (conHist) Array.prototype.forEach.call(main.querySelectorAll('.glist section.card'), function (sec) {
+        var t = (sec.querySelector('h2') || {}).textContent || ''; if (!/^(Control lechero|Historial reproductivo)/.test(t)) return;
+        var c = sec.cloneNode(true); c.classList.add('open');
+        Array.prototype.forEach.call(c.querySelectorAll('.shic,.chev,.pdesc,details.nota,.despbtn,button.lnk,details:not([open])'), function (x) { x.remove(); });
+        c.style.cssText = 'margin:12px 0 0;border:1px solid #D3DBE7;border-radius:14px;padding:12px 14px;background:#fff'; d.appendChild(c);
+      });
+      var rp = state.rp || '', w = shHoja('Vaca ' + rp, '', '', d, 0);
+      var tt = w.querySelector('.shcard > div'); if (tt) tt.remove(); // el encabezado de la ficha ya muestra la caravana
+      shMandar([w], 'Ficha ' + rp);
     }
     // resumen de visita: los cuatro cuadros del Panel con su semáforo y los avisos
     function compartirPanel() {
@@ -5081,7 +5113,10 @@
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main);
+          // compartir la ficha como imagen (modo veterinario): flecha arriba a la derecha, como en las tarjetas
+          var fh = main.querySelector('header.fh'); if (fh && esVet()) { fh.classList.add('fhsh'); fh.insertAdjacentHTML('beforeend', '<button class="shic" data-a="fichaimg" aria-label="Compartir la ficha como imagen" title="Compartir"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'); }
+          return; }
         state.rp = null;
       }
       // Voy mañana va después de la ficha: tocar una vaca de sus listas abre su ficha, y Volver vuelve a la lista
@@ -5231,6 +5266,9 @@
       else if (a === 'shgraf') shDesdeSheet('g');
       else if (a === 'shtab') shDesdeSheet('t');
       else if (a === 'shtodo') shDesdeSheet('todo');
+      else if (a === 'fichaimg') compartirFicha();
+      else if (a === 'fichaimg1') fichaImagen(false);
+      else if (a === 'fichaimg2') fichaImagen(true);
       else if (a === 'panelimg') compartirPanel();
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
