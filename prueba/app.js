@@ -3606,26 +3606,31 @@
       if (!P) return vet ? '<p class="grp">Sanidad</p><div class="glist"><button class="lrow" data-a="saned"><span class="lico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span><span class="pttl"><h2>Armar plan sanitario</h2><small class="pdesc">Vacunas por etapa o por fecha, para este tambo</small></span><svg class="chev rt" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>' : '';
       var hoy = today();
       var orden = function (o) { return o.L && o.L.length ? -1000 + (o.nEnt ? -100 : 0) : o.dias != null ? Math.max(o.dias, 0) : 9999; };
-      var secs = sanCalc(P).map(function (o, i) { return { o: o, i: i }; }).sort(function (x, y) { return orden(x.o) - orden(y.o) || x.i - y.i; }).map(function (z) {
-        var o = z.o, i = z.i;
-        var it = o.it, key = 'san' + i; state.desp = state.desp || {}; if (state.desp[key] === undefined) state.desp[key] = true;
+      // toda la lista en un solo desplegable; adentro, cada evento con su detalle y sus animales (sin plegar uno por uno)
+      var R = sanCalc(P), blk = R.map(function (o, i) { return { o: o, i: i }; }).sort(function (x, y) { return orden(x.o) - orden(y.o) || x.i - y.i; }).map(function (z) {
+        var o = z.o, i = z.i, it = o.it, key = 'san' + i, badge = '', extra = '', rows = '';
         var nota = '<p class="secnote"><b>' + esc(sanQuien(it)) + '</b> · ' + esc(sanVentTxt(it)) + (it.x ? '<br>' + esc(it.x) : '') + '</p>';
-        if (it.t === 'tac') return secTareas(key, esc(it.n), nota + '<p class="secnote">Se da en la visita de tacto. Hoy hay ' + nf(o.nServ) + ' servidas para confirmar.</p>', [], null, '', 'tacto');
-        if (it.t === 'mes') {
-          var tm = o.prox ? (o.act ? 'Este mes (' + MESL[+o.prox.slice(5, 7) - 1] + ')' : 'Próximo: ' + MESL[+o.prox.slice(5, 7) - 1] + ' · faltan ' + o.dias + ' días') : 'Sin meses';
-          return secTareas(key, esc(it.n), nota + '<p class="secnote">' + tm + ' · ' + nf(o.nG) + ' animales.</p>', [], null, '', o.prox ? (o.act ? 'este mes' : A.MESES[+o.prox.slice(5, 7) - 1]) : '–');
+        if (it.t === 'tac') { badge = 'tacto'; extra = '<p class="secnote">Se da en la visita de tacto. Hoy hay ' + nf(o.nServ) + ' servidas para confirmar.</p>'; }
+        else if (it.t === 'mes') {
+          badge = o.prox ? (o.act ? 'este mes' : A.MESES[+o.prox.slice(5, 7) - 1]) : '–';
+          extra = '<p class="secnote">' + (o.prox ? (o.act ? 'Este mes (' + MESL[+o.prox.slice(5, 7) - 1] + ')' : 'Próximo: ' + MESL[+o.prox.slice(5, 7) - 1] + ' · faltan ' + o.dias + ' días') : 'Sin meses') + ' · ' + nf(o.nG) + ' animales.</p>';
+        } else if (it.t === 'fecha') {
+          badge = o.prox ? (o.dias <= 0 ? (o.dias === 0 ? 'hoy' : 'pasó') : o.dias + ' d') : '–';
+          extra = '<p class="secnote">' + (o.prox ? (o.dias < 0 ? 'Fue el ' + A.fmt(o.prox) + ' (hace ' + (-o.dias) + ' días)' : o.dias === 0 ? 'Es hoy' : 'El ' + A.fmt(o.prox) + ' · faltan ' + o.dias + ' días') : 'Sin fecha') + ' · ' + nf(o.nG) + ' animales.</p>';
+        } else {
+          badge = String(o.L.length);
+          if (o.nEnt) extra = '<p class="secnote"><b>' + o.nEnt + '</b> ' + (o.nEnt === 1 ? 'entra' : 'entran') + ' en fecha esta semana (marcadas «nueva»).</p>';
+          var ab = !!state.abiertas[key], lim = ab ? o.L.length : 6;
+          rows = o.L.length ? o.L.slice(0, lim).map(function (x) {
+            var d = A.diffDays(x.fi, hoy), dq = A.diffDays(x.ff, hoy);
+            var r = d > 0 ? '<span class="when">en ' + d + (d === 1 ? ' día' : ' días') + '</span>' : '<span class="when' + (x.ent ? ' ok' : '') + '">' + (x.ent ? 'nueva · ' : '') + (dq === 0 ? 'último día' : dq === 1 ? 'queda 1 día' : 'quedan ' + dq + ' días') + '</span>';
+            var sub = it.t === 'pre' ? 'Parto probable ' + A.fmt(A.derive(x.a, hoy).partoProb) : it.t === 'pos' ? 'Parió el ' + A.fmt(x.a.pFecha) : (function () { var fn = DB.hist[x.a.rp].fn; return nf(A.diffDays(hoy, fn) / 30.44, 1) + ' meses · nació el ' + A.fmt(fn); })();
+            return rowHTML(x.a, { right: r, sub: sub });
+          }).join('') + (o.L.length > 6 ? '<button class="btn more" data-a="ver" data-k="' + key + '">' + (ab ? 'Ver menos' : 'Ver las ' + o.L.length) + '</button>' : '') : '<p class="hint">Ningún animal en fecha esta semana.</p>';
         }
-        if (it.t === 'fecha') {
-          var txt = o.prox ? (o.dias < 0 ? 'Fue el ' + A.fmt(o.prox) + ' (hace ' + (-o.dias) + ' días)' : o.dias === 0 ? 'Es hoy' : 'El ' + A.fmt(o.prox) + ' · faltan ' + o.dias + ' días') : 'Sin fecha';
-          return secTareas(key, esc(it.n), nota + '<p class="secnote">' + txt + ' · ' + nf(o.nG) + ' animales.</p>', [], null, '', o.prox ? (o.dias <= 0 ? (o.dias === 0 ? 'hoy' : 'pasó') : o.dias + ' d') : '–');
-        }
-        return secTareas(key, esc(it.n), nota + (o.nEnt ? '<p class="secnote"><b>' + o.nEnt + '</b> ' + (o.nEnt === 1 ? 'entra' : 'entran') + ' en fecha esta semana (marcadas «nueva»).</p>' : ''), o.L, function (x) {
-          var d = A.diffDays(x.fi, hoy), dq = A.diffDays(x.ff, hoy);
-          var r = d > 0 ? '<span class="when">en ' + d + (d === 1 ? ' día' : ' días') + '</span>' : '<span class="when' + (x.ent ? ' ok' : '') + '">' + (x.ent ? 'nueva · ' : '') + (dq === 0 ? 'último día' : dq === 1 ? 'queda 1 día' : 'quedan ' + dq + ' días') + '</span>';
-          var sub = it.t === 'tac' ? 'Preñez confirmada el ' + A.fmt(sanTactoPos(x.a)) : it.t === 'pre' ? 'Parto probable ' + A.fmt(A.derive(x.a, hoy).partoProb) : it.t === 'pos' ? 'Parió el ' + A.fmt(x.a.pFecha) : (function () { var fn = DB.hist[x.a.rp].fn; return nf(A.diffDays(hoy, fn) / 30.44, 1) + ' meses · nació el ' + A.fmt(fn); })();
-          return rowHTML(x.a, { right: r, sub: sub });
-        }, 'Ningún animal en fecha esta semana.');
+        return '<div class="sanblk" id="sanb' + i + '"><div class="sanbh"><h3>' + esc(it.n) + '</h3><span class="count">' + badge + '</span></div>' + nota + extra + rows + '</div>';
       }).join('');
+      var secs = secTareas('sanlista', 'Eventos del plan', blk, [], null, '', String(R.length));
       return '<p class="grp" id="sangrp">Sanidad</p><div class="glist">' + sanCalHTML(P) + secs + '</div>' +
         '<p class="cap" style="margin:6px 4px 0">Plan sanitario del Dr. Mauro Torterolo' + (P.f ? ', actualizado el ' + A.fmt(P.f) : '') + '. La lista muestra quiénes están en fecha según su etapa; lo aplicado no se registra.' + (vet ? ' <button class="lnk" data-a="saned">Editar plan</button>' : '') + '</p>';
     }
@@ -5111,7 +5116,7 @@
       else if (a === 'sanver' && esVet()) sanEditarUno(+b.dataset.i);
       else if (a === 'sannuevo') { var gk = b.dataset.g; sanEditarUno(null, { n: '', t: 'mes', m: [+b.dataset.m], g: [gk] }); }
       else if (a === 'sanborrar') { if (state.sanUno != null && confirm('¿Borrar este evento del plan?')) { state.sanDraft.splice(state.sanUno, 1); state.sanUno = null; sanGuardar(); } }
-      else if (a === 'sanver') { var k = 'san' + b.dataset.i; state.desp = state.desp || {}; state.desp[k] = true; render(); setTimeout(function () { var h = document.querySelector('[data-desp="' + k + '"]'); if (h) { h.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); h.closest('section').classList.add('sanflash'); } }, 30); }
+      else if (a === 'sanver') { state.desp = state.desp || {}; state.desp.sanlista = true; render(); setTimeout(function () { var h = document.getElementById('sanb' + b.dataset.i); if (h) { h.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); h.classList.add('sanflash'); } }, 30); }
       else if (a === 'sanir') { state.desp = state.desp || {}; state.desp.sancal = true; setTab('tareas'); setTimeout(function () { var g = $('#sangrp'); if (g) g.scrollIntoView(); }, 50); }
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
