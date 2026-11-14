@@ -2660,11 +2660,14 @@
       return out.length ? out : null;
     }
     function vacasAnioHTML() {
-      var V = vacasAnio(); if (!V) return '';
-      var S = V.slice(-10), hayS = S.some(function (x) { return x.s != null; });
+      var V0 = vacasAnio(); if (!V0) return '';
+      // últimos 10 años (gráfico, tabla y crecimiento promedio)
+      var V = V0.slice(-10); V.fuente = V0.fuente;
+      var S = V, hayS = S.some(function (x) { return x.s != null; });
       var max = Math.max.apply(null, S.map(function (x) { return x.m != null ? x.m : x.o; })) || 1;
       var W = 340, H = 190, padx = 6, gap = 8, N = S.length, bw = Math.min(40, (W - padx * 2 - gap * (N - 1)) / N), off = (W - padx * 2 - (bw * N + gap * (N - 1))) / 2, k = (H - 64) / max, sv = '';
-      var cr = function (v) { return v == null ? '' : (v >= 0 ? '+' : '−') + nf(Math.abs(v), 1) + '%'; };
+      var cr = function (v) { return v == null ? '' : Math.abs(v) < 0.05 ? '0%' : (v >= 0 ? '+' : '−') + nf(Math.abs(v), 1) + '%'; };
+      var crB = function (v) { var r = Math.round(v); return r === 0 ? '0%' : (r > 0 ? '+' : '−') + Math.abs(r) + '%'; }; // en las barras, sin decimales
       S.forEach(function (x, i) {
         var X = padx + off + i * (bw + gap), base = H - 40, ho = x.o * k, hs = (x.s || 0) * k, tot = x.m != null ? x.m : x.o;
         sv += '<rect class="pord' + (x.parcial || x.incompleto ? ' parc' : '') + '" x="' + X.toFixed(1) + '" y="' + (base - ho).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + ho.toFixed(1) + '"><title>' + x.y + ': ' + nf(x.o) + ' en ordeñe</title></rect>';
@@ -2672,7 +2675,7 @@
         sv += '<text class="mval" x="' + (X + bw / 2).toFixed(1) + '" y="' + (base - ho - hs - 4).toFixed(1) + '" text-anchor="middle">' + nf(tot) + '</text>';
         sv += '<text class="mlbl" x="' + (X + bw / 2).toFixed(1) + '" y="' + (H - 24) + '" text-anchor="middle">' + (x.parcial ? String(x.y).slice(2) + '*' : String(x.y).slice(2)) + '</text>';
         var c = hayS ? x.cM : x.cO;
-        if (c != null) sv += '<text class="vpac ' + (c >= 0 ? 'up' : 'dn') + '" x="' + (X + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + cr(c) + '</text>';
+        if (c != null) sv += '<text class="vpac ' + (c >= 0 ? 'up' : 'dn') + '" x="' + (X + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + crB(c) + '</text>';
       });
       var ult = V.filter(function (x) { return !x.parcial; }).pop() || V[V.length - 1], pri = V[0];
       var tot = function (x) { return hayS && x.m != null ? x.m : x.o; };
@@ -2689,7 +2692,7 @@
         (hayS ? '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' : '') +
         '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Promedio de vacas por año">' + sv + '</svg>' +
         '<table class="tbl vpatbl"><thead><tr><th>Año</th><th>Ordeñe</th>' + (hayS ? '<th>Secas</th><th>Masa</th>' : '') + '<th>Crec. ordeñe</th>' + (hayS ? '<th>Crec. masa</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
-        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas ' + (/^base/.test(SRCbase()) ? 'de la ' : 'del ') + SRCbase() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + ' Volvé a cargar la base o el respaldo del tambo para calcularlo con los animales, sin depender del control lechero.') + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. Historia desde ' + pri.y + '.' + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año desde": crecimiento promedio anual entre el primer año y el último completo.</p></details></section>';
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas ' + (/^base/.test(SRCbase()) ? 'de la ' : 'del ') + SRCbase() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + ' Volvé a cargar la base o el respaldo del tambo para calcularlo con los animales, sin depender del control lechero.') + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. ' + (V0.length > V.length ? 'Se muestran los últimos ' + V.length + ' años; la historia empieza en ' + V0[0].y + '.' : 'Historia desde ' + pri.y + '.') + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año desde": crecimiento promedio anual entre el primer año y el último completo.</p></details></section>';
     }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
