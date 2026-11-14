@@ -3425,7 +3425,7 @@
        Lo arma el veterinario (modo veterinario) y se guarda en sanidad.json (raíz del sitio, con el permiso de GitHub de los links).
        Cada tambo lo toma al abrir la app con internet y queda guardado para usarlo sin conexión. La app no registra lo aplicado:
        según la etapa de cada animal (días al parto, días de parida, edad) o una fecha fija, lista quiénes están en fecha. */
-    var SANT = { mes: 'Por mes', tac: 'Al confirmar preñez', pre: 'Antes del parto (secado, preparto)', pos: 'Después del parto', edad: 'Por edad (desleche, recría)', fecha: 'Fecha fija' };
+    var SANT = { mes: 'Por mes', tac: 'En el tacto (preñez confirmada)', pre: 'Antes del parto (secado, preparto)', pos: 'Después del parto', edad: 'Por edad (desleche, recría)', fecha: 'Fecha fija' };
     var MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
     var SANG = { vaca: 'Vacas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
     var SANJ = null; try { SANJ = JSON.parse(localStorage.getItem('libreta:sanj') || 'null'); } catch (e) { SANJ = null; }
@@ -3451,7 +3451,7 @@
         { n: 'Aftosa', t: 'mes', m: [3], g: ['vaca'] },
         { n: 'Leptospirosis', t: 'mes', m: [4, 8], g: ['vaca'] },
         { n: 'Querato', t: 'mes', m: [9], g: ['vaca'] },
-        { n: 'Confirmación de preñez: Leptospirosis', t: 'tac', d1: 0, d2: 15, g: ['vaca', 'vaquillona'], x: 'Al tacto positivo' },
+        { n: 'Confirmación de preñez: Leptospirosis', t: 'tac', g: ['vaca', 'vaquillona'] },
         { n: 'Secado: Clostridial + Saguaypicida', t: 'pre', d1: 65, d2: 55, g: ['vaca'], x: 'Al secar' },
         { n: 'Preparto: Diar 7 + Saguaypicida', t: 'pre', d1: 30, d2: 21, g: ['vaca', 'vaquillona'], x: 'Al entrar al preparto' },
         { n: 'Vaquillonas: Sanidad + Aftosa', t: 'mes', m: [2], g: ['vaquillona'] },
@@ -3479,6 +3479,7 @@
       var r = P.items.map(function (it) {
         var g = it.g && it.g.length ? it.g : ['vaca'], o = { it: it, L: [], nEnt: 0, nG: 0 };
         var en = DB.animales.filter(function (a) { return g.indexOf(sanGrupo(a)) >= 0; }); o.nG = en.length;
+        if (it.t === 'tac') { o.enTacto = true; o.semana = false; o.nServ = en.filter(function (a) { return a.estado === 'servida'; }).length; return o; }
         if (it.t === 'mes') {
           var M = (it.m || []).map(Number).filter(function (x) { return x >= 1 && x <= 12; }).sort(function (a, b) { return a - b; });
           var mh = +hoy.slice(5, 7), yh = +hoy.slice(0, 4);
@@ -3497,8 +3498,7 @@
         var lo = Math.min(+it.d1 || 0, +it.d2 || 0), hi = Math.max(+it.d1 || 0, +it.d2 || 0);
         en.forEach(function (a) {
           var fi = null, ff = null;
-          if (it.t === 'tac') { var tp = sanTactoPos(a); if (!tp) return; fi = A.addDays(tp, lo); ff = A.addDays(tp, hi); }
-          else if (it.t === 'pre') { if (a.estado !== 'prenada') return; var d = A.derive(a, hoy); if (!d.partoProb || d.partoEstimado) return; fi = A.addDays(d.partoProb, -hi); ff = A.addDays(d.partoProb, -lo); }
+          if (it.t === 'pre') { if (a.estado !== 'prenada') return; var d = A.derive(a, hoy); if (!d.partoProb || d.partoEstimado) return; fi = A.addDays(d.partoProb, -hi); ff = A.addDays(d.partoProb, -lo); }
           else if (it.t === 'pos') { if (!a.pFecha || (a.cat && a.cat !== 'vaca')) return; fi = A.addDays(a.pFecha, lo); ff = A.addDays(a.pFecha, hi); }
           else if (it.t === 'edad') { var fn = DB.hist && DB.hist[a.rp] && DB.hist[a.rp].fn; if (!fn) return; fi = addM(fn, lo); ff = addM(fn, hi); }
           if (!fi || ff < hoy || fi > h7) return;
@@ -3523,7 +3523,7 @@
     function sanVentTxt(it) {
       var lo = Math.min(+it.d1 || 0, +it.d2 || 0), hi = Math.max(+it.d1 || 0, +it.d2 || 0);
       if (it.t === 'pre') return 'De ' + hi + ' a ' + lo + ' días antes del parto';
-      if (it.t === 'tac') return lo ? 'De ' + lo + ' a ' + hi + ' días después del tacto positivo' : 'Hasta ' + hi + ' días después del tacto positivo';
+      if (it.t === 'tac') return 'En el tacto, a las que den preñadas';
       if (it.t === 'pos') return 'De ' + lo + ' a ' + hi + ' días de paridas';
       if (it.t === 'edad') return 'De ' + lo + ' a ' + hi + ' meses de edad';
       if (it.t === 'mes') return (it.m || []).slice().sort(function (a, b) { return a - b; }).map(function (x) { return MESL[x - 1]; }).join(', ').replace(/, ([^,]*)$/, ' y $1').replace(/^./, function (c) { return c.toUpperCase(); });
@@ -3545,6 +3545,7 @@
       var secs = sanCalc(P).map(function (o, i) { return { o: o, i: i }; }).sort(function (x, y) { return orden(x.o) - orden(y.o) || x.i - y.i; }).map(function (z) {
         var o = z.o, i = z.i;
         var it = o.it, key = 'san' + i, nota = '<p class="secnote"><b>' + esc(sanQuien(it)) + '</b> · ' + esc(sanVentTxt(it)) + (it.x ? '<br>' + esc(it.x) : '') + '</p>';
+        if (it.t === 'tac') return secTareas(key, esc(it.n), nota + '<p class="secnote">Se da en la visita de tacto. Hoy hay ' + nf(o.nServ) + ' servidas para confirmar.</p>', [], null, '', 'tacto');
         if (it.t === 'mes') {
           var tm = o.prox ? (o.act ? 'Este mes (' + MESL[+o.prox.slice(5, 7) - 1] + ')' : 'Próximo: ' + MESL[+o.prox.slice(5, 7) - 1] + ' · faltan ' + o.dias + ' días') : 'Sin meses';
           return secTareas(key, esc(it.n), nota + '<p class="secnote">' + tm + ' · ' + nf(o.nG) + ' animales.</p>', [], null, '', o.prox ? (o.act ? 'este mes' : A.MESES[+o.prox.slice(5, 7) - 1]) : '–');
@@ -3573,7 +3574,7 @@
         '<p class="cap" style="margin:0 0 8px">Para ' + esc(PERFIL.nombre || 'este tambo') + (DB.sel && DB.sel.length ? ' (solo las unidades elegidas)' : '') + '. Al guardar se sube y al productor le llega la próxima vez que abra la app con internet.</p>' +
         D.map(function (it, i) {
           var g = it.g || [], tipo = '<select data-sf="' + i + '.t">' + Object.keys(SANT).map(function (t) { return '<option value="' + t + '"' + (it.t === t ? ' selected' : '') + '>' + SANT[t] + '</option>'; }).join('') + '</select>';
-          var vent = it.t === 'mes' ? '<div class="filters sanmes">' + A.MESES.map(function (x, k) { return '<button class="fchip" data-smo="' + i + '.' + (k + 1) + '" aria-pressed="' + ((it.m || []).indexOf(k + 1) >= 0) + '">' + x + '</button>'; }).join('') + '</div>' : it.t === 'fecha' ? '<label class="xnum">Fechas (dd/mm) <input type="text" data-sf="' + i + '.f" value="' + esc((it.f || []).join(' y ')) + '" placeholder="15/04 y 15/10"></label>'
+          var vent = it.t === 'tac' ? '<p class="cap" style="margin:6px 0">Se da en el tacto, a las que den preñadas. Aparece como recordatorio en Voy mañana.</p>' : it.t === 'mes' ? '<div class="filters sanmes">' + A.MESES.map(function (x, k) { return '<button class="fchip" data-smo="' + i + '.' + (k + 1) + '" aria-pressed="' + ((it.m || []).indexOf(k + 1) >= 0) + '">' + x + '</button>'; }).join('') + '</div>' : it.t === 'fecha' ? '<label class="xnum">Fechas (dd/mm) <input type="text" data-sf="' + i + '.f" value="' + esc((it.f || []).join(' y ')) + '" placeholder="15/04 y 15/10"></label>'
             : '<label class="xnum">De ' + num(i, 'd1', it.d1) + ' a ' + num(i, 'd2', it.d2) + ' ' + (it.t === 'edad' ? 'meses de edad' : it.t === 'pre' ? 'días antes del parto' : it.t === 'tac' ? 'días después del tacto positivo' : 'días de paridas') + '</label>';
           var grs = (it.t === 'pos' ? ['vaca'] : it.t === 'pre' || it.t === 'tac' ? ['vaca', 'vaquillona'] : ['vaca', 'vaquillona', 'ternera']).map(function (x) { return '<button class="fchip" data-sgr="' + i + '.' + x + '" aria-pressed="' + (g.indexOf(x) >= 0) + '">' + SANG[x] + '</button>'; }).join('');
           return '<div class="sanit"><div class="sanhd"><input type="text" class="sann" data-sf="' + i + '.n" value="' + esc(it.n || '') + '" placeholder="Vacuna o tratamiento"><button class="sandel" data-a="sandel" data-i="' + i + '" aria-label="Quitar">✕</button></div>' +
@@ -3588,7 +3589,7 @@
       var p = el.dataset.sf.split('.'), it = state.sanDraft[+p[0]], f = p[1]; if (!it) return;
       if (f === 'f') it.f = el.value.split(/\s*(?:y|,|;)\s*|\s+/).filter(Boolean);
       else if (f === 'd1' || f === 'd2') { var v = parseInt(el.value, 10); it[f] = v >= 0 ? v : null; }
-      else if (f === 't') { it.t = el.value; it.g = it.t === 'pos' ? ['vaca'] : it.t === 'edad' ? ['ternera'] : it.t === 'pre' || it.t === 'tac' ? ['vaca', 'vaquillona'] : ['vaca']; if (it.t === 'tac') { it.d1 = 0; it.d2 = 15; } if (it.t === 'fecha') it.f = it.f || []; if (it.t === 'mes') it.m = it.m || []; sanEditor(); }
+      else if (f === 't') { it.t = el.value; it.g = it.t === 'pos' ? ['vaca'] : it.t === 'edad' ? ['ternera'] : it.t === 'pre' || it.t === 'tac' ? ['vaca', 'vaquillona'] : ['vaca']; if (it.t === 'fecha') it.f = it.f || []; if (it.t === 'mes') it.m = it.m || []; sanEditor(); }
       else it[f] = el.value;
     }
     function sanGuardar() {
@@ -3596,11 +3597,11 @@
       if (!tok) { toast('Falta el permiso de GitHub (Ajustes → permiso para links).'); return; }
       var items = state.sanDraft.filter(function (it) { return (it.n || '').trim(); }).map(function (it) {
         var o = { n: it.n.trim(), t: it.t, g: it.g && it.g.length ? it.g : ['vaca'] };
-        if (it.t === 'mes') o.m = (it.m || []).slice().sort(function (a, b) { return a - b; }); else if (it.t === 'fecha') o.f = (it.f || []).filter(sanDdmm); else { o.d1 = +it.d1 || 0; o.d2 = +it.d2 || 0; }
+        if (it.t === 'tac') {} else if (it.t === 'mes') o.m = (it.m || []).slice().sort(function (a, b) { return a - b; }); else if (it.t === 'fecha') o.f = (it.f || []).filter(sanDdmm); else { o.d1 = +it.d1 || 0; o.d2 = +it.d2 || 0; }
         if ((it.x || '').trim()) o.x = it.x.trim();
         return o;
       });
-      var mal = items.filter(function (o) { return o.t === 'mes' ? !o.m.length : o.t === 'fecha' ? !o.f.length : (o.d1 === 0 && o.d2 === 0); });
+      var mal = items.filter(function (o) { return o.t === 'tac' ? false : o.t === 'mes' ? !o.m.length : o.t === 'fecha' ? !o.f.length : (o.d1 === 0 && o.d2 === 0); });
       if (mal.length) { toast('Falta la ventana de: ' + mal.map(function (o) { return o.n; }).join(', ')); return; }
       var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/sanidad.json', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
       busy(true, 'Guardando el plan sanitario…');
@@ -4723,6 +4724,7 @@
         '<button class="valert' + (nAl ? '' : ' ok') + '" data-voy="alertas"><b>' + nAl + '</b><span><em>Alertas</em><small>' + al + '</small></span><svg class="vch" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
         (le ? '<button class="vf" data-a="voyleche"><span>Leche por vaca <b>' + nf(le.v, 1) + ' L</b></span>' + (d4 != null ? '<span class="' + (d4 < 0 ? 'dn' : 'up') + '">' + (d4 < 0 ? '▼ ' : '▲ +') + nf(Math.abs(d4), 0) + '% vs ' + le.mes + ' ' + (le.anio - 1) + '</span>' : '') + '</button>' : '') +
         '<button class="vf" data-voy="prox"><span>Próximos 30 días</span><span><b>' + R.secar.length + '</b> ' + (R.secar.length === 1 ? 'secado' : 'secados') + ' · <b>' + R.partos.length + '</b> ' + (R.partos.length === 1 ? 'parto' : 'partos') + '</span></button>' +
+        (function () { var P = sanPlan(), T = P ? P.items.filter(function (it) { return it.t === 'tac'; }) : []; return T.length ? '<div class="vf vsan"><span>En el tacto, a las que den preñadas</span><span><b>' + esc(T.map(function (it) { return it.n.replace(/^Confirmaci[oó]n de preñez:\s*/i, ''); }).join(' · ')) + '</b></span></div>' : ''; })() +
         '<button class="btn primary big vbtn" data-a="voyplanilla">Planilla de tacto para mañana</button></div>';
     }
     // refV: fecha a la que se calcula (Voy mañana la pide para mañana; desde Tareas, hoy)
