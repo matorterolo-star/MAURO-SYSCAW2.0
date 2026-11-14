@@ -3119,7 +3119,7 @@
         sec.insertAdjacentHTML('afterbegin', '<button class="shic" data-a="cardimg" aria-label="Compartir como imagen" title="Compartir">' + ico + '</button>');
       });
       var pan = main.querySelector('.panel');
-      if (pan && !main.querySelector('.shbtn')) pan.insertAdjacentHTML('afterend', '<button class="shbtn" data-a="panelimg">' + ico + 'Compartir resumen de visita</button>');
+      var pt = main.querySelector('h1.ptitle'); if (pan && pt && !pt.querySelector('.shic')) { pt.classList.add('ptsh'); pt.insertAdjacentHTML('beforeend', '<button class="shic" data-a="panelimg" aria-label="Compartir resumen de visita" title="Compartir resumen de visita">' + ico + '</button>'); }
     }
     function cargarH2C() {
       if (root.html2canvas) return Promise.resolve(root.html2canvas);
@@ -3810,7 +3810,8 @@
         var der = x.ok ? '<span class="sanhecho">✓ Hecho ' + A.fmt(x.ok).slice(0, 5) + '</span>' : '<button class="btn sm sanok' + (x.act ? '' : ' tarde') + '" data-a="sanhecho" data-sk="' + esc(x.k) + '">Hecho</button>';
         return '<div class="sanrow' + (x.ok ? ' ok' : '') + '"><span><b>' + esc(sanEtq(x.it.n)) + '</b><small>' + esc(sub) + '</small></span>' + der + '</div>';
       }).join('');
-      return btn + '<div class="sanpen"><p class="sanpt">' + (pend ? (pend === 1 ? '1 vacuna para marcar' : pend + ' vacunas para marcar') : 'Vacunas del mes: todo hecho') + '</p>' + rows + '<p class="cap">Tocá «Hecho» cuando la hayan dado. Queda guardado en este teléfono.</p></div>';
+      var ab = !!(state.desp && state.desp.sanpen);
+      return btn + '<div class="sanpen' + (ab ? ' open' : '') + '"><button class="sanpt" data-desp="sanpen" aria-expanded="' + ab + '"><span>' + (pend ? (pend === 1 ? '1 vacuna para marcar' : pend + ' vacunas para marcar') : 'Vacunas del mes: todo hecho') + '</span><svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' + (ab ? rows + '<p class="cap">Tocá «Hecho» cuando la hayan dado. Queda guardado en este teléfono.</p>' : '') + '</div>';
     }
     // resumen del cumplimiento, para verlo junto con el productor
     function sanCumpHTML(P) {
