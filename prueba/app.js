@@ -3825,7 +3825,22 @@
         var acc = x.ok ? '<button class="lnk" data-a="sandeshacer" data-sk="' + esc(x.k) + '">deshacer</button>' : '<button class="lnk" data-a="sanhecho" data-sk="' + esc(x.k) + '">marcar</button>';
         return '<tr><td>' + esc(sanYmTxt(x.ym)) + '</td><td><b>' + esc(sanEtq(x.it.n)) + '</b><br><small>' + esc(sanQuien(x.it)) + '</small></td><td>' + est + '<br>' + acc + '</td></tr>';
       }).join('');
-      var nota = '<p class="secnote">Vacunas y antiparasitarios del mes (tambo, vaquillonas y recría), desde ' + sanYmTxt(O.ini) + '. «En fecha» = marcadas dentro de su mes. Lo de secado, preparto, tacto y desleche no entra.</p>' + kp +
+      // por producto y grupo: última dosis dada y qué meses no se dio (para cruzarlo con un problema sanitario)
+      var GN = { vaca: 'Tambo', seca: 'Tambo', vaquillona: 'Vaquillonas', ternera: 'Recría' }, PR = {};
+      L.forEach(function (x) {
+        sanEtq(x.it.n).split(/\s*\+\s*/).filter(Boolean).forEach(function (pn) {
+          pn = /^leptosp/i.test(pn) ? 'Leptospirosis' : pn.charAt(0).toUpperCase() + pn.slice(1);
+          (x.it.g && x.it.g.length ? x.it.g : ['vaca']).forEach(function (g) {
+            var k = pn + '|' + GN[g], r = PR[k] = PR[k] || { p: pn, g: GN[g], ult: null, sin: [], n: 0 };
+            if (x.ok) { r.n++; if (!r.ult || x.ok > r.ult) r.ult = x.ok; } else if (!x.act && r.sin.indexOf(x.ym) < 0) r.sin.push(x.ym);
+          });
+        });
+      });
+      var PRL = Object.keys(PR).map(function (k) { return PR[k]; }).sort(function (a, b) { return (b.sin.length > 0) - (a.sin.length > 0) || a.p.localeCompare(b.p) || a.g.localeCompare(b.g); });
+      var prod = PRL.length ? '<h3 class="sanh3">Por producto</h3><div class="tblw"><table class="tbl sancump"><thead><tr><th>Producto</th><th>Última dada</th><th>No se dio</th></tr></thead><tbody>' + PRL.map(function (r) {
+        return '<tr' + (r.sin.length ? ' class="sinp"' : '') + '><td><b>' + esc(r.p) + '</b><br><small>' + esc(r.g) + '</small></td><td>' + (r.ult ? A.fmt(r.ult) : r.sin.length ? '<span class="sant mal">ninguna</span>' : '<span class="sant">–</span>') + '</td><td>' + (r.sin.length ? '<span class="sant mal">' + r.sin.map(sanYmTxt).join(', ') + '</span>' : '<span class="sant ok">–</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div><h3 class="sanh3">Mes por mes</h3>' : '';
+      var nota = '<p class="secnote">Vacunas y antiparasitarios del mes (tambo, vaquillonas y recría), desde ' + sanYmTxt(O.ini) + '. «En fecha» = marcadas dentro de su mes. Lo de secado, preparto, tacto y desleche no entra.</p>' + kp + prod +
         '<div class="tblw"><table class="tbl sancump"><thead><tr><th>Mes</th><th>Vacuna</th><th>Estado</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
       return secTareas('sancump', 'Cumplimiento sanitario', nota, [], null, '', pct == null ? '' : pct + '%');
     }
