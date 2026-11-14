@@ -666,6 +666,18 @@ details.lac summary .l{flex:1}
 .sanit .filters{margin-top:6px}
 .sanmes{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}.sanmes .fchip{padding-left:0;padding-right:0;justify-content:center;min-width:0}
 .sandel{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:var(--bg);color:var(--muted);font-size:16px;cursor:pointer}
+.scal{overflow-x:auto;margin:6px -4px 0}
+.scal table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11.5px;line-height:1.2}
+.scal th,.scal td{border:1px solid var(--line);padding:3px 2px;text-align:center;vertical-align:middle}
+.scal thead th{font-size:12px;font-weight:800;color:var(--ink);padding:6px 2px}
+.scal thead th:first-child{width:36px}.scal tbody th{width:36px;font-weight:700;font-size:10.5px;color:var(--muted)}
+.scal tr.hoy th{color:var(--ink);background:rgba(201,162,39,.28)}
+.scal td span{display:block;border-radius:6px;padding:4px 3px;margin:1px 0;color:#1b2333;font-weight:600;overflow-wrap:break-word;hyphens:auto}
+.scal .cb{background:#4FB3E8}.scal .cg{background:#8DCB5E}.scal .co{background:#F5B13D}.scal .cy{background:#F7EB5C}.scal .cl{background:#D3E8C4}.scal .cx{background:#E2E4EA}
+.scal [data-a=sanver],.sband button{cursor:pointer}.scal td span[data-a=sanver]:active,.sband button:active{filter:brightness(.9)}
+.scalev{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+.sband{display:grid;grid-template-columns:1fr 1fr;gap:6px}.sband button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;border-radius:10px;padding:9px 10px;font:inherit;text-align:left;color:#1b2333}.sband b{font-size:12px;text-transform:uppercase;letter-spacing:.3px}.sband span{font-size:13px;font-weight:600;line-height:1.25}.sband button{background:var(--bg);color:var(--ink);border:1px solid var(--line)}.sband b{color:var(--muted)}
+.sec.sanflash{animation:sanfl 1.4s ease-out}@keyframes sanfl{0%{box-shadow:0 0 0 3px var(--apta)}100%{box-shadow:0 0 0 0 transparent}}
 </style>
 </head>
 <body>
@@ -767,6 +779,6 @@ details.lac summary .l{flex:1}
 <script src="fosapp.js?v=p220"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=p224"></script>
+<script src="app.js?v=p225"></script>
 </body>
 </html>
