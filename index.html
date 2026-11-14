@@ -655,6 +655,41 @@ details.lac summary .l{flex:1}
 .valert>b{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}.valert em{display:block;font-style:normal;font-weight:700;font-size:15px}.valert small{display:block;font-size:12.5px;opacity:.85}
 .valert.ok{background:var(--surface);color:var(--muted);border:1px solid var(--line)}.valert .vch{position:absolute;right:12px;top:50%;margin-top:-9px;opacity:.6}
 @media (prefers-color-scheme:dark){.valert{background:#3d1717;color:#f3a5a0}}
+.kpis div.ok,.kpis div.at,.kpis div.mal{background:var(--bg)}.kpis div.ok b{color:var(--prenada)}.kpis div.at b{color:var(--apta)}.kpis div.mal b{color:var(--vacia)}.kpis div.ok,.kpis div.at,.kpis div.mal{border:2px solid transparent;padding:8px 6px}.kpis div.at{border-color:var(--apta)}.kpis div.mal{border-color:var(--vacia)}
+.sanit{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 10px;background:var(--surface)}
+.sanhd{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.sanit input[type=text]{width:100%;box-sizing:border-box;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:inherit}
+.sanit .sann{font-weight:700;font-size:16px}
+.sanit .sanx{margin-top:8px;font-size:14px}
+.sanit select{font:inherit;padding:7px 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:inherit}
+.sanit .xnum input[type=number]{width:62px}
+.sanit .filters{margin-top:6px}
+.sanmes{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}.sanmes .fchip{padding-left:0;padding-right:0;justify-content:center;min-width:0}
+.sandel{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:var(--bg);color:var(--muted);font-size:16px;cursor:pointer}
+.scal{overflow-x:auto;margin:6px -4px 0}
+.scal table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px;line-height:1.15}
+.scal th,.scal td{border:1px solid var(--line);padding:3px 2px;text-align:center;vertical-align:middle}
+.scal thead th{font-size:10px;letter-spacing:.2px;font-weight:800;color:var(--ink);padding:6px 2px}
+.scal thead th.mcol{width:30px}.scal th.bcol,.scal td.band{width:22px;padding:0;position:relative}.scal thead th{height:78px}.scal .bsvg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}.scal td.band{background:var(--surface);color:var(--ink);cursor:pointer}.count:empty{display:none}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.scal tbody th{width:30px;font-weight:700;font-size:10.5px;color:var(--muted)}
+.scal tr.hoy th{color:var(--ink);background:rgba(201,162,39,.28)}
+.scal td span{display:block;border-radius:6px;padding:4px 3px;margin:1px 0;color:#1b2333;font-weight:600;overflow-wrap:break-word;hyphens:auto}
+.scal .cb{background:#4FB3E8}.scal .cg{background:#8DCB5E}.scal .co{background:#F5B13D}.scal .cy{background:#F7EB5C}.scal .cl{background:#D3E8C4}.scal .cx{background:#E2E4EA}
+.scal [data-a=sanver],.sband button{cursor:pointer}.scal td span[data-a=sanver]:active,.sband button:active{filter:brightness(.9)}
+.scalev{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+.sband{display:grid;grid-template-columns:1fr 1fr;gap:6px}.sband button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:0;border-radius:10px;padding:9px 10px;font:inherit;text-align:left;color:#1b2333}.sband b{font-size:12px;text-transform:uppercase;letter-spacing:.3px}.sband span{font-size:13px;font-weight:600;line-height:1.25}.sband button{background:var(--bg);color:var(--ink);border:1px solid var(--line)}.sband b{color:var(--muted)}
+.sec.sanflash{animation:sanfl 1.4s ease-out}@keyframes sanfl{0%{box-shadow:0 0 0 3px var(--apta)}100%{box-shadow:0 0 0 0 transparent}}
+.sancalsec{position:relative}.sancalsec .shic{top:12px;right:52px}
+.scal td.sadd{cursor:pointer}.scal td.sadd:empty:active{background:rgba(201,162,39,.18)}
+.btn.sanborrar{color:var(--vacia);border-color:var(--vacia)}
+.sanblk{padding:12px 2px 14px;border-top:1px solid var(--line)}.sanblk:first-of-type{border-top:0;padding-top:4px}
+.sanbh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}.sanbh h3{margin:0;font-size:16px;font-weight:800;color:var(--ink)}
+.sanblk.sanflash{animation:sanfl 1.4s ease-out;border-radius:12px}
+.mchart .parc{opacity:.55}.vpac{font-size:10.5px;font-weight:800}.vpac.up{fill:var(--prenada)}.vpac.dn{fill:var(--vacia)}
+.vpatbl td span.up{color:var(--prenada);font-weight:700}.vpatbl td span.dn{color:var(--vacia);font-weight:700}.vpatbl tr.parc td{color:var(--muted)}.vpatbl th,.vpatbl td{font-size:13px}
+.fh.fhsh{position:relative}.fh.fhsh .shic{top:-50px;right:0}
+.cprng{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0 4px;font-size:14px;color:var(--muted);font-weight:600}.cprng input{width:58px;font:inherit;font-weight:700;color:var(--ink);padding:6px 8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);text-align:center}
+.tbl tr.cpk td{font-weight:800;color:var(--vacia)}
+.vpac.eq{fill:var(--muted)}.vpatbl td span.eq{color:var(--muted);font-weight:700}.kpis .vpak.up b{color:var(--prenada)}.kpis .vpak.dn b{color:var(--vacia)}.kpis .vpak.eq b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -752,10 +787,10 @@ details.lac summary .l{flex:1}
 <div id="toast" role="status" aria-live="polite"></div>
 <div class="busy" id="busy" hidden><div id="busyMsg">Leyendo respaldo…</div></div>
 <script src="paradox.js?v=38"></script>
-<script src="syscaw.js?v=43"></script>
-<script src="fosapp.js?v=63"></script>
+<script src="syscaw.js?v=44"></script>
+<script src="fosapp.js?v=64"></script>
 <script src="unrar.js"></script>
 <script src="unrar-wasm.js"></script>
-<script src="app.js?v=67"></script>
+<script src="app.js?v=68"></script>
 </body>
 </html>

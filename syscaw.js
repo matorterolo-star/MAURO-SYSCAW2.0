@@ -31,6 +31,64 @@
   function addDays(s, n) { var d = new Date(P(s) + n * 864e5); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
   function okDate(d) { return d && d > '1900' && d < '2100' ? d : null; }
 
+  // vacas en ordeñe y secas mes a mes, por unidad, con la vida de todas las vacas:
+  // L = [{ u, pa: [[fecha parto, fecha cierre]], baja, activa, seca }] (sin abortos). Promedio de los días de cada mes.
+  // Si falta el secado: 60 días antes del parto siguiente; seca activa sin secado: desde 30 días antes de la fecha del respaldo.
+  // El primer año con partos anotados queda afuera (las vacas que ya estaban no tienen su parto cargado).
+  function vovsHist(L, ref) {
+    try {
+      var acc = {}, prim = null, ymI = function (s) { return +s.slice(0, 4) * 12 + (+s.slice(5, 7) - 1); };
+      var sumar = function (u, k, a, b) {
+        if (!a || !b || b <= a) return;
+        var A0 = ymI(a), B0 = ymI(b), U = acc[u] || (acc[u] = {});
+        for (var m = A0; m <= B0; m++) {
+          var y = Math.floor(m / 12), mm = m % 12 + 1, ini = y + '-' + pad(mm) + '-01', fin = mm === 12 ? (y + 1) + '-01-01' : y + '-' + pad(mm + 1) + '-01';
+          var d0 = a > ini ? a : ini, d1 = b < fin ? b : fin, n = diffDays(d1, d0); if (n <= 0) continue;
+          var c = U[m] || (U[m] = [0, 0]); c[k] += n;
+        }
+      };
+      // pases entre unidades: cada tramo se suma en la unidad donde estaba la vaca ese día
+      // (x.mv = [[fecha, unidad destino, unidad origen]], ordenado; antes del primer pase, la de origen)
+      var uEn = function (x, D) {
+        var mv = x.mv; if (!mv || !mv.length) return x.u == null ? 0 : x.u;
+        var u = null; mv.forEach(function (m) { if (m[0] <= D) u = m[1]; });
+        return u != null ? u : (mv[0][2] != null ? mv[0][2] : (x.u == null ? 0 : x.u));
+      };
+      var porUnidad = function (x, k, a, b) {
+        if (!a || !b || b <= a) return;
+        var cortes = (x.mv || []).map(function (m) { return m[0]; }).filter(function (f) { return f > a && f < b; });
+        var p = a; cortes.concat([b]).forEach(function (q) { if (q > p) { sumar(uEn(x, p), k, p, q); p = q; } });
+      };
+      L.forEach(function (x) {
+        var fb = x.baja && x.baja <= ref ? x.baja : null, E = fb || addDays(ref, 1);
+        if (!fb && !x.activa) return; // fuera del rodeo sin fecha de baja: no se sabe hasta cuándo estuvo
+        var P = (x.pa || []).filter(function (p) { return p[0]; }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+        P.forEach(function (p, i) {
+          var s = p[0], np = P[i + 1] ? P[i + 1][0] : null, c = p[1];
+          if (s >= E) return;
+          if (!prim || s < prim) prim = s;
+          if (!c || c <= s || (np && c >= np)) c = np ? addDays(np, -60) : (x.activa && x.seca ? addDays(ref, -30) : null);
+          if (c && c <= s) c = addDays(s, 1);
+          var finL = c && c < E ? c : E, finS = np && np < E ? np : E;
+          porUnidad(x, 0, s, finL);
+          if (c && c < finS) porUnidad(x, 1, c, finS);
+        });
+      });
+      if (!prim) return null;
+      var desde = (+prim.slice(0, 4) + 1) * 12, hasta = ymI(ref), out = {};
+      if (desde > hasta) return null;
+      Object.keys(acc).forEach(function (u) {
+        var arr = [];
+        for (var m = desde; m <= hasta; m++) {
+          var y = Math.floor(m / 12), mm = m % 12 + 1, dm = m === hasta ? +ref.slice(8, 10) : diffDays(mm === 12 ? (y + 1) + '-01-01' : y + '-' + pad(mm + 1) + '-01', y + '-' + pad(mm) + '-01');
+          var c = acc[u][m] || [0, 0]; arr.push([Math.round(c[0] / dm * 10) / 10, Math.round(c[1] / dm * 10) / 10]);
+        }
+        out[u] = arr;
+      });
+      return { desde: Math.floor(desde / 12) + '-01', hasta: ref.slice(0, 7), u: out };
+    } catch (e) { return null; }
+  }
+
   function infoFromName(name) {
     var base = String(name || '').replace(/\.rar$/i, '').replace(/^[0-9a-f]{8}-/i, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
     var m = base.match(/(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/), fecha = null;
@@ -152,9 +210,10 @@
       var t = r[2] === 1 ? 'C' : 'S'; g.ev.push([f, t, t === 'S' ? (toro[r[3]] || '') : '', t === 'S' ? (insServ[r[0] + '|' + r[1]] || null) : null]); if (f > maxF) maxF = f;
     });
     // pases entre unidades (últimos 3 años): para saber en qué unidad estaba cada animal en cada fecha
-    var mvBy = {};
-    try { if (files[OPCIONALES.pases]) PX.readTable(files[OPCIONALES.pases], { fields: ['ID', 'Fecha', 'Tambo', 'Origen'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && f >= '2023-01-01' && r[2] != null) (mvBy[r[0]] = mvBy[r[0]] || []).push([f, r[2], r[3]]); }); } catch (e) { mvBy = {}; }
+    var mvBy = {}, mvAll = {};
+    try { if (files[OPCIONALES.pases]) PX.readTable(files[OPCIONALES.pases], { fields: ['ID', 'Fecha', 'Tambo', 'Origen'], array: true }).rows.forEach(function (r) { var f = okDate(r[1]); if (f && r[2] != null) (mvAll[r[0]] = mvAll[r[0]] || []).push([f, r[2], r[3]]); if (f && f >= '2023-01-01' && r[2] != null) (mvBy[r[0]] = mvBy[r[0]] || []).push([f, r[2], r[3]]); }); } catch (e) { mvBy = {}; }
     Object.keys(mvBy).forEach(function (k) { mvBy[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
+    Object.keys(mvAll).forEach(function (k) { mvAll[k].sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); });
     // condición corporal: la última de cada animal y su historial de los últimos 3 años (como el resto del historial)
     var ecBy = {}, ecH = {};
     try { if (files[OPCIONALES.estcorp]) PX.readTable(files[OPCIONALES.estcorp], { fields: ['ID', 'Fecha', 'ECorp'], array: true }).rows.forEach(function (r) {
@@ -290,7 +349,17 @@
     // número de productor de SysCaw: identifica al tambo para la activación
     var idProd = [];
     try { if (files[OPCIONALES.tambos]) PX.readTable(files[OPCIONALES.tambos], { fields: ['IdProd'], array: true }).rows.forEach(function (r) { if (r[0] != null && idProd.indexOf(r[0]) < 0) idProd.push(r[0]); }); } catch (e) { idProd = []; }
-    return { idProd: idProd, ctrls: ctrls, curvas: curvas, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
+    // historia de vacas en ordeñe y secas (todas las vacas del respaldo, también las dadas de baja hace años)
+    var VL = [];
+    var PAt = {};
+    T.partos.forEach(function (r) { var f = okDate(r[1]); if (f && r[4] > 0) (PAt[r[0]] = PAt[r[0]] || []).push([f, okDate(r[7])]); });
+    Object.keys(PAt).forEach(function (id) {
+      var a = byId[id]; if (!a) return; // todas las unidades: la app filtra por unidad, y con los pases cada día cuenta donde estaba
+      var fb = okDate(a[9]);
+      VL.push({ u: a[11] == null ? 0 : a[11], mv: mvAll[id] || null, pa: PAt[id], baja: fb, activa: !fb && !!CAT[a[6]], seca: CAT[a[6]] === 'seca' });
+    });
+    var vovsH = vovsHist(VL, ref);
+    return { idProd: idProd, vovsH: vovsH, ctrls: ctrls, curvas: curvas, config: config, animales: animales, bajas: bajas, hist: hist, codes: codes, fecha: ref, desdeHist: desdeHist, tambo: info.tambo, conteoCat: c };
   }
 
   // Unidades (tambos / campos) que trae el respaldo, con los animales activos de cada una
@@ -331,6 +400,6 @@
     return d;
   }
 
-  var api = { build: build, curvaLact: curvaLact, curvaProy: curvaProy, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
+  var api = { vovsHist: vovsHist, build: build, curvaLact: curvaLact, curvaProy: curvaProy, fromRar: fromRar, unidades: unidades, TABLES: TABLES, infoFromName: infoFromName };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SysCaw = api;
 })(typeof window !== 'undefined' ? window : this);

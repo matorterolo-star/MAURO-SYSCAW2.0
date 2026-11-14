@@ -834,7 +834,7 @@
     function cargarSigea() {
       if (root.Sigea) return Promise.resolve(root.Sigea);
       return new Promise(function (ok, mal) {
-        var s = document.createElement('script'); s.src = 'sigea.js?v=1';
+        var s = document.createElement('script'); s.src = 'sigea.js?v=2';
         s.onload = function () { root.Sigea ? ok(root.Sigea) : mal(new Error('no se pudo cargar el lector de SIGEA')); };
         s.onerror = function () { mal(new Error('no se pudo descargar el lector de SIGEA (hace falta internet la primera vez)')); };
         document.head.appendChild(s);
@@ -844,12 +844,12 @@
     function cargarDhm() {
       if (root.Dhm && root.MDBReader) return Promise.resolve(root.Dhm);
       var uno = function (src) { return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DHM (hace falta internet la primera vez)')); }; document.head.appendChild(s); }); };
-      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=4'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
+      return (root.MDBReader ? Promise.resolve() : uno('mdb-reader.js?v=1')).then(function () { return root.Dhm ? null : uno('dhm.js?v=6'); }).then(function () { if (!root.Dhm || !root.MDBReader) throw new Error('no se pudo cargar el lector de DHM'); return root.Dhm; });
     }
     // exportación de DelPro (DeLaval): .zip con las tablas en CSV; el lector se baja recién la primera vez
     function cargarDelpro() {
       if (root.Delpro) return Promise.resolve(root.Delpro);
-      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=4'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
+      return new Promise(function (ok, mal) { var s = document.createElement('script'); s.src = 'delpro.js?v=5'; s.onload = function () { root.Delpro ? ok(root.Delpro) : mal(new Error('no se pudo cargar el lector de DelPro')); }; s.onerror = function () { mal(new Error('no se pudo descargar el lector de DelPro (hace falta internet la primera vez)')); }; document.head.appendChild(s); });
     }
     // ¿es un .zip con las tablas de DelPro? (se busca el nombre de sus tablas en el índice del .zip, al final del archivo)
     function esDelpro(buf) {
@@ -890,7 +890,7 @@
           if (!q) return;
           var d = q.d, nom = q.nom, cambio = prepararDestino(nom, d.idProd || []);
           if ((!d.tambo || externo(d.origen)) && tamboAct() && tamboAct().nombre) nom = tamboAct().nombre; // sin nombre en el respaldo: se mantiene el que ya tenía
-          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], ctrls: d.ctrls || [], curvas: d.curvas || null, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
+          var nuevo = { animales: [], todos: d.animales, idProd: d.idProd || [], vovsH: d.vovsH || null, ctrls: d.ctrls || [], curvas: d.curvas || null, bajasT: d.bajas || [], config: d.config || {}, unidades: d.unidades.length > 1 ? d.unidades : null, sel: d.sel, hist: d.hist, codes: d.codes, fecha: d.fecha, desdeHist: d.desdeHist, cargada: today(), archivo: f.name, fuente: 'syscaw', origen: d.origen || 'syscaw' };
           return leerDB(TAMBOS.activo).then(function (viejo) { return { cambio: cambio, nom: nom, n: unirRespaldo(nuevo, viejo) }; }, function () { return { cambio: cambio, nom: nom, n: { db: nuevo, bajas: 0 } }; });
         }).then(function (r) {
           if (!r) return;
@@ -938,6 +938,7 @@
         if (vivo[b.key]) return;
         N.bajasT.push(b); N.hist[b.key] = hv; out.bajas++;
       });
+      if (!N.vovsH && V.vovsH) N.vovsH = V.vovsH;
       var cv = {}; (N.ctrls || []).forEach(function (c) { cv[c[0] + '|' + c[1]] = 1; });
       (V.ctrls || []).forEach(function (c) { if (!cv[c[0] + '|' + c[1]]) N.ctrls.push(c); });
       N.ctrls.sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; });
@@ -1331,16 +1332,16 @@
       var hoy = today(), pp = A.derive(a, hoy).partoProb || a.partoProb; if (!pp) return null;
       var d = A.diffDays(hoy, pp); return d > ATRASO_DIAS ? { pp: pp, d: d } : null;
     }
-    function secTareas(key, titulo, nota, items, mapRow, vacio) {
+    function secTareas(key, titulo, nota, items, mapRow, vacio, cnt) {
       var abierta = !!state.abiertas[key], lim = abierta ? items.length : 12;
       // cada lista arranca plegada: título y cantidad; se despliega tocando el título
       var desp = !!(state.desp && state.desp[key]);
       var ds = descDe(key);
-      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><span class="pttl"><h2>' + titulo + '</h2>' + (ds ? '<small class="pdesc">' + esc(ds) + '</small>' : '') + '</span><span class="count">' + items.length + '</span>' +
+      var h = '<section class="sec' + (desp ? ' open' : '') + '"><button class="sechead" data-desp="' + key + '" aria-expanded="' + desp + '"><span class="pttl"><h2>' + titulo + '</h2>' + (ds ? '<small class="pdesc">' + esc(ds) + '</small>' : '') + '</span><span class="count">' + (cnt != null ? cnt : items.length) + '</span>' +
         '<svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       if (!desp) return h + '</section>';
       h += (nota ? (nota.charAt(0) === '<' ? nota : '<p class="secnote">' + nota + '</p>') : '');
-      if (!items.length) h += '<p class="hint">' + vacio + '</p>';
+      if (!items.length) { if (vacio) h += '<p class="hint">' + vacio + '</p>'; }
       else {
         h += items.slice(0, lim).map(mapRow).join('');
         if (items.length > 12) h += '<button class="btn more" data-a="ver" data-k="' + key + '">' + (abierta ? 'Ver menos' : 'Ver las ' + items.length) + '</button>';
@@ -1551,6 +1552,7 @@
             return rowHTML(x.a, { right: '<span class="when late">' + x.d + ' días</span>', sub: 'Parto probable ' + A.fmt(x.pp) + (x.a.tFecha ? ' · tacto ' + A.fmt(x.a.tFecha) : '') });
           }, 'No hay partos atrasados.');
         })() : '')) +
+        (esOperario() ? '' : sanTareasHTML()) +
         grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Vacas en ordeñe por caravana, para anotar en el corral') : '')) +
         grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
@@ -1911,8 +1913,58 @@
       var res = avisos.length
         ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
         : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
-      return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' +
+      var SM = sanMes(), sanBtn = SM ? '<button class="voyent" data-a="sanir"><span><b>Sanidad de ' + SM.mes + '</b><small>' + esc(SM.txt) + '</small></span><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' : '';
+      return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' + sanBtn +
         '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: último día en que se tactaron 5 vacas en ordeñe o más (no cuentan vaquillonas, secas ni registros sueltos, como un aborto cargado como tacto); amarillo desde 21 días, rojo con más de 30.</p>';
+    }
+    // Celos perdidos: días entre un celo o servicio y el siguiente de cada animal en la temporada (mismo inicio que los ciclos de 21 días).
+    // Un intervalo de dos ciclos (por defecto 34 a 45 días) es un celo que no se vio a los 21 días.
+    function celosPerdidosHTML() {
+      if (!DB.hist) return '';
+      var ini = inicio21(), ref = DB.fecha || today(); if (ini > ref) return '';
+      // último tacto: el día más reciente con 5 vacas o más tactadas en ordeñe (como el Panel)
+      var porDia = {}, ut = null;
+      DB.animales.forEach(function (a) { var h = DB.hist[a.rp]; if (!h || !h.ta) return; h.ta.forEach(function (t) { if (t[0] > ref) return; var lp = null; (h.pa || []).forEach(function (p) { if (p[0] < t[0]) lp = p; }); if (!lp || (lp[5] && lp[5] <= t[0])) return; porDia[t[0]] = (porDia[t[0]] || 0) + 1; }); });
+      Object.keys(porDia).forEach(function (d) { if (porDia[d] >= 5 && (!ut || d > ut)) ut = d; });
+      var vista = state.cpVista || 'tacto'; if (vista === 'tacto' && !ut) vista = 'zafra';
+      var corte = vista === 'tacto' ? ut : null;
+      var mn = +(getP('cpmin') || 34), mx = +(getP('cpmax') || 45); if (!(mn > 25)) mn = 34; if (!(mx >= mn)) mx = mn + 11;
+      var B = [['Menos de 18 días', function (d) { return d < 18; }], ['18 a 24 días (un ciclo)', function (d) { return d >= 18 && d <= 24; }], ['25 a ' + (mn - 1) + ' días', function (d) { return d >= 25 && d < mn; }],
+        [mn + ' a ' + mx + ' días (celo perdido)', function (d) { return d >= mn && d <= mx; }, 1], ['Más de ' + mx + ' días', function (d) { return d > mx; }]];
+      var cnt = B.map(function () { return [0, 0]; }), tot = [0, 0], perd = [], vacas = {};
+      var an = DB.animales.map(function (a) { return { a: a, h: DB.hist[a.rp] }; }).concat((DB.bajas || []).map(function (b) { return { a: b, h: DB.hist[b.key], baja: true }; }));
+      an.forEach(function (x) {
+        var h = x.h; if (!h || !h.ev) return;
+        var E = h.ev.filter(function (e) { return (e[1] === 'S' || e[1] === 'C') && e[0] >= ini && e[0] <= ref; });
+        for (var i = 1; i < E.length; i++) {
+          var e1 = E[i - 1][0], e2 = E[i][0], d = A.diffDays(e2, e1); if (d <= 1) continue;
+          if ((h.pa || []).some(function (p) { return p[0] > e1 && p[0] <= e2; })) continue; // parto en el medio: otra lactancia
+          if (!(h.pa || []).some(function (p) { return p[0] <= e1; })) continue; // vaquillonas (lactancia 0) no
+          if (corte && e2 <= corte) continue; // desde el último tacto: las que repitieron después de la visita
+          var q = 0;
+          tot[q]++;
+          B.forEach(function (b, k) { if (b[1](d)) { cnt[k][q]++; if (b[2]) { perd.push({ x: x, e1: E[i - 1], e2: E[i], d: d, q: q }); vacas[(x.baja ? 'b' : '') + (x.a.key || x.a.rp)] = 1; } } });
+        }
+      });
+      if (vista === 'zafra' && tot[0] < 10) return '';
+      var nP = cnt[3][0] + cnt[3][1], T = tot[0] + tot[1], pc = function (n, d) { return d ? nf(n / d * 100, 1) + '%' : '–'; };
+      CLAVE['Celos perdidos'] = nP + ' intervalos de ' + mn + ' a ' + mx + ' días (' + pc(nP, T) + ' de ' + T + ') · ' + Object.keys(vacas).length + ' animales';
+      var hayQ = false;
+      var filas = B.map(function (b, k) { return '<tr' + (b[2] ? ' class="cpk"' : '') + '><td>' + b[0] + '</td><td>' + nf(cnt[k][0]) + ' <small>' + pc(cnt[k][0], tot[0]) + '</small></td>' + (hayQ ? '<td>' + nf(cnt[k][1]) + ' <small>' + pc(cnt[k][1], tot[1]) + '</small></td>' : '') + '</tr>'; }).join('') +
+        '<tr class="sep"><td><b>Total intervalos</b></td><td><b>' + nf(tot[0]) + '</b></td>' + (hayQ ? '<td><b>' + nf(tot[1]) + '</b></td>' : '') + '</tr>';
+      var L = perd.filter(function (p) { return !p.x.baja; }).sort(function (a, b) { return a.e2[0] < b.e2[0] ? 1 : -1; });
+      var ab = !!state.abiertas.cperd, lista = L.slice(0, ab ? L.length : 8).map(function (p) {
+        var t = function (e) { return (e[1] === 'C' ? 'Celo ' : 'Serv. ') + A.fmt(e[0]).slice(0, 5); };
+        return rowHTML(p.x.a, { right: '<span class="when late">' + p.d + ' días</span>', sub: t(p.e1) + ' → ' + t(p.e2) });
+      }).join('') + (L.length > 8 ? '<button class="btn more" data-a="ver" data-k="cperd">' + (ab ? 'Ver menos' : 'Ver las ' + L.length) + '</button>' : '');
+      return '<section class="card"><h2>Celos perdidos</h2>' +
+        '<div class="filters cpv">' + [['tacto', 'Desde el último tacto'], ['zafra', 'Toda la zafra']].map(function (v) { return '<button class="fchip plain" data-cpv="' + v[0] + '" aria-pressed="' + (vista === v[0]) + '"' + (v[0] === 'tacto' && !ut ? ' disabled' : '') + '>' + v[1] + '</button>'; }).join('') + '</div>' +
+        '<p class="secnote" style="margin:6px 0 0">' + (vista === 'tacto' ? 'Repeticiones después del tacto del ' + A.fmt(ut) + '.' : 'Toda la zafra, desde el ' + A.fmt(ini) + '.') + ' Solo vacas (sin vaquillonas).</p>' +
+        (T ? '' : '<p class="hint">Todavía no hay repeticiones después del último tacto.</p>') + '<div class="kpis kpis2"><div><b>' + pc(nP, T) + '</b><span>Intervalos de ' + mn + ' a ' + mx + ' días · ' + nP + ' de ' + T + '</span></div><div><b>' + Object.keys(vacas).length + '</b><span>Vacas con un celo perdido</span></div></div>' +
+        '<div class="cprng">Celo perdido de <input type="number" inputmode="numeric" id="cpmin" value="' + mn + '" min="26" max="60"> a <input type="number" inputmode="numeric" id="cpmax" value="' + mx + '" min="27" max="70"> días</div>' +
+        '<table class="tbl"><thead><tr><th>Días entre celos o servicios</th><th>Vacas</th>' + (hayQ ? '<th>Vaquill.</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
+        (L.length ? '<h3 class="vh3">Con celo perdido</h3>' + lista : '') +
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Zafra: desde el ' + A.fmt(ini) + ' (el mismo inicio de los ciclos de 21 días) hasta el ' + A.fmt(ref) + '. Desde el último tacto: solo los celos o servicios después del tacto' + (ut ? ' del ' + A.fmt(ut) : '') + ' (el día más reciente con 5 vacas o más tactadas en ordeñe), contando los días desde el celo o servicio anterior. Solo vacas: las vaquillonas (lactancia 0) no entran. Para cada vaca, los días entre un celo o servicio y el siguiente, sin parto en el medio; también cuentan las vacas que después se vendieron o murieron (no van en la lista). Un intervalo de ' + mn + ' a ' + mx + ' días son dos ciclos: el celo de los 21 días no se vio o no se anotó. El rango se cambia arriba.</p></details></section>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
@@ -2439,6 +2491,56 @@
         sexoHTML(SX) +
         '<p class="cap">Partos de los 12 meses que terminan en ' + A.MESES[G.m - 1] + ' ' + G.y + ', sin abortos' + (ab ? ' (hubo ' + ab + ')' : '') + '. Los % son sobre la vaca masa promedio de esos meses (ordeñe + secas: ' + (vm != null ? nf(vm) : '–') + '). El mes del respaldo puede estar incompleto.</p></section>';
     }
+    // Salidas tempranas: de los partos de 12 meses (con 60 días de seguimiento cumplidos), cuántas vacas se vendieron o murieron
+    // antes de los 60 días de paridas. Termómetro del período de transición. Referencia: hasta 5% bien, más de 8% problema.
+    var SALT = { dias: 60, ok: 5, mal: 8 };
+    function salTempDatos(desde, hasta) {
+      var out = { n: 0, nP: 0, nM: 0, sal: [], s30: 0, mu: 0, ve: 0, salP: 0, salM: 0 };
+      infLista().forEach(function (x) {
+        var pa = x.h.pa || [];
+        pa.forEach(function (p, i) {
+          if (p[0] <= desde || p[0] > hasta || /^A/.test(p[2] || '') || !enSel(unidadEn(x, p[0]))) return;
+          var prim = p[1] === 1; out.n++; if (prim) out.nP++; else out.nM++;
+          var b = x.a.bFecha, sig = pa[i + 1];
+          if (!b || b < p[0] || (sig && sig[0] <= b)) return;
+          var d = A.diffDays(b, p[0]); if (d > SALT.dias) return;
+          out.sal.push({ a: x.a, p: p[0], d: d, prim: prim });
+          if (d <= 30) out.s30++;
+          if (x.a.bTipo === 'muerte') out.mu++; else out.ve++;
+          if (prim) out.salP++; else out.salM++;
+        });
+      });
+      out.pct = out.n ? out.sal.length / out.n * 100 : null;
+      return out;
+    }
+    function salTempHTML() {
+      if (DB.fuente !== 'syscaw' || !DB.hist) return '';
+      var ref = DB.fecha || today(), hasta = A.addDays(ref, -SALT.dias), desde = A.addDays(hasta, -365);
+      var R = salTempDatos(desde, hasta); if (R.n < 10) return '';
+      var dh = DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730), dA = A.addDays(desde, -365);
+      var RA = dh && dh <= dA ? salTempDatos(dA, desde) : null; if (RA && RA.n < 10) RA = null;
+      var p1 = function (v) { return v == null ? '–' : nf(v, 1) + '%'; };
+      var sem = R.pct <= SALT.ok ? 'ok' : R.pct <= SALT.mal ? 'at' : 'mal';
+      var pp = function (a, b) { return b ? nf(a / b * 100, 1) + '%' : '–'; };
+      var cz = {}; R.sal.forEach(function (s) { var c = s.a.bCausa || (s.a.bTipo === 'muerte' ? 'Muerte sin causa anotada' : 'Venta sin causa anotada'); cz[c] = (cz[c] || 0) + 1; });
+      var czL = Object.keys(cz).sort(function (a, b) { return cz[b] - cz[a]; });
+      var dif = RA && RA.pct != null ? R.pct - RA.pct : null;
+      CLAVE['Salidas tempranas'] = p1(R.pct) + ' de los partos salieron antes de los ' + SALT.dias + ' días (' + R.sal.length + ' de ' + R.n + ')' + (R.mu ? ' · ' + R.mu + ' muertas' : '');
+      var filas = R.sal.slice().sort(function (x, y) { return x.d - y.d; }).map(function (s) {
+        return '<tr data-rp="' + esc(s.a.key || s.a.rp) + '"><td><b>' + esc(s.a.rp) + '</b>' + (s.prim ? ' <small>1ª</small>' : '') + '</td><td>' + (function (f) { return f.slice(0, 6) + f.slice(8); })(A.fmt(s.p)) + '</td><td>' + s.d + '</td><td>' + (BAJA[s.a.bTipo] || 'Baja') + (s.a.bCausa ? '<br><small>' + esc(s.a.bCausa) + '</small>' : '') + '</td></tr>';
+      }).join('');
+      return '<section class="card"><h2>Salidas tempranas</h2>' +
+        '<div class="kpis kpis2"><div class="' + sem + '"><b>' + p1(R.pct) + '</b><span>Salieron antes de los ' + SALT.dias + ' días · ' + R.sal.length + ' de ' + nf(R.n) + ' partos</span></div>' +
+        '<div><b>' + nf(R.mu) + '</b><span>Muertas · ' + nf(R.ve) + ' vendidas</span></div></div>' +
+        (dif != null ? '<p class="cap" style="margin-top:8px">Año anterior: <b>' + p1(RA.pct) + '</b> (' + RA.sal.length + ' de ' + nf(RA.n) + ') · ' + (Math.abs(dif) < 0.5 ? 'igual' : (dif > 0 ? '▲ ' : '▼ ') + nf(Math.abs(dif), 1) + ' puntos') + '</p>' : '') +
+        '<table class="tbl"><thead><tr><th></th><th>Partos</th><th>Salieron</th><th>%</th></tr></thead><tbody>' +
+        '<tr><td>Primíparas</td><td>' + nf(R.nP) + '</td><td>' + nf(R.salP) + '</td><td>' + pp(R.salP, R.nP) + '</td></tr>' +
+        '<tr><td>Multíparas</td><td>' + nf(R.nM) + '</td><td>' + nf(R.salM) + '</td><td>' + pp(R.salM, R.nM) + '</td></tr>' +
+        '<tr class="sep"><td>En los primeros 30 días</td><td></td><td>' + nf(R.s30) + '</td><td>' + pp(R.s30, R.n) + '</td></tr></tbody></table>' +
+        (czL.length ? '<h3 class="vh3">Motivos</h3><table class="tbl"><tbody>' + czL.slice(0, 6).map(function (c) { return '<tr><td>' + esc(c) + '</td><td>' + cz[c] + '</td></tr>'; }).join('') + '</tbody></table>' : '') +
+        (filas ? '<details class="nota"><summary>Ver las ' + R.sal.length + ' vacas</summary><table class="tbl"><thead><tr><th>Caravana</th><th>Parto</th><th>Días</th><th>Salida</th></tr></thead><tbody>' + filas + '</tbody></table></details>' : '') +
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Partos de vacas y vaquillonas del ' + A.fmt(A.addDays(desde, 1)) + ' al ' + A.fmt(hasta) + ' (12 meses que terminan ' + SALT.dias + ' días antes del ' + SRCbase() + ' del ' + A.fmt(ref) + ', para que todas hayan cumplido los ' + SALT.dias + ' días), sin abortos. Cuenta las que se vendieron o murieron antes de cumplir ' + SALT.dias + ' días de paridas. Referencia: hasta ' + SALT.ok + '% está bien, entre ' + SALT.ok + ' y ' + SALT.mal + '% hay que mirarlo, más de ' + SALT.mal + '% es un problema del período de transición (preparto, parto y arranque de la lactancia). 1ª = primípara.</p></details></section>';
+    }
     function vovsHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
       var G = rangoVO(), M = G.M, fin = G.fin, minMes = G.minMes, maxMes = G.maxMes, y = G.y, m = G.m;
@@ -2553,6 +2655,94 @@
         '<svg class="lvsvg" viewBox="0 0 ' + W + ' 70" role="img" aria-label="Línea de vida: edad promedio en cada etapa">' + svg + '</svg>' + lista +
         '<p class="cap">Promedios con lo que pasó desde el ' + A.fmt(r.desde) + ' (salida: últimos 12 meses), según ' + SRC() + '. Recría: las vaquillonas que parieron en los últimos 2 años, con su edad al primer servicio, a la preñez (el servicio que coincide con el parto) y al parto. Lactancias, mismas reglas que el índice: parto al primer celo o servicio; días abiertos hasta el servicio que coincide con el parto siguiente o el último antes del tacto positivo, y las vacas que siguen vacías con 150 días o más cuentan con los días que llevan (tope 300); servicios por preñez con tope 6. % preñadas: de las vacas con 150 días o más de paridas. Seca: del cierre de la lactancia al parto siguiente. Gestación: del servicio de la preñez hasta el parto.' + (ant ? ' En gris, la foto fija del 1/7/' + ant.f.slice(0, 4) + ' (los mismos 24 meses hasta esa fecha), para ver la evolución.' : ' Cada 1 de julio se guarda una foto fija de estos números para comparar con los años siguientes.') + '</p></section>';
     }
+    // Vacas por año: promedio de vacas en ordeñe, secas y vaca masa de cada año, con el resumen de cada control lechero
+    // (SysCaw lo guarda desde que el tambo usa el programa, más allá de los 2-3 años de historial de animales)
+    function vacasAnio() {
+      var H = DB.vovsH, mes = {}, fuente = 'ctrl';
+      if (H && H.u) {
+        fuente = 'anim';
+        var y0 = +H.desde.slice(0, 4);
+        Object.keys(H.u).forEach(function (u) {
+          if (DB.sel && DB.sel.length && DB.sel.indexOf(+u) < 0 && DB.sel.indexOf(u) < 0) return;
+          H.u[u].forEach(function (x, i) { var k = (y0 + Math.floor(i / 12)) + '-' + pad2(i % 12 + 1), m = mes[k] || (mes[k] = { v: 0, n: 1, s: 0, ns: 1 }); m.v += x[0]; m.s += x[1]; });
+        });
+        Object.keys(mes).forEach(function (k) { if (!mes[k].v && !mes[k].s) delete mes[k]; });
+        return vacasAnioDe(mes, fuente);
+      }
+      var C = (DB.ctrls || []).filter(function (c) { return !DB.sel || !DB.sel.length || DB.sel.indexOf(c[1]) >= 0; });
+      if (C.length < 6) return null;
+      // rondas de control: una fecha por control (si hay varias unidades, se suman)
+      var L = C.slice().sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; }), R = [], cur = null;
+      L.forEach(function (c) {
+        if (!(c[2] > 0)) return;
+        var u = c[1] == null ? 0 : c[1];
+        if (!cur || A.diffDays(c[0], cur.ini) > 7 || cur.us[u]) { cur = { ini: c[0], f: c[0], us: {}, v: 0, s: 0, sok: true }; R.push(cur); }
+        cur.us[u] = 1; cur.f = c[0]; cur.v += c[2]; if (c[5] == null) cur.sok = false; else cur.s += c[5];
+      });
+      R.forEach(function (r) { var k = r.f.slice(0, 7), m = mes[k] || (mes[k] = { v: 0, n: 0, s: 0, ns: 0 }); m.v += r.v; m.n++; if (r.sok) { m.s += r.s; m.ns++; } });
+      var k0 = Object.keys(mes).sort();
+      // el primer mes con registros suele estar incompleto
+      if (k0.length > 1 && mes[k0[0]].v / mes[k0[0]].n < 0.7 * mes[k0[1]].v / mes[k0[1]].n) delete mes[k0[0]];
+      return vacasAnioDe(mes, fuente);
+    }
+    function vacasAnioDe(mes, fuente) {
+      var ks = Object.keys(mes).sort();
+      if (!ks.length) return null;
+      var ult = ks[ks.length - 1], yU = +ult.slice(0, 4), mU = +ult.slice(5, 7);
+      var anio = function (y, hasta) {
+        var vs = [], ss = [], ms = 0;
+        for (var m = 1; m <= (hasta || 12); m++) { var x = mes[y + '-' + pad2(m)]; if (!x) continue; ms++; vs.push(x.v / x.n); if (x.ns) ss.push(x.s / x.ns); }
+        if (!ms) return null;
+        var o = vs.reduce(function (a, b) { return a + b; }, 0) / vs.length, s = ss.length >= ms * 0.75 ? ss.reduce(function (a, b) { return a + b; }, 0) / ss.length : null;
+        return { o: o, s: s, m: s != null ? o + s : null, meses: ms };
+      };
+      var y0 = +ks[0].slice(0, 4), out = [];
+      for (var y = y0; y <= yU; y++) {
+        var a = anio(y), parcial = y === yU && mU < 12;
+        if (!a) continue;
+        // año en curso: se compara con los mismos meses del año anterior
+        var ant = parcial ? anio(y - 1, mU) : anio(y - 1);
+        var inc = !parcial && a.meses < 10;
+        out.push({ y: y, o: a.o, s: a.s, m: a.m, meses: a.meses, parcial: parcial, incompleto: inc, cO: ant && ant.o ? (a.o / ant.o - 1) * 100 : null, cM: ant && ant.m && a.m != null ? (a.m / ant.m - 1) * 100 : null, mU: mU });
+      }
+      if (out.length) out.fuente = fuente;
+      return out.length ? out : null;
+    }
+    function vacasAnioHTML() {
+      var V0 = vacasAnio(); if (!V0) return '';
+      // últimos 10 años (gráfico, tabla y crecimiento promedio)
+      var V = V0.slice(-10); V.fuente = V0.fuente;
+      var S = V, hayS = S.some(function (x) { return x.s != null; });
+      var max = Math.max.apply(null, S.map(function (x) { return x.m != null ? x.m : x.o; })) || 1;
+      var W = 340, H = 190, padx = 6, gap = 8, N = S.length, bw = Math.min(40, (W - padx * 2 - gap * (N - 1)) / N), off = (W - padx * 2 - (bw * N + gap * (N - 1))) / 2, k = (H - 64) / max, sv = '';
+      var cr = function (v) { return v == null ? '' : Math.abs(v) < 0.05 ? '0%' : (v >= 0 ? '+' : '−') + nf(Math.abs(v), 1) + '%'; };
+      var crB = function (v) { var r = Math.round(v); return r === 0 ? '0%' : (r > 0 ? '+' : '−') + Math.abs(r) + '%'; }; // en las barras, sin decimales
+      S.forEach(function (x, i) {
+        var X = padx + off + i * (bw + gap), base = H - 40, ho = x.o * k, hs = (x.s || 0) * k, tot = x.m != null ? x.m : x.o;
+        sv += '<rect class="pord' + (x.parcial || x.incompleto ? ' parc' : '') + '" x="' + X.toFixed(1) + '" y="' + (base - ho).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + ho.toFixed(1) + '"><title>' + x.y + ': ' + nf(x.o) + ' en ordeñe</title></rect>';
+        if (hs) sv += '<rect class="psec' + (x.parcial || x.incompleto ? ' parc' : '') + '" x="' + X.toFixed(1) + '" y="' + (base - ho - hs).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hs.toFixed(1) + '"><title>' + x.y + ': ' + nf(x.s) + ' secas</title></rect>';
+        sv += '<text class="mval" x="' + (X + bw / 2).toFixed(1) + '" y="' + (base - ho - hs - 4).toFixed(1) + '" text-anchor="middle">' + nf(tot) + '</text>';
+        sv += '<text class="mlbl" x="' + (X + bw / 2).toFixed(1) + '" y="' + (H - 24) + '" text-anchor="middle">' + (x.parcial ? String(x.y).slice(2) + '*' : String(x.y).slice(2)) + '</text>';
+        var c = hayS ? x.cM : x.cO;
+        if (c != null) sv += '<text class="vpac ' + (Math.round(c) === 0 ? 'eq' : c > 0 ? 'up' : 'dn') + '" x="' + (X + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + crB(c) + '</text>';
+      });
+      var ult = V.filter(function (x) { return !x.parcial; }).pop() || V[V.length - 1], pri = V[0];
+      var tot = function (x) { return hayS && x.m != null ? x.m : x.o; };
+      var anos = ult.y - pri.y, cagr = anos > 0 && tot(pri) ? (Math.pow(tot(ult) / tot(pri), 1 / anos) - 1) * 100 : null;
+      CLAVE['Vacas por año'] = ult.y + ': ' + nf(ult.o) + ' vacas en ordeñe' + (ult.m != null ? ' · ' + nf(ult.m) + ' de vaca masa' : '') + (cagr != null ? ' · desde ' + pri.y + ' ' + cr(cagr) + ' por año' : '');
+      var filas = V.slice().reverse().map(function (x) {
+        var c = function (v) { return v == null ? '–' : '<span class="' + (Math.abs(v) < 0.05 ? 'eq' : v > 0 ? 'up' : 'dn') + '">' + cr(v) + '</span>'; };
+        return '<tr' + (x.parcial ? ' class="parc"' : '') + '><td>' + x.y + (x.parcial ? '*' : x.incompleto ? '**' : '') + '</td><td>' + nf(x.o) + '</td>' + (hayS ? '<td>' + (x.s != null ? nf(x.s) : '–') + '</td><td><b>' + (x.m != null ? nf(x.m) : '–') + '</b></td>' : '') + '<td>' + c(x.cO) + '</td>' + (hayS ? '<td>' + c(x.cM) + '</td>' : '') + '</tr>';
+      }).join('');
+      var hay = V.some(function (x) { return x.parcial; }), inc = V.some(function (x) { return x.incompleto; });
+      return '<section class="card"><h2>Vacas por año</h2>' +
+        '<div class="kpis' + (hayS ? '' : ' kpis2') + '"><div><b>' + nf(ult.o) + '</b><span>En ordeñe ' + ult.y + '</span></div>' + (hayS && ult.m != null ? '<div><b>' + nf(ult.m) + '</b><span>Vaca masa ' + ult.y + '</span></div>' : '') +
+        '<div class="vpak ' + (cagr == null || Math.abs(cagr) < 0.5 ? 'eq' : cagr > 0 ? 'up' : 'dn') + '"><b>' + (cagr != null ? cr(cagr) : '–') + '</b><span>Por año, ' + pri.y + '–' + String(ult.y).slice(2) + '</span></div></div>' +
+        (hayS ? '<div class="mleg"><span><i class="pord"></i>En ordeñe</span><span><i class="psec"></i>Secas</span></div>' : '') +
+        '<svg class="mchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Promedio de vacas por año">' + sv + '</svg>' +
+        '<table class="tbl vpatbl"><thead><tr><th>Año</th><th>Ordeñe</th>' + (hayS ? '<th>Secas</th><th>Masa</th>' : '') + '<th>Crec. ordeñe</th>' + (hayS ? '<th>Crec. masa</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas ' + (/^base/.test(SRCbase()) ? 'de la ' : 'del ') + SRCbase() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + ' Volvé a cargar la base o el respaldo del tambo para calcularlo con los animales, sin depender del control lechero.') + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. ' + (V0.length > V.length ? 'Se muestran los últimos ' + V.length + ' años; la historia empieza en ' + V0[0].y + '.' : 'Historia desde ' + pri.y + '.') + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año": cuánto creció (o bajó, en rojo) por año en promedio entre el primer año y el último completo.</p></details></section>';
+    }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
       var rv = A.resumen(V, h), rq = A.resumen(Q, h);
@@ -2570,10 +2760,10 @@
       // agrupadas por tema; un grupo sin tarjetas no muestra su título
       var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        grp('Lo que pasó', partosOcHTML() + vovsHTML()) +
+        grp('Lo que pasó', partosOcHTML() + salTempHTML() + vovsHTML()) +
         grp('Lo que viene', probables + proyHTML()) +
-        grp('Reproducción', repHTML() + (prenOK() ? prenHTML() : '')) +
-        grp('El rodeo', idxCardHTML() + (prenOK() ? ccRodeoHTML() : '') + vidaHTML());
+        grp('Reproducción', repHTML() + celosPerdidosHTML() + (prenOK() ? prenHTML() : '')) +
+        grp('El rodeo', vacasAnioHTML() + idxCardHTML() + (prenOK() ? ccRodeoHTML() : '') + vidaHTML());
     }
     function rodeoHTML() {
       if (state.cat === 'pren') state.cat = 'todas';
@@ -2976,11 +3166,17 @@
       Array.prototype.forEach.call(c.querySelectorAll('.plgh'), function (x) { x.remove(); });
       return c;
     }
+    // html2canvas no entiende color-mix(): en la copia para la imagen se quitan esas propiedades (incluidas las de @supports)
+    function sinColorMix(doc) {
+      var limpiar = function (rs) { for (var q = rs.length - 1; q >= 0; q--) { var r = rs[q]; if (r.cssRules && !r.style) { limpiar(r.cssRules); continue; } if (!r.style) continue; for (var k = r.style.length - 1; k >= 0; k--) { var pr = r.style[k]; if (/color-mix/.test(r.style.getPropertyValue(pr))) r.style.removeProperty(pr); } } };
+      Array.prototype.forEach.call(doc.styleSheets, function (sh) { try { limpiar(sh.cssRules); } catch (e) {} });
+      Array.prototype.forEach.call(doc.querySelectorAll('[style*="color-mix"]'), function (el) { el.style.cssText = el.style.cssText.replace(/[a-z-]+\s*:\s*color-mix\([^;]*\)\s*;?/g, ''); });
+    }
     function shImagen(w) {
       document.body.appendChild(w);
       return cargarH2C().then(function (h2c) {
         return h2c(w, { scale: 2.7, backgroundColor: '#EEF2F7', logging: false,
-          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); } });
+          onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); sinColorMix(doc); } });
       }).then(function (cv) { w.remove(); return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); }, function (e) { w.remove(); throw e; });
     }
     // que: 'g' gráfico, 't' tabla, 'gt' las dos, 'todo' la tarjeta entera
@@ -3028,6 +3224,46 @@
       var tit = sec.querySelector('h2').textContent.split(' · ')[0].trim();
       shMandar(shArmar(sec, que), tit);
     }
+    // ficha de una vaca como imagen: encabezado (caravana, estado, sellos) + datos; con historial suma control lechero e historial reproductivo
+    function compartirFicha() {
+      $('#sheetXTitle').textContent = 'Compartir · Ficha';
+      $('#xopts').innerHTML = '<label class="shopt"><input type="checkbox" id="shNom"' + (shNombre() ? ' checked' : '') + '> Con el nombre del tambo</label>' +
+        '<p class="cap" style="margin:0 0 6px">Sin nombre sale como "Tambo" (para mandar a colegas).</p>';
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="fichaimg1">Solo la ficha</button><button class="btn big" data-a="fichaimg2">Ficha con historial</button><button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function fichaImagen(conHist) {
+      var ck = $('#shNom'); if (ck) try { localStorage.setItem('libreta:shnom', ck.checked ? '1' : '0'); } catch (e) {}
+      $('#sheetX').hidden = true;
+      var main = $('#main'), fh = main && main.querySelector('header.fh'), dat = main && main.querySelector('section.card.datos'); if (!fh) return;
+      var d = document.createElement('div'), h = fh.cloneNode(true);
+      Array.prototype.forEach.call(h.querySelectorAll('.shic'), function (x) { x.remove(); });
+      h.classList.remove('fhsh'); h.style.margin = '0 0 12px';
+      // en la imagen el índice va debajo de los sellos, para que el nombre y el estado no queden apretados
+      var med = h.querySelector('.medalla'), inf = h.querySelector('.fhinfo');
+      if (med && inf) { med.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:8px;margin-top:10px'; inf.appendChild(med); }
+      d.appendChild(h);
+      if (dat) { var c = dat.cloneNode(true); c.style.cssText = 'margin:0;box-shadow:none'; d.appendChild(c); }
+      if (conHist) Array.prototype.forEach.call(main.querySelectorAll('.glist section.card'), function (sec) {
+        var t = (sec.querySelector('h2') || {}).textContent || ''; if (!/^(Control lechero|Historial reproductivo)/.test(t)) return;
+        var c = sec.cloneNode(true); c.classList.add('open');
+        Array.prototype.forEach.call(c.querySelectorAll('.shic,.chev,.pdesc,details.nota,.despbtn,button.lnk,details:not([open])'), function (x) { x.remove(); });
+        if (/^Control lechero/.test(t)) {
+          // solo el gráfico: sin tablas ni la leyenda de células somáticas
+          Array.prototype.forEach.call(c.querySelectorAll('table,.scroll,details,p.cap'), function (x) { x.remove(); });
+          Array.prototype.forEach.call(c.querySelectorAll('.clegend span'), function (x) { if (/CS/.test(x.textContent)) x.remove(); });
+          Array.prototype.forEach.call(c.querySelectorAll('svg.bars .cs, svg.bars .csd, svg.bars line[stroke-dasharray], svg.bars .cs200'), function (x) { x.remove(); });
+          Array.prototype.forEach.call(c.querySelectorAll('svg.bars text.lbl'), function (x) { if (x.textContent.trim() === '200') x.remove(); });
+        } else {
+          // historial reproductivo: solo la última lactancia
+          var lacs = c.querySelectorAll('details.lac'); Array.prototype.forEach.call(lacs, function (x, k) { if (k > 0) x.remove(); else x.setAttribute('open', ''); });
+        }
+        c.style.cssText = 'margin:12px 0 0;border:1px solid #D3DBE7;border-radius:14px;padding:12px 14px;background:#fff'; d.appendChild(c);
+      });
+      var rp = state.rp || '', w = shHoja('Vaca ' + rp, '', '', d, 0);
+      var tt = w.querySelector('.shcard > div'); if (tt) tt.remove(); // el encabezado de la ficha ya muestra la caravana
+      shMandar([w], 'Ficha ' + rp);
+    }
     // resumen de visita: los cuatro cuadros del Panel con su semáforo y los avisos
     function compartirPanel() {
       var main = $('#main') || document.querySelector('main'), pan = main && main.querySelector('.panel'); if (!pan) return;
@@ -3038,7 +3274,7 @@
     }
     // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
     var DESC = {
-      'Partos': 'Vacas y vaquillonas, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
+      'Partos': 'Vacas y vaquillonas, mes a mes', 'Salidas tempranas': 'Vendidas o muertas antes de los 60 días de paridas', 'Celos perdidos': 'Vacas que repitieron a los dos ciclos', 'Vacas por año': 'Ordeñe y vaca masa promedio, año a año', 'Calendario sanitario': 'El plan del año, mes a mes', 'sancal': 'El plan del año, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
@@ -3368,6 +3604,285 @@
       if (DB && DB.idProd && DB.idProd.some(esBloq)) return true;
       return ACT.length > 0 && !ACT.some(actOK);
     }
+    /* ===== Plan sanitario por tambo =====
+       Lo arma el veterinario (modo veterinario) y se guarda en sanidad.json (raíz del sitio, con el permiso de GitHub de los links).
+       Cada tambo lo toma al abrir la app con internet y queda guardado para usarlo sin conexión. La app no registra lo aplicado:
+       según la etapa de cada animal (días al parto, días de parida, edad) o una fecha fija, lista quiénes están en fecha. */
+    var SANT = { mes: 'Por mes', tac: 'En el tacto (preñez confirmada)', pre: 'Antes del parto (secado, preparto)', pos: 'Después del parto', edad: 'Por edad (desleche, recría)', fecha: 'Fecha fija' };
+    var MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+    var SANG = { vaca: 'Vacas', vaquillona: 'Vaquillonas', ternera: 'Terneras' };
+    var SANJ = null; try { SANJ = JSON.parse(localStorage.getItem('libreta:sanj') || 'null'); } catch (e) { SANJ = null; }
+    function sanKey() { return DB.idProd && DB.idProd.length ? DB.idProd.join('+') + (DB.sel && DB.sel.length ? '/' + DB.sel.slice().sort().join(',') : '') : null; }
+    function sanPlan() {
+      var k = sanKey(), P = SANJ && SANJ.planes; if (!k || !P) return null;
+      var p = P[k] || P[DB.idProd.join('+')] || null;
+      return p && p.items && p.items.length ? p : null;
+    }
+    function sanFetch() {
+      if (!root.fetch) return;
+      fetch(baseApp().replace(/prueba\/$/, '') + 'sanidad.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (o) {
+        if (!o || !o.planes) return;
+        var antes = JSON.stringify(SANJ); SANJ = o;
+        try { localStorage.setItem('libreta:sanj', JSON.stringify(o)); } catch (e) {}
+        if (antes !== JSON.stringify(o)) { state.sanc = null; render(); }
+      }).catch(function () {});
+    }
+    // plantilla base: punto de partida para editar en cada tambo (revisar productos, dosis y días)
+    function sanBase() {
+      return [
+        { n: 'Sanidad', t: 'mes', m: [2], g: ['vaca'] },
+        { n: 'Aftosa', t: 'mes', m: [3], g: ['vaca'] },
+        { n: 'Leptospirosis', t: 'mes', m: [4, 8], g: ['vaca'] },
+        { n: 'Querato', t: 'mes', m: [9], g: ['vaca'] },
+        { n: 'Confirmación de preñez: Leptospirosis', t: 'tac', g: ['vaca', 'vaquillona'] },
+        { n: 'Secas: Clostridial + Saguaypicida', t: 'pre', d1: 65, d2: 55, g: ['vaca'], x: 'Al secar' },
+        { n: 'Preparto: Diar 7 + Saguaypicida', t: 'pre', d1: 30, d2: 21, g: ['vaca', 'vaquillona'], x: 'Al entrar al preparto' },
+        { n: 'Vaquillonas: Sanidad + Aftosa', t: 'mes', m: [2], g: ['vaquillona'] },
+        { n: 'Vaquillonas: Antiparasitario + Saguaypicida', t: 'mes', m: [3, 9], g: ['vaquillona'] },
+        { n: 'Vaquillonas: Clostridial + Leptospirosis', t: 'mes', m: [4, 8], g: ['vaquillona'] },
+        { n: 'Vaquillonas: Aftosa', t: 'mes', m: [5], g: ['vaquillona'], x: 'Según campaña' },
+        { n: 'Vaquillonas: Querato', t: 'mes', m: [10], g: ['vaquillona'] },
+        { n: 'Vaquillonas: Leptospirosis', t: 'mes', m: [12], g: ['vaquillona'] },
+        { n: 'Recría: Aftosa', t: 'mes', m: [2, 5], g: ['ternera'], x: 'Según campaña' },
+        { n: 'Recría: Clostridial + Leptospirosis', t: 'mes', m: [3, 8], g: ['ternera'] },
+        { n: 'Recría: Antiparasitario + Saguaypicida', t: 'mes', m: [4, 9], g: ['ternera'] },
+        { n: 'Recría: Querato', t: 'mes', m: [10], g: ['ternera'] },
+        { n: 'Recría: Leptospirosis', t: 'mes', m: [12], g: ['ternera'] },
+        { n: 'Desleche: Leptospira + Clostridial + Antiparasitario', t: 'edad', d1: 2, d2: 3, g: ['ternera'], x: 'Al deslechar' }
+      ];
+    }
+    var addM = function (f, m) { return A.addDays(f, Math.round(m * 30.44)); };
+    function sanDdmm(s) { var m = /^(\d{1,2})\/(\d{1,2})$/.exec(String(s || '').trim()); if (!m) return null; var d = +m[1], mm = +m[2]; return d >= 1 && d <= 31 && mm >= 1 && mm <= 12 ? [d, mm] : null; }
+    function sanProxFecha(dm, hoy) { var y = +hoy.slice(0, 4), f = function (yy) { return yy + '-' + pad2(dm[1]) + '-' + pad2(dm[0]); }, a = f(y); return A.diffDays(a, hoy) < -7 ? f(y + 1) : a; }
+    function sanGrupo(a) { var c = a.cat || 'vaca'; return c === 'seca' ? 'vaca' : c; }
+    // para cada ítem: animales con la ventana abierta hoy o en los próximos 7 días; "entran" = la ventana se abre entre hace 7 días y dentro de 7
+    function sanCalc(P) {
+      var hoy = today(), h7 = A.addDays(hoy, 7), hm7 = A.addDays(hoy, -7);
+      if (state.sanc && state.sanc.db === DB && state.sanc.p === P && state.sanc.hoy === hoy) return state.sanc.r;
+      var r = P.items.map(function (it) {
+        var g = it.g && it.g.length ? it.g : ['vaca'], o = { it: it, L: [], nEnt: 0, nG: 0 };
+        var en = DB.animales.filter(function (a) { return g.indexOf(sanGrupo(a)) >= 0; }); o.nG = en.length;
+        if (it.t === 'tac') { o.enTacto = true; o.semana = false; o.nServ = en.filter(function (a) { return a.estado === 'servida'; }).length; return o; }
+        if (it.t === 'mes') {
+          var M = (it.m || []).map(Number).filter(function (x) { return x >= 1 && x <= 12; }).sort(function (a, b) { return a - b; });
+          var mh = +hoy.slice(5, 7), yh = +hoy.slice(0, 4);
+          o.act = M.indexOf(mh) >= 0;
+          if (o.act) o.prox = hoy.slice(0, 8) + '01';
+          else { var sig = M.filter(function (x) { return x > mh; })[0], yy = yh; if (sig == null && M.length) { sig = M[0]; yy++; } o.prox = sig ? yy + '-' + pad2(sig) + '-01' : null; }
+          o.dias = o.prox ? A.diffDays(o.prox, hoy) : null;
+          o.semana = o.act ? +hoy.slice(8, 10) <= 7 : (o.dias != null && o.dias <= 7);
+          return o;
+        }
+        if (it.t === 'fecha') {
+          var fs = (it.f || []).map(sanDdmm).filter(Boolean).map(function (dm) { return sanProxFecha(dm, hoy); }).sort();
+          o.prox = fs[0] || null; o.dias = o.prox ? A.diffDays(o.prox, hoy) : null; o.semana = o.dias != null && o.dias <= 7;
+          return o;
+        }
+        var lo = Math.min(+it.d1 || 0, +it.d2 || 0), hi = Math.max(+it.d1 || 0, +it.d2 || 0);
+        en.forEach(function (a) {
+          var fi = null, ff = null;
+          if (it.t === 'pre') { if (a.estado !== 'prenada') return; var d = A.derive(a, hoy); if (!d.partoProb || d.partoEstimado) return; fi = A.addDays(d.partoProb, -hi); ff = A.addDays(d.partoProb, -lo); }
+          else if (it.t === 'pos') { if (!a.pFecha || (a.cat && a.cat !== 'vaca')) return; fi = A.addDays(a.pFecha, lo); ff = A.addDays(a.pFecha, hi); }
+          else if (it.t === 'edad') { var fn = DB.hist && DB.hist[a.rp] && DB.hist[a.rp].fn; if (!fn) return; fi = addM(fn, lo); ff = addM(fn, hi); }
+          if (!fi || ff < hoy || fi > h7) return;
+          var ent = fi >= hm7; if (ent) o.nEnt++;
+          o.L.push({ a: a, fi: fi, ff: ff, ent: ent });
+        });
+        o.L.sort(function (x, y) { return x.fi < y.fi ? -1 : x.fi > y.fi ? 1 : numRp(x.a, y.a); });
+        o.semana = o.nEnt > 0;
+        return o;
+      });
+      state.sanc = { db: DB, p: P, hoy: hoy, r: r };
+      return r;
+    }
+    // fecha del primer tacto positivo de la preñez actual (después del último parto)
+    function sanTactoPos(a) {
+      if (a.estado !== 'prenada') return null;
+      var h = DB.hist && DB.hist[a.rp], desde = a.pFecha || '0000';
+      if (!h || !h.ta) return a.tFecha || null;
+      var t = h.ta.filter(function (x) { return x[0] > desde && esPren(x[1]); });
+      return t.length ? t[0][0] : (a.tFecha || null);
+    }
+    function sanVentTxt(it) {
+      var lo = Math.min(+it.d1 || 0, +it.d2 || 0), hi = Math.max(+it.d1 || 0, +it.d2 || 0);
+      if (it.t === 'pre') return 'De ' + hi + ' a ' + lo + ' días antes del parto';
+      if (it.t === 'tac') return 'En el tacto, a las que den preñadas';
+      if (it.t === 'pos') return 'De ' + lo + ' a ' + hi + ' días de paridas';
+      if (it.t === 'edad') return 'De ' + lo + ' a ' + hi + ' meses de edad';
+      if (it.t === 'mes') return (it.m || []).slice().sort(function (a, b) { return a - b; }).map(function (x) { return MESL[x - 1]; }).join(', ').replace(/, ([^,]*)$/, ' y $1').replace(/^./, function (c) { return c.toUpperCase(); });
+      return (it.f || []).filter(sanDdmm).join(' y ');
+    }
+    function sanQuien(it) { return (it.g && it.g.length ? it.g : ['vaca']).map(function (k) { return SANG[k].toLowerCase(); }).join(', ').replace(/, ([^,]*)$/, ' y $1').replace(/^./, function (c) { return c.toUpperCase(); }); }
+    // resumen para el Panel: ítems con algo para esta semana
+    function sanSemana() {
+      if (esOperario()) return null;
+      var P = sanPlan(); if (!P) return null;
+      var R = sanCalc(P).filter(function (o) { return o.semana; });
+      return R.length ? R : null;
+    }
+    // calendario del plan: meses en filas; Tambo, Vaquillonas y Recría en columnas (ítems por mes o fecha fija);
+    // los eventos (secado, preparto, desleche, tacto…) como franjas verticales todo el año, como la planilla del Dr. Torterolo
+    function sanColor(n) {
+      var t = String(n || '').toLowerCase().replace(/^[^:]*:\s*/, '');
+      return /antiparasit|saguay/.test(t) ? 'cb' : /clostrid/.test(t) ? 'cg' : /querato/.test(t) ? 'co' : /lepto/.test(t) ? 'cy' : /aftosa|sanidad/.test(t) ? 'cl' : 'cx';
+    }
+    function sanEtq(n) { return String(n || '').replace(/^(vaquillonas|recr[ií]a|tambo|vacas)\s*:\s*/i, ''); }
+    // cortes fijos de las palabras largas (la imagen para compartir no hace guiones solos)
+    function sanCorte(t) {
+      var C = { leptospirosis: 'Lepto-|spirosis', antiparasitario: 'Antipara-|sitario', saguaypicida: 'Saguay-|picida', clostridiales: 'Clostri-|diales', reproductivas: 'Reproduc-|tivas', respiratorias: 'Respira-|torias' };
+      return t.replace(/[A-Za-zÁÉÍÓÚáéíóúñÑ]{12,}/g, function (w) { var c = C[w.toLowerCase()]; if (!c) return w; var p = c.split('|'); return (w.charAt(0) === w.charAt(0).toUpperCase() ? p[0] : p[0].toLowerCase()) + '<br>' + p[1]; });
+    }
+    function sanCalHTML(P) {
+      var MC = { vaca: 'TAMBO', vaquillona: 'VAQUILLONAS', ternera: 'RECRÍA' }, celdas = {}, bandas = {}, ordenB = [], usadas = {};
+      P.items.forEach(function (it, ix) {
+        var g = it.g && it.g.length ? it.g : ['vaca'], meses = [];
+        if (it.t === 'mes') meses = (it.m || []).map(function (m) { return [m, '']; });
+        else if (it.t === 'fecha') meses = (it.f || []).map(sanDdmm).filter(Boolean).map(function (dm) { return [dm[1], dm[0] + '/' + pad2(dm[1]) + ' ']; });
+        else {
+          var m = /^([^:]+):\s*(.+)$/.exec(it.n || ''), tit = m ? m[1] : (it.t === 'tac' ? 'Tacto' : it.t === 'pre' ? 'Preparto' : it.t === 'pos' ? 'Posparto' : 'Por edad');
+          if (it.t === 'tac' && /confirmaci/i.test(tit)) tit = 'Tacto';
+          tit = tit.toUpperCase();
+          if (!bandas[tit]) { bandas[tit] = { t: tit, i: ix, v: [], fin: g.length === 1 && g[0] === 'ternera' }; ordenB.push(tit); }
+          bandas[tit].v.push((m ? m[2] : it.n).replace(/\s*\+\s*/g, ' – ').toUpperCase());
+          return;
+        }
+        meses.forEach(function (x) { g.forEach(function (k) { var c = k === 'seca' ? 'vaca' : k, key = c + x[0]; usadas[c] = 1; (celdas[key] = celdas[key] || []).push('<span class="' + sanColor(it.n) + '" data-a="sanver" data-i="' + ix + '" role="button">' + sanCorte(esc(x[1] + sanEtq(it.n))).split(/\s*\+\s*/).join('/<br>') + '</span>'); }); });
+      });
+      // orden de la planilla: TAMBO, eventos de las vacas, VAQUILLONAS, RECRÍA, eventos de la recría
+      var B = ordenB.map(function (k) { return bandas[k]; }), cols = [];
+      if (usadas.vaca) cols.push({ k: 'vaca' });
+      B.filter(function (b) { return !b.fin; }).forEach(function (b) { cols.push({ b: b }); });
+      if (usadas.vaquillona) cols.push({ k: 'vaquillona' });
+      if (usadas.ternera) cols.push({ k: 'ternera' });
+      B.filter(function (b) { return b.fin; }).forEach(function (b) { cols.push({ b: b }); });
+      if (!cols.length) return '';
+      // texto vertical en SVG (de abajo hacia arriba, como la planilla): sale igual en la pantalla y en la imagen para compartir
+      var vert = function (t, fs) { return '<svg class="bsvg" xmlns="http://www.w3.org/2000/svg"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-family="Inter, system-ui, sans-serif" font-size="' + fs + '" font-weight="800" letter-spacing=".4" style="transform-box:fill-box;transform-origin:center;transform:rotate(-90deg)">' + esc(t) + '</text></svg>'; };
+      var mh = +today().slice(5, 7), vet = esVet();
+      var head = '<tr><th class="mcol"></th>' + cols.map(function (c) { return c.b ? '<th class="bcol">' + vert(c.b.t, 10) + '</th>' : '<th>' + MC[c.k] + '</th>'; }).join('') + '</tr>';
+      var filas = '';
+      for (var i = 1; i <= 12; i++) {
+        filas += '<tr' + (i === mh ? ' class="hoy"' : '') + '><th>' + A.MESES[i - 1].replace(/^./, function (c) { return c.toUpperCase(); }) + '</th>' + cols.map(function (c) {
+          if (c.b) return i === 1 ? '<td class="band" rowspan="12" data-a="sanver" data-i="' + c.b.i + '" role="button">' + vert(c.b.v.join(' · '), 11) + '</td>' : '';
+          var v = celdas[c.k + i]; return '<td' + (vet ? ' class="sadd" data-a="sannuevo" data-m="' + i + '" data-g="' + c.k + '"' : '') + '>' + (v ? v.join('') : '') + '</td>';
+        }).join('') + '</tr>';
+      }
+      var cont = '<div class="calwrap"><h2 class="sr">Calendario sanitario</h2><div class="scal"><table><thead>' + head + '</thead><tbody>' + filas + '</tbody></table></div>' +
+        '<p class="cap">El mes actual va marcado. Las franjas se dan en cada evento. ' + (vet ? 'Tocá un evento para editarlo o borrarlo, o una casilla vacía para agregar uno.' : 'Tocá una vacuna para ver los animales.') + '</p></div>';
+      if (vet) cont = '<button class="shic" data-a="sancalimg" aria-label="Compartir como imagen" title="Compartir"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' + cont;
+      return secTareas('sancal', 'Calendario sanitario', cont, [], null, '', '').replace('<section class="sec', '<section class="sec sancalsec');
+    }
+    // lo que el calendario tiene en el mes actual (por mes o fecha fija), por columna
+    function sanMes() {
+      if (esOperario()) return null;
+      var P = sanPlan(); if (!P) return null;
+      var hoy = today(), mh = +hoy.slice(5, 7), C = { vaca: 'Tambo', vaquillona: 'Vaquillonas', ternera: 'Recría' }, por = {};
+      P.items.forEach(function (it) {
+        var ok = it.t === 'mes' ? (it.m || []).indexOf(mh) >= 0 : it.t === 'fecha' ? (it.f || []).map(sanDdmm).filter(Boolean).some(function (dm) { return dm[1] === mh; }) : false;
+        if (!ok) return;
+        (it.g && it.g.length ? it.g : ['vaca']).forEach(function (g) { var c = C[g === 'seca' ? 'vaca' : g]; (por[c] = por[c] || []).push(sanEtq(it.n)); });
+      });
+      var L = ['Tambo', 'Vaquillonas', 'Recría'].filter(function (c) { return por[c]; }).map(function (c) { return c + ': ' + por[c].join(', '); });
+      return L.length ? { mes: MESL[mh - 1], txt: L.join(' · ') } : null;
+    }
+    function sanTareasHTML() {
+      var P = sanPlan(), vet = esVet();
+      if (!P) return vet ? '<p class="grp">Sanidad</p><div class="glist"><button class="lrow" data-a="saned"><span class="lico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span><span class="pttl"><h2>Armar plan sanitario</h2><small class="pdesc">Vacunas por etapa o por fecha, para este tambo</small></span><svg class="chev rt" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>' : '';
+      var hoy = today();
+      var orden = function (o) { return o.L && o.L.length ? -1000 + (o.nEnt ? -100 : 0) : o.dias != null ? Math.max(o.dias, 0) : 9999; };
+      // toda la lista en un solo desplegable; adentro, cada evento con su detalle y sus animales (sin plegar uno por uno)
+      var R = sanCalc(P), blk = R.map(function (o, i) { return { o: o, i: i }; }).sort(function (x, y) { return orden(x.o) - orden(y.o) || x.i - y.i; }).map(function (z) {
+        var o = z.o, i = z.i, it = o.it, key = 'san' + i, badge = '', extra = '', rows = '';
+        var nota = '<p class="secnote"><b>' + esc(sanQuien(it)) + '</b> · ' + esc(sanVentTxt(it)) + (it.x ? '<br>' + esc(it.x) : '') + '</p>';
+        if (it.t === 'tac') { badge = 'tacto'; extra = '<p class="secnote">Se da en la visita de tacto. Hoy hay ' + nf(o.nServ) + ' servidas para confirmar.</p>'; }
+        else if (it.t === 'mes') {
+          badge = o.prox ? (o.act ? 'este mes' : A.MESES[+o.prox.slice(5, 7) - 1]) : '–';
+          extra = '<p class="secnote">' + (o.prox ? (o.act ? 'Este mes (' + MESL[+o.prox.slice(5, 7) - 1] + ')' : 'Próximo: ' + MESL[+o.prox.slice(5, 7) - 1] + ' · faltan ' + o.dias + ' días') : 'Sin meses') + ' · ' + nf(o.nG) + ' animales.</p>';
+        } else if (it.t === 'fecha') {
+          badge = o.prox ? (o.dias <= 0 ? (o.dias === 0 ? 'hoy' : 'pasó') : o.dias + ' d') : '–';
+          extra = '<p class="secnote">' + (o.prox ? (o.dias < 0 ? 'Fue el ' + A.fmt(o.prox) + ' (hace ' + (-o.dias) + ' días)' : o.dias === 0 ? 'Es hoy' : 'El ' + A.fmt(o.prox) + ' · faltan ' + o.dias + ' días') : 'Sin fecha') + ' · ' + nf(o.nG) + ' animales.</p>';
+        } else {
+          badge = String(o.L.length);
+          if (o.nEnt) extra = '<p class="secnote"><b>' + o.nEnt + '</b> ' + (o.nEnt === 1 ? 'entra' : 'entran') + ' en fecha esta semana (marcadas «nueva»).</p>';
+          var ab = !!state.abiertas[key], lim = ab ? o.L.length : 6;
+          rows = o.L.length ? o.L.slice(0, lim).map(function (x) {
+            var d = A.diffDays(x.fi, hoy), dq = A.diffDays(x.ff, hoy);
+            var r = d > 0 ? '<span class="when">en ' + d + (d === 1 ? ' día' : ' días') + '</span>' : '<span class="when' + (x.ent ? ' ok' : '') + '">' + (x.ent ? 'nueva · ' : '') + (dq === 0 ? 'último día' : dq === 1 ? 'queda 1 día' : 'quedan ' + dq + ' días') + '</span>';
+            var sub = it.t === 'pre' ? 'Parto probable ' + A.fmt(A.derive(x.a, hoy).partoProb) : it.t === 'pos' ? 'Parió el ' + A.fmt(x.a.pFecha) : (function () { var fn = DB.hist[x.a.rp].fn; return nf(A.diffDays(hoy, fn) / 30.44, 1) + ' meses · nació el ' + A.fmt(fn); })();
+            return rowHTML(x.a, { right: r, sub: sub });
+          }).join('') + (o.L.length > 6 ? '<button class="btn more" data-a="ver" data-k="' + key + '">' + (ab ? 'Ver menos' : 'Ver las ' + o.L.length) + '</button>' : '') : '<p class="hint">Ningún animal en fecha esta semana.</p>';
+        }
+        return '<div class="sanblk" id="sanb' + i + '"><div class="sanbh"><h3>' + esc(it.n) + '</h3><span class="count">' + badge + '</span></div>' + nota + extra + rows + '</div>';
+      }).join('');
+      var secs = secTareas('sanlista', 'Eventos del plan', blk, [], null, '', String(R.length));
+      return '<p class="grp" id="sangrp">Sanidad</p><div class="glist">' + sanCalHTML(P) + secs + '</div>' +
+        '<p class="cap" style="margin:6px 4px 0">Plan sanitario del Dr. Mauro Torterolo' + (P.f ? ', actualizado el ' + A.fmt(P.f) : '') + '. La lista muestra quiénes están en fecha según su etapa; lo aplicado no se registra.' + (vet ? ' <button class="lnk" data-a="saned">Editar plan</button>' : '') + '</p>';
+    }
+    /* ----- editor del plan (modo veterinario) ----- */
+    // un evento solo (desde el calendario): i = índice en el plan; nuevo = evento a agregar
+    function sanEditarUno(i, nuevo) {
+      var P = sanPlan(); state.sanDraft = P ? JSON.parse(JSON.stringify(P.items)) : [];
+      if (nuevo) { state.sanDraft.push(nuevo); i = state.sanDraft.length - 1; state.sanNuevo = true; } else state.sanNuevo = false;
+      state.sanUno = i; sanEditor();
+    }
+    function sanEditor(nuevo) {
+      if (nuevo) { var P = sanPlan(); state.sanDraft = P ? JSON.parse(JSON.stringify(P.items)) : []; state.sanUno = null; }
+      var D = state.sanDraft, k = sanKey(), uno = state.sanUno != null;
+      $('#sheetXTitle').textContent = uno ? (state.sanNuevo ? 'Nuevo evento' : 'Editar evento') : 'Plan sanitario';
+      var num = function (i, f, v) { return '<input type="number" inputmode="numeric" min="0" max="999" data-sf="' + i + '.' + f + '" value="' + (v == null ? '' : v) + '">'; };
+      $('#xopts').innerHTML = (k ? '' : '<p class="hint">Este tambo no tiene número de productor: no se le puede asignar un plan.</p>') +
+        (uno ? '' : '<p class="cap" style="margin:0 0 8px">Para ' + esc(PERFIL.nombre || 'este tambo') + (DB.sel && DB.sel.length ? ' (solo las unidades elegidas)' : '') + '. Al guardar se sube y al productor le llega la próxima vez que abra la app con internet.</p>') +
+        D.map(function (it, i) {
+          if (uno && i !== state.sanUno) return '';
+          var g = it.g || [], tipo = '<select data-sf="' + i + '.t">' + Object.keys(SANT).map(function (t) { return '<option value="' + t + '"' + (it.t === t ? ' selected' : '') + '>' + SANT[t] + '</option>'; }).join('') + '</select>';
+          var vent = it.t === 'tac' ? '<p class="cap" style="margin:6px 0">Se da en el tacto, a las que den preñadas. Aparece como recordatorio en Voy mañana.</p>' : it.t === 'mes' ? '<div class="filters sanmes">' + A.MESES.map(function (x, k) { return '<button class="fchip" data-smo="' + i + '.' + (k + 1) + '" aria-pressed="' + ((it.m || []).indexOf(k + 1) >= 0) + '">' + x + '</button>'; }).join('') + '</div>' : it.t === 'fecha' ? '<label class="xnum">Fechas (dd/mm) <input type="text" data-sf="' + i + '.f" value="' + esc((it.f || []).join(' y ')) + '" placeholder="15/04 y 15/10"></label>'
+            : '<label class="xnum">De ' + num(i, 'd1', it.d1) + ' a ' + num(i, 'd2', it.d2) + ' ' + (it.t === 'edad' ? 'meses de edad' : it.t === 'pre' ? 'días antes del parto' : it.t === 'tac' ? 'días después del tacto positivo' : 'días de paridas') + '</label>';
+          var grs = (it.t === 'pos' ? ['vaca'] : it.t === 'pre' || it.t === 'tac' ? ['vaca', 'vaquillona'] : ['vaca', 'vaquillona', 'ternera']).map(function (x) { return '<button class="fchip" data-sgr="' + i + '.' + x + '" aria-pressed="' + (g.indexOf(x) >= 0) + '">' + SANG[x] + '</button>'; }).join('');
+          return '<div class="sanit"><div class="sanhd"><input type="text" class="sann" data-sf="' + i + '.n" value="' + esc(it.n || '') + '" placeholder="Vacuna o tratamiento">' + (uno ? '' : '<button class="sandel" data-a="sandel" data-i="' + i + '" aria-label="Quitar">✕</button>') + '</div>' +
+            '<label class="xnum">' + tipo + '</label>' + vent + '<div class="filters">' + grs + '</div>' +
+            '<input type="text" class="sanx" data-sf="' + i + '.x" value="' + esc(it.x || '') + '" placeholder="Producto y dosis (opcional)"></div>';
+        }).join('') +
+        (uno ? '' : '<div class="filters" style="margin-top:10px"><button class="fchip plain" data-a="sanadd">+ Agregar</button>' + '<button class="fchip plain" data-a="sanbase">Cargar el plan base</button>' + '</div>');
+      $('#xbtns').innerHTML = '<button class="btn primary big" data-a="sanok"' + (k ? '' : ' disabled') + '>Guardar y enviar</button>' + (uno && !state.sanNuevo ? '<button class="btn sanborrar" data-a="sanborrar">Borrar evento</button>' : '') + '<button class="btn" data-a="xcancel">Cancelar</button>';
+      $('#sheetX').hidden = false;
+    }
+    function sanInput(el) {
+      var p = el.dataset.sf.split('.'), it = state.sanDraft[+p[0]], f = p[1]; if (!it) return;
+      if (f === 'f') it.f = el.value.split(/\s*(?:y|,|;)\s*|\s+/).filter(Boolean);
+      else if (f === 'd1' || f === 'd2') { var v = parseInt(el.value, 10); it[f] = v >= 0 ? v : null; }
+      else if (f === 't') { it.t = el.value; it.g = it.t === 'pos' ? ['vaca'] : it.t === 'edad' ? ['ternera'] : it.t === 'pre' || it.t === 'tac' ? ['vaca', 'vaquillona'] : ['vaca']; if (it.t === 'fecha') it.f = it.f || []; if (it.t === 'mes') it.m = it.m || []; sanEditor(); }
+      else it[f] = el.value;
+    }
+    function sanGuardar() {
+      var tok = ghToken(), k = sanKey(); if (!k) return;
+      if (!tok) { toast('Falta el permiso de GitHub (Ajustes → permiso para links).'); return; }
+      var items = state.sanDraft.filter(function (it) { return (it.n || '').trim(); }).map(function (it) {
+        var o = { n: it.n.trim(), t: it.t, g: it.g && it.g.length ? it.g : ['vaca'] };
+        if (it.t === 'tac') {} else if (it.t === 'mes') o.m = (it.m || []).slice().sort(function (a, b) { return a - b; }); else if (it.t === 'fecha') o.f = (it.f || []).filter(sanDdmm); else { o.d1 = +it.d1 || 0; o.d2 = +it.d2 || 0; }
+        if ((it.x || '').trim()) o.x = it.x.trim();
+        return o;
+      });
+      var mal = items.filter(function (o) { return o.t === 'tac' ? false : o.t === 'mes' ? !o.m.length : o.t === 'fecha' ? !o.f.length : (o.d1 === 0 && o.d2 === 0); });
+      if (mal.length) { toast('Falta la ventana de: ' + mal.map(function (o) { return o.n; }).join(', ')); return; }
+      var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/sanidad.json', H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+      busy(true, 'Guardando el plan sanitario…');
+      fetch(url + '?t=' + Date.now(), { headers: H, cache: 'no-store' }).then(function (r) {
+        if (r.status === 404) return { o: { planes: {} }, sha: null };
+        if (!r.ok) throw new Error('No pude leer los planes (' + r.status + ').');
+        return r.json().then(function (j) { return { o: JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\s/g, '')), function (c) { return c.charCodeAt(0); }))), sha: j.sha }; });
+      }).then(function (x) {
+        var o = x.o; o.planes = o.planes || {};
+        if (items.length) o.planes[k] = { t: PERFIL.nombre || '', f: today(), items: items }; else delete o.planes[k];
+        var body = { message: 'Plan sanitario ' + (PERFIL.nombre || k), content: b64std(new TextEncoder().encode(JSON.stringify(o, null, 1) + '\n')) };
+        if (x.sha) body.sha = x.sha;
+        return fetch(url, { method: 'PUT', headers: H, body: JSON.stringify(body) }).then(function (r) {
+          if (!r.ok) throw new Error('No pude guardar el plan (' + r.status + ').');
+          SANJ = o; try { localStorage.setItem('libreta:sanj', JSON.stringify(o)); } catch (e) {}
+          state.sanc = null; state.sanUno = null; busy(false); $('#sheetX').hidden = true; render();
+          toast(items.length ? 'Plan guardado. Al productor le llega en 1 o 2 minutos.' : 'Plan quitado.');
+        });
+      }).catch(function (e) { busy(false); toast(e && e.message || 'No se pudo.'); });
+    }
     function revisarBloqueos() {
       if (esVet() || !root.fetch) return;
       fetch(baseApp().replace(/prueba\/$/, '') + 'bloqueos.json?t=' + Date.now(), { cache: 'no-store' })
@@ -3483,7 +3998,7 @@
       var t = tamboAct();
       return leerDB(TAMBOS.activo).then(function (o) {
         if (!o || !o.hist) throw new Error('El tambo no tiene datos cargados.');
-        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], ctrls: o.ctrls || [], curvas: o.curvas || null, config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
+        return { animales: o.todos || o.animales || [], bajas: o.bajasT || o.bajas || [], vovsH: o.vovsH || null, ctrls: o.ctrls || [], curvas: o.curvas || null, config: o.config || {}, unidades: o.unidades || [], sel: null, unidadesSel: [], hist: o.hist, codes: o.codes, fecha: o.fecha, desdeHist: o.desdeHist, idProd: o.idProd && o.idProd.length ? o.idProd : ['L' + meta.id], tambo: (t && t.nombre) || PERFIL.nombre || '', origen: o.origen || 'syscaw' };
       });
     }
     function subirDatos() {
@@ -4470,6 +4985,7 @@
         '<button class="valert' + (nAl ? '' : ' ok') + '" data-voy="alertas"><b>' + nAl + '</b><span><em>Alertas</em><small>' + al + '</small></span><svg class="vch" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
         (le ? '<button class="vf" data-a="voyleche"><span>Leche por vaca <b>' + nf(le.v, 1) + ' L</b></span>' + (d4 != null ? '<span class="' + (d4 < 0 ? 'dn' : 'up') + '">' + (d4 < 0 ? '▼ ' : '▲ +') + nf(Math.abs(d4), 0) + '% vs ' + le.mes + ' ' + (le.anio - 1) + '</span>' : '') + '</button>' : '') +
         '<button class="vf" data-voy="prox"><span>Próximos 30 días</span><span><b>' + R.secar.length + '</b> ' + (R.secar.length === 1 ? 'secado' : 'secados') + ' · <b>' + R.partos.length + '</b> ' + (R.partos.length === 1 ? 'parto' : 'partos') + '</span></button>' +
+        (function () { var P = sanPlan(), T = P ? P.items.filter(function (it) { return it.t === 'tac'; }) : []; return T.length ? '<div class="vf vsan"><span>En el tacto, a las que den preñadas</span><span><b>' + esc(T.map(function (it) { return it.n.replace(/^Confirmaci[oó]n de preñez:\s*/i, ''); }).join(' · ')) + '</b></span></div>' : ''; })() +
         '<button class="btn primary big vbtn" data-a="voyplanilla">Planilla de tacto para mañana</button></div>';
     }
     // refV: fecha a la que se calcula (Voy mañana la pide para mañana; desde Tareas, hoy)
@@ -4663,7 +5179,10 @@
       if (state.informe && esVet()) { main.innerHTML = informeHTML(); return; }
       if (state.rp) {
         var a = byRp(state.rp);
-        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main); return; }
+        if (a) { main.innerHTML = fichaHTML(a); plegarFicha(main, true); agruparPlegadas(main); var gl = main.querySelector('.glist'); if (gl) gl.insertAdjacentHTML('beforebegin', '<p class="grp">Historial</p>'); plegarNotas(main);
+          // compartir la ficha como imagen (modo veterinario): flecha arriba a la derecha, como en las tarjetas
+          var fh = main.querySelector('header.fh'); if (fh && esVet()) { fh.classList.add('fhsh'); fh.insertAdjacentHTML('beforeend', '<button class="shic" data-a="fichaimg" aria-label="Compartir la ficha como imagen" title="Compartir"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'); }
+          return; }
         state.rp = null;
       }
       // Voy mañana va después de la ficha: tocar una vaca de sus listas abre su ficha, y Volver vuelve a la lista
@@ -4722,6 +5241,9 @@
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
       if ((el = e.target.closest('[data-k]'))) { state.abiertas[el.dataset.k] = !state.abiertas[el.dataset.k]; render(); return; }
       if ((el = e.target.closest('[data-vk]'))) { state.vtaDraft[el.dataset.vk] = !state.vtaDraft[el.dataset.vk]; el.setAttribute('aria-pressed', !!state.vtaDraft[el.dataset.vk]); vtaCuenta(); return; }
+      if ((el = e.target.closest('[data-cpv]'))) { state.cpVista = el.dataset.cpv; render(); return; }
+      if ((el = e.target.closest('[data-smo]'))) { var sm = el.dataset.smo.split('.'), itm = state.sanDraft[+sm[0]]; if (itm) { itm.m = itm.m || []; var im = itm.m.indexOf(+sm[1]); if (im >= 0) itm.m.splice(im, 1); else itm.m.push(+sm[1]); el.setAttribute('aria-pressed', im < 0); } return; }
+      if ((el = e.target.closest('[data-sgr]'))) { var sg = el.dataset.sgr.split('.'), it = state.sanDraft[+sg[0]]; if (it) { it.g = it.g || []; var ix = it.g.indexOf(sg[1]); if (ix >= 0) it.g.splice(ix, 1); else it.g.push(sg[1]); el.setAttribute('aria-pressed', ix < 0); } return; }
       if ((el = e.target.closest('[data-xk]'))) { state.xf[el.dataset.xk] = !state.xf[el.dataset.xk]; xOpts(); return; }
       var b = e.target.closest('[data-a]'); if (!b) return;
       var a = b.dataset.a;
@@ -4773,6 +5295,17 @@
       else if (a === 'lnkwa') { window.open('https://wa.me/?text=' + encodeURIComponent(state.linkTxt || ''), '_blank'); }
       else if (a === 'lnkcopy') { (navigator.clipboard ? navigator.clipboard.writeText(state.linkTxt || '') : Promise.reject()).then(function () { toast('Copiado. Pegalo en WhatsApp.'); }, function () { prompt('Copiá el mensaje:', state.linkTxt || ''); }); }
       else if (a === 'xcancel') $('#sheetX').hidden = true;
+      else if (a === 'saned') { state.sanUno = null; sanEditor(true); }
+      else if (a === 'sanadd' && state.sanUno == null) { state.sanDraft.push({ n: '', t: 'mes', m: [], g: ['vaca'] }); sanEditor(); }
+      else if (a === 'sanbase') { if (state.sanDraft.length && !confirm('¿Reemplazar lo que hay por el plan base?')) return; state.sanDraft = sanBase(); sanEditor(); }
+      else if (a === 'sandel') { state.sanDraft.splice(+b.dataset.i, 1); sanEditor(); }
+      else if (a === 'sanok') sanGuardar();
+      else if (a === 'sancalimg') { var cw = document.querySelector('.calwrap'); if (cw) compartirCard(cw); }
+      else if (a === 'sanver' && esVet()) sanEditarUno(+b.dataset.i);
+      else if (a === 'sannuevo') { var gk = b.dataset.g; sanEditarUno(null, { n: '', t: 'mes', m: [+b.dataset.m], g: [gk] }); }
+      else if (a === 'sanborrar') { if (state.sanUno != null && confirm('¿Borrar este evento del plan?')) { state.sanDraft.splice(state.sanUno, 1); state.sanUno = null; sanGuardar(); } }
+      else if (a === 'sanver') { state.desp = state.desp || {}; state.desp.sanlista = true; render(); setTimeout(function () { var h = document.getElementById('sanb' + b.dataset.i); if (h) { h.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); h.classList.add('sanflash'); } }, 30); }
+      else if (a === 'sanir') { state.desp = state.desp || {}; state.desp.sancal = true; setTab('tareas'); setTimeout(function () { var g = $('#sangrp'); if (g) g.scrollIntoView(); }, 50); }
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
       else if (a === 'pobvista') { state.pobVista = b.dataset.pv; render(); window.scrollTo(0, 0); }
@@ -4800,6 +5333,9 @@
       else if (a === 'shgraf') shDesdeSheet('g');
       else if (a === 'shtab') shDesdeSheet('t');
       else if (a === 'shtodo') shDesdeSheet('todo');
+      else if (a === 'fichaimg') compartirFicha();
+      else if (a === 'fichaimg1') fichaImagen(false);
+      else if (a === 'fichaimg2') fichaImagen(true);
       else if (a === 'panelimg') compartirPanel();
       else if (a === 'inscalc') { var F = insFechas(); if (F[0] > F[1]) { toast('La fecha "del" tiene que ser anterior a la fecha "al".'); return; } state.insR = insCalc(F[0], F[1]); state.insR.d0 = F[0]; state.insR.d1 = F[1]; render(); }
       else if (a === 'inswa') insComprobanteWA();
@@ -4814,12 +5350,15 @@
       if (e.target.id === 'pobSel') { state.pobModo = e.target.value; render(); return; }
       if (e.target.classList && e.target.classList.contains('pobToro')) { pobToroSet(e.target.dataset.toro, e.target.checked); state.pobToroAb = true; render(); return; }
       if (e.target.id === 'finZaf' && e.target.value) { setP('finzaf', e.target.value.slice(5)); render(); return; }
+      if ((e.target.id === 'cpmin' || e.target.id === 'cpmax') && e.target.value) { var cv = parseInt(e.target.value, 10); if (cv > 0) { setP(e.target.id, String(cv)); render(); } }
       if (e.target.id === 'ini21' && e.target.value) { state.ini21 = e.target.value; setP('ini21', state.ini21); render(); }
       if ((e.target.id === 'insd0' || e.target.id === 'insd1') && e.target.value) { var k = e.target.id === 'insd0' ? 'insD0' : 'insD1'; state[k] = e.target.value; setP(k.toLowerCase(), e.target.value); render(); return; }
       if (e.target.dataset && e.target.dataset.ip) { var Pp = insPrecios(), v = parseFloat(String(e.target.value).replace(',', '.')); Pp[e.target.dataset.ip] = isFinite(v) && v >= 0 ? v : null; setP('insprec', JSON.stringify(Pp)); if (state.insR) render(); return; }
+      if (e.target.dataset && e.target.dataset.sf && e.target.tagName === 'SELECT') { sanInput(e.target); return; }
       if (e.target.id === 'fsec' && e.target.value) { state.fsec = e.target.value; setP('fsec', state.fsec); render(); }
     });
     document.addEventListener('input', function (e) {
+      if (e.target.dataset && e.target.dataset.sf && e.target.tagName !== 'SELECT') { sanInput(e.target); return; }
       if (e.target.dataset && e.target.dataset.vn) { var w = parseInt(e.target.value, 10); state.vtaDraft[e.target.dataset.vn] = w > 0 ? w : null; vtaCuenta(); return; }
       if (e.target.dataset && e.target.dataset.xn) { var v = parseInt(e.target.value, 10); state.xf[e.target.dataset.xn] = v > 0 ? v : null; xActualizarCuenta(); return; }
       if (e.target.id === 'q') { state.q = e.target.value; updateResults(); }
@@ -4856,6 +5395,8 @@
     });
     if (!leerLibreta()) { leerActivacion(); leerPrecarga(); listo.then(function () { setTimeout(actualizarDesdeLink, 800); }); }
     listo.then(function () { setTimeout(revisarBloqueos, 400); });
+    listo.then(function () { setTimeout(sanFetch, 600); });
+    root.addEventListener('online', sanFetch);
     root.addEventListener('online', revisarBloqueos);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) revisarBloqueos(); });
     var desdeHash = function () { var r = rpDeHash(); if (r) state.rp = r; };
