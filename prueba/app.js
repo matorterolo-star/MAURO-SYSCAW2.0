@@ -1552,11 +1552,11 @@
             return rowHTML(x.a, { right: '<span class="when late">' + x.d + ' días</span>', sub: 'Parto probable ' + A.fmt(x.pp) + (x.a.tFecha ? ' · tacto ' + A.fmt(x.a.tFecha) : '') });
           }, 'No hay partos atrasados.');
         })() : '')) +
-        (esOperario() ? '' : sanTareasHTML()) +
         grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Vacas en ordeñe por caravana, para anotar en el corral') : '')) +
         grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML());
+        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML()) +
+        (esOperario() ? '' : sanTareasHTML());
     }
 
     /* ----- pestaña Rodeo ----- */
