@@ -1,4 +1,4 @@
-const CACHE = 'libreta-v70';
+const CACHE = 'libreta-v71';
 const FILES = ['./', 'index.html', 'app.js?v=68', 'xlsx.full.min.js', 'unrar.js', 'unrar-wasm.js', 'paradox.js?v=38', 'syscaw.js?v=44', 'fosapp.js?v=64', 'manifest.webmanifest', 'icon2-192.png', 'icon2-512.png'];
 // al instalar, baja todo de nuevo (sin usar la memoria del navegador) para que no queden archivos de versiones distintas
 self.addEventListener('install', e => {
