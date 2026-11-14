@@ -1552,11 +1552,11 @@
             return rowHTML(x.a, { right: '<span class="when late">' + x.d + ' días</span>', sub: 'Parto probable ' + A.fmt(x.pp) + (x.a.tFecha ? ' · tacto ' + A.fmt(x.a.tFecha) : '') });
           }, 'No hay partos atrasados.');
         })() : '')) +
-        (esOperario() ? '' : sanTareasHTML()) +
         grp('Listas para llevar', lrow('exptactar', 'Lista para revisación', 'Tacto, secado y venta, con todos los datos') + lrow('expparches', 'Listado de parches', 'Servidas entre X e Y días, paridas y vacías') + (esVet() ? lrow('expplanilla', 'Planilla de tacto', 'Vacas en ordeñe por caravana, para anotar en el corral') : '')) +
         grp('Gestión', secTareas('venta', 'Para venta', '<p class="secnote">Criterio: ' + esc(vtaTxt()) + '. <button class="lnk" data-a="vtacfg">Cambiar criterio</button></p>', DB.animales.filter(paraVenta).sort(function (x, y) { return x.pr[0] - y.pr[0]; }), function (a) {
           return rowHTML(a, { right: '<span class="vta">VENTA</span>', sub: nf(a.pr[0], 1) + ' lts · ' + nf(delDe(a)) + ' días en leche' + (a.rech ? ' · ' + esc(a.rechDet || a.rech) : '') });
-        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML());
+        }, 'Ninguna vaca cumple el criterio de venta.') + insHTML()) +
+        (esOperario() ? '' : sanTareasHTML());
     }
 
     /* ----- pestaña Rodeo ----- */
@@ -1913,7 +1913,7 @@
       var res = avisos.length
         ? '<div class="pres ' + (hayMal ? 'mal' : 'at') + '" role="alert"><span class="pri" aria-hidden="true">⚠</span><div><b>' + (avisos.length === 1 ? '1 indicador para revisar' : avisos.length + ' indicadores para revisar') + '</b>' + avisos.map(function (x) { return '<span>' + x[1] + '</span>'; }).join('') + '</div></div>'
         : '<div class="pres ok"><span class="pri" aria-hidden="true">✓</span><div><b>Todo en orden</b><span>Los indicadores están bien.</span></div></div>';
-      var SM = sanMes(), sanBtn = SM ? '<button class="voyent" data-a="sanir"><span><b>Sanidad de ' + SM.mes + '</b><small>' + esc(SM.txt) + '</small></span><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' : '';
+      var sanBtn = sanPanelHTML();
       return '<h1 class="ptitle">Panel</h1>' + res + '<div class="panel">' + t1 + t2 + t3 + t4 + '</div>' + sanBtn +
         '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: último día en que se tactaron 5 vacas en ordeñe o más (no cuentan vaquillonas, secas ni registros sueltos, como un aborto cargado como tacto); amarillo desde 21 días, rojo con más de 30.</p>';
     }
@@ -3119,7 +3119,7 @@
         sec.insertAdjacentHTML('afterbegin', '<button class="shic" data-a="cardimg" aria-label="Compartir como imagen" title="Compartir">' + ico + '</button>');
       });
       var pan = main.querySelector('.panel');
-      if (pan && !main.querySelector('.shbtn')) pan.insertAdjacentHTML('afterend', '<button class="shbtn" data-a="panelimg">' + ico + 'Compartir resumen de visita</button>');
+      var pt = main.querySelector('h1.ptitle'); if (pan && pt && !pt.querySelector('.shic')) { pt.classList.add('ptsh'); pt.insertAdjacentHTML('beforeend', '<button class="shic" data-a="panelimg" aria-label="Compartir resumen de visita" title="Compartir resumen de visita">' + ico + '</button>'); }
     }
     function cargarH2C() {
       if (root.html2canvas) return Promise.resolve(root.html2canvas);
@@ -3773,6 +3773,77 @@
       return secTareas('sancal', 'Calendario sanitario', cont, [], null, '', '').replace('<section class="sec', '<section class="sec sancalsec');
     }
     // lo que el calendario tiene en el mes actual (por mes o fecha fija), por columna
+    /* ----- vacunas del mes confirmadas por el productor (solo eventos por mes o por fecha: tambo, vaquillonas y recría).
+       Quedan guardadas en este teléfono, por tambo; no se mandan a ningún lado. Arranca a contar desde el mes en que el
+       plan apareció en este teléfono. */
+    function sanOkLeer() { var k = 'libreta:sanok:' + sanKey(), o = null; try { o = JSON.parse(localStorage.getItem(k)); } catch (e) {} o = o || {}; o.v = o.v || {}; if (!o.ini) { o.ini = today().slice(0, 7); try { localStorage.setItem(k, JSON.stringify(o)); } catch (e) {} } return o; }
+    function sanOkGuardar(o) { try { localStorage.setItem('libreta:sanok:' + sanKey(), JSON.stringify(o)); } catch (e) {} }
+    function sanMesesDe(it) { return it.t === 'mes' ? (it.m || []).slice() : it.t === 'fecha' ? (it.f || []).map(sanDdmm).filter(Boolean).map(function (dm) { return dm[1]; }) : []; }
+    // ocurrencias a confirmar desde el inicio hasta este mes: { it, k, ym, ok (fecha o null), act (es este mes), tarde }
+    function sanConf(P) {
+      P = P || sanPlan(); if (!P) return [];
+      var O = sanOkLeer(), ym = today().slice(0, 7), L = [];
+      var y0 = +O.ini.slice(0, 4), y1 = +ym.slice(0, 4);
+      P.items.forEach(function (it) {
+        var ms = sanMesesDe(it); if (!ms.length) return;
+        for (var y = y0; y <= y1; y++) ms.forEach(function (m) {
+          var e = y + '-' + (m < 10 ? '0' : '') + m; if (e < O.ini || e > ym) return;
+          var k = it.n + '|' + e, ok = O.v[k] || null;
+          if (L.some(function (x) { return x.k === k; })) return;
+          L.push({ it: it, k: k, ym: e, ok: ok, act: e === ym, tarde: !!ok && ok.slice(0, 7) > e });
+        });
+      });
+      return L.sort(function (a, b) { return a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0; });
+    }
+    function sanYmTxt(e) { return MESL[+e.slice(5, 7) - 1] + (e.slice(0, 4) !== today().slice(0, 4) ? ' ' + e.slice(0, 4) : ''); }
+    // tarjeta del Panel: lo de este mes y lo atrasado sin marcar, con su botón «Hecho»
+    function sanPanelHTML() {
+      if (esOperario() || !sanPlan()) return '';
+      var SM = sanMes(), d2 = new Date(), lim; d2.setDate(1); d2.setMonth(d2.getMonth() - 2); lim = A.ymd(d2).slice(0, 7);
+      // lo atrasado se muestra hasta 2 meses; lo más viejo queda en el resumen de cumplimiento como «sin hacer»
+      var L = sanConf().filter(function (x) { return x.act || (!x.ok && x.ym >= lim); });
+      var btn = SM ? '<button class="voyent" data-a="sanir"><span><b>Sanidad de ' + SM.mes + '</b><small>' + esc(SM.txt) + '</small></span><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' : '';
+      if (!L.length) return btn;
+      var pend = L.filter(function (x) { return !x.ok; }).length;
+      var rows = L.map(function (x) {
+        var sub = sanQuien(x.it) + (x.act ? '' : ' · era de ' + sanYmTxt(x.ym));
+        var der = x.ok ? '<span class="sanhecho">✓ Hecho ' + A.fmt(x.ok).slice(0, 5) + '</span>' : '<button class="btn sm sanok' + (x.act ? '' : ' tarde') + '" data-a="sanhecho" data-sk="' + esc(x.k) + '">Hecho</button>';
+        return '<div class="sanrow' + (x.ok ? ' ok' : '') + '"><span><b>' + esc(sanEtq(x.it.n)) + '</b><small>' + esc(sub) + '</small></span>' + der + '</div>';
+      }).join('');
+      var ab = !!(state.desp && state.desp.sanpen);
+      return btn + '<div class="sanpen' + (ab ? ' open' : '') + '"><button class="sanpt" data-desp="sanpen" aria-expanded="' + ab + '"><span>' + (pend ? (pend === 1 ? '1 vacuna para marcar' : pend + ' vacunas para marcar') : 'Vacunas del mes: todo hecho') + '</span><svg class="chev" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' + (ab ? rows + '<p class="cap">Tocá «Hecho» cuando la hayan dado. Queda guardado en este teléfono.</p>' : '') + '</div>';
+    }
+    // resumen del cumplimiento, para verlo junto con el productor
+    function sanCumpHTML(P) {
+      var L = sanConf(P), O = sanOkLeer();
+      if (!L.length) return secTareas('sancump', 'Cumplimiento sanitario', '<p class="secnote">Cuenta desde ' + sanYmTxt(O.ini) + ', cuando el plan llegó a este teléfono. Todavía no hubo vacunas del mes para marcar.</p>', [], null, '', '');
+      var venc = L.filter(function (x) { return !x.act || x.ok; }), hechas = venc.filter(function (x) { return x.ok; }), enf = hechas.filter(function (x) { return !x.tarde; });
+      var sin = venc.length - hechas.length, pct = venc.length ? Math.round(enf.length * 100 / venc.length) : null;
+      var kp = '<div class="kpis"><div class="' + (pct == null ? '' : pct >= 90 ? 'ok' : pct >= 70 ? 'at' : 'mal') + '"><b>' + (pct == null ? '–' : pct + '%') + '</b><span>en fecha</span></div><div><b>' + (hechas.length - enf.length) + '</b><span>con atraso</span></div><div' + (sin ? ' class="mal"' : '') + '><b>' + sin + '</b><span>sin hacer</span></div></div>';
+      var rows = L.slice().reverse().map(function (x) {
+        var est = x.ok ? (x.tarde ? '<span class="sant at">Tarde · ' + A.fmt(x.ok).slice(0, 5) + '</span>' : '<span class="sant ok">Hecho · ' + A.fmt(x.ok).slice(0, 5) + '</span>') : x.act ? '<span class="sant">Este mes</span>' : '<span class="sant mal">Sin hacer</span>';
+        var acc = x.ok ? '<button class="lnk" data-a="sandeshacer" data-sk="' + esc(x.k) + '">deshacer</button>' : '<button class="lnk" data-a="sanhecho" data-sk="' + esc(x.k) + '">marcar</button>';
+        return '<tr><td>' + esc(sanYmTxt(x.ym)) + '</td><td><b>' + esc(sanEtq(x.it.n)) + '</b><br><small>' + esc(sanQuien(x.it)) + '</small></td><td>' + est + '<br>' + acc + '</td></tr>';
+      }).join('');
+      // por producto y grupo: última dosis dada y qué meses no se dio (para cruzarlo con un problema sanitario)
+      var GN = { vaca: 'Tambo', seca: 'Tambo', vaquillona: 'Vaquillonas', ternera: 'Recría' }, PR = {};
+      L.forEach(function (x) {
+        sanEtq(x.it.n).split(/\s*\+\s*/).filter(Boolean).forEach(function (pn) {
+          pn = /^leptosp/i.test(pn) ? 'Leptospirosis' : pn.charAt(0).toUpperCase() + pn.slice(1);
+          (x.it.g && x.it.g.length ? x.it.g : ['vaca']).forEach(function (g) {
+            var k = pn + '|' + GN[g], r = PR[k] = PR[k] || { p: pn, g: GN[g], ult: null, sin: [], n: 0 };
+            if (x.ok) { r.n++; if (!r.ult || x.ok > r.ult) r.ult = x.ok; } else if (!x.act && r.sin.indexOf(x.ym) < 0) r.sin.push(x.ym);
+          });
+        });
+      });
+      var PRL = Object.keys(PR).map(function (k) { return PR[k]; }).sort(function (a, b) { return (b.sin.length > 0) - (a.sin.length > 0) || a.p.localeCompare(b.p) || a.g.localeCompare(b.g); });
+      var prod = PRL.length ? '<h3 class="sanh3">Por producto</h3><div class="tblw"><table class="tbl sancump"><thead><tr><th>Producto</th><th>Última dada</th><th>No se dio</th></tr></thead><tbody>' + PRL.map(function (r) {
+        return '<tr' + (r.sin.length ? ' class="sinp"' : '') + '><td><b>' + esc(r.p) + '</b><br><small>' + esc(r.g) + '</small></td><td>' + (r.ult ? A.fmt(r.ult) : r.sin.length ? '<span class="sant mal">ninguna</span>' : '<span class="sant">–</span>') + '</td><td>' + (r.sin.length ? '<span class="sant mal">' + r.sin.map(sanYmTxt).join(', ') + '</span>' : '<span class="sant ok">–</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div><h3 class="sanh3">Mes por mes</h3>' : '';
+      var nota = '<p class="secnote">Vacunas y antiparasitarios del mes (tambo, vaquillonas y recría), desde ' + sanYmTxt(O.ini) + '. «En fecha» = marcadas dentro de su mes. Lo de secado, preparto, tacto y desleche no entra.</p>' + kp + prod +
+        '<div class="tblw"><table class="tbl sancump"><thead><tr><th>Mes</th><th>Vacuna</th><th>Estado</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      return secTareas('sancump', 'Cumplimiento sanitario', nota, [], null, '', pct == null ? '' : pct + '%');
+    }
     function sanMes() {
       if (esOperario()) return null;
       var P = sanPlan(); if (!P) return null;
@@ -3791,6 +3862,7 @@
       var hoy = today();
       var orden = function (o) { return o.L && o.L.length ? -1000 + (o.nEnt ? -100 : 0) : o.dias != null ? Math.max(o.dias, 0) : 9999; };
       // toda la lista en un solo desplegable; adentro, cada evento con su detalle y sus animales (sin plegar uno por uno)
+      var CF = sanConf(P);
       var R = sanCalc(P), blk = R.map(function (o, i) { return { o: o, i: i }; }).sort(function (x, y) { return orden(x.o) - orden(y.o) || x.i - y.i; }).map(function (z) {
         var o = z.o, i = z.i, it = o.it, key = 'san' + i, badge = '', extra = '', rows = '';
         var nota = '<p class="secnote"><b>' + esc(sanQuien(it)) + '</b> · ' + esc(sanVentTxt(it)) + (it.x ? '<br>' + esc(it.x) : '') + '</p>';
@@ -3812,11 +3884,13 @@
             return rowHTML(x.a, { right: r, sub: sub });
           }).join('') + (o.L.length > 6 ? '<button class="btn more" data-a="ver" data-k="' + key + '">' + (ab ? 'Ver menos' : 'Ver las ' + o.L.length) + '</button>' : '') : '<p class="hint">Ningún animal en fecha esta semana.</p>';
         }
+        if (it.t === 'mes' || it.t === 'fecha') { var cx = CF.filter(function (x) { return x.it === it && x.act; })[0]; if (cx) extra += cx.ok ? '<p class="secnote"><span class="sanhecho">✓ Hecho el ' + A.fmt(cx.ok) + '</span> <button class="lnk" data-a="sandeshacer" data-sk="' + esc(cx.k) + '">deshacer</button></p>' : '<p class="secnote"><button class="btn sm sanok" data-a="sanhecho" data-sk="' + esc(cx.k) + '">Hecho</button></p>'; }
         return '<div class="sanblk" id="sanb' + i + '"><div class="sanbh"><h3>' + esc(it.n) + '</h3><span class="count">' + badge + '</span></div>' + nota + extra + rows + '</div>';
       }).join('');
       var secs = secTareas('sanlista', 'Eventos del plan', blk, [], null, '', String(R.length));
+      secs += sanCumpHTML(P);
       return '<p class="grp" id="sangrp">Sanidad</p><div class="glist">' + sanCalHTML(P) + secs + '</div>' +
-        '<p class="cap" style="margin:6px 4px 0">Plan sanitario del Dr. Mauro Torterolo' + (P.f ? ', actualizado el ' + A.fmt(P.f) : '') + '. La lista muestra quiénes están en fecha según su etapa; lo aplicado no se registra.' + (vet ? ' <button class="lnk" data-a="saned">Editar plan</button>' : '') + '</p>';
+        '<p class="cap" style="margin:6px 4px 0">Plan sanitario del Dr. Mauro Torterolo' + (P.f ? ', actualizado el ' + A.fmt(P.f) : '') + '. La lista muestra quiénes están en fecha según su etapa. Las vacunas del mes se marcan como hechas en el Panel y quedan guardadas en este teléfono.' + (vet ? ' <button class="lnk" data-a="saned">Editar plan</button>' : '') + '</p>';
     }
     /* ----- editor del plan (modo veterinario) ----- */
     // un evento solo (desde el calendario): i = índice en el plan; nuevo = evento a agregar
@@ -5305,6 +5379,12 @@
       else if (a === 'sannuevo') { var gk = b.dataset.g; sanEditarUno(null, { n: '', t: 'mes', m: [+b.dataset.m], g: [gk] }); }
       else if (a === 'sanborrar') { if (state.sanUno != null && confirm('¿Borrar este evento del plan?')) { state.sanDraft.splice(state.sanUno, 1); state.sanUno = null; sanGuardar(); } }
       else if (a === 'sanver') { state.desp = state.desp || {}; state.desp.sanlista = true; render(); setTimeout(function () { var h = document.getElementById('sanb' + b.dataset.i); if (h) { h.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); h.classList.add('sanflash'); } }, 30); }
+      else if (a === 'sanhecho' || a === 'sandeshacer') {
+        var SO = sanOkLeer(), sk = b.dataset.sk;
+        if (a === 'sanhecho') { SO.v[sk] = today(); toast('Marcada como hecha'); }
+        else if (confirm('¿Desmarcar esta vacuna?')) delete SO.v[sk]; else return;
+        sanOkGuardar(SO); render();
+      }
       else if (a === 'sanir') { state.desp = state.desp || {}; state.desp.sancal = true; setTab('tareas'); setTimeout(function () { var g = $('#sangrp'); if (g) g.scrollIntoView(); }, 50); }
       else if (a === 'informe') abrirInforme();
       else if (a === 'poblacion') abrirPoblacion();
