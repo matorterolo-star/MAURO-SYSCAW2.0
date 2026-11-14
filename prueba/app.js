@@ -3238,7 +3238,11 @@
       var main = $('#main'), fh = main && main.querySelector('header.fh'), dat = main && main.querySelector('section.card.datos'); if (!fh) return;
       var d = document.createElement('div'), h = fh.cloneNode(true);
       Array.prototype.forEach.call(h.querySelectorAll('.shic'), function (x) { x.remove(); });
-      h.style.margin = '0 0 12px'; d.appendChild(h);
+      h.classList.remove('fhsh'); h.style.margin = '0 0 12px';
+      // en la imagen el índice va debajo de los sellos, para que el nombre y el estado no queden apretados
+      var med = h.querySelector('.medalla'), inf = h.querySelector('.fhinfo');
+      if (med && inf) { med.style.cssText = 'display:inline-flex;flex-direction:row;align-items:center;gap:8px;margin-top:10px'; inf.appendChild(med); }
+      d.appendChild(h);
       if (dat) { var c = dat.cloneNode(true); c.style.cssText = 'margin:0;box-shadow:none'; d.appendChild(c); }
       if (conHist) Array.prototype.forEach.call(main.querySelectorAll('.glist section.card'), function (sec) {
         var t = (sec.querySelector('h2') || {}).textContent || ''; if (!/^(Control lechero|Historial reproductivo)/.test(t)) return;
