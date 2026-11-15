@@ -1952,7 +1952,7 @@
       var hayQ = false;
       var filas = B.map(function (b, k) { return '<tr' + (b[2] ? ' class="cpk"' : '') + '><td>' + b[0] + '</td><td>' + nf(cnt[k][0]) + ' <small>' + pc(cnt[k][0], tot[0]) + '</small></td>' + (hayQ ? '<td>' + nf(cnt[k][1]) + ' <small>' + pc(cnt[k][1], tot[1]) + '</small></td>' : '') + '</tr>'; }).join('') +
         '<tr class="sep"><td><b>Total intervalos</b></td><td><b>' + nf(tot[0]) + '</b></td>' + (hayQ ? '<td><b>' + nf(tot[1]) + '</b></td>' : '') + '</tr>';
-      var L = perd.filter(function (p) { return !p.x.baja; }).sort(function (a, b) { return a.e2[0] < b.e2[0] ? 1 : -1; });
+      var L = perd.filter(function (p) { return !p.x.baja; }).sort(function (a, b) { var x = String(a.x.a.rp), y = String(b.x.a.rp), nx = parseInt(x, 10), ny = parseInt(y, 10); return (nx - ny) || x.localeCompare(y) || (a.e2[0] < b.e2[0] ? 1 : -1); }); // por caravana
       var ab = !!state.abiertas.cperd, lista = L.slice(0, ab ? L.length : 8).map(function (p) {
         var t = function (e) { return (e[1] === 'C' ? 'Celo ' : 'Serv. ') + A.fmt(e[0]).slice(0, 5); };
         return rowHTML(p.x.a, { right: '<span class="when late">' + p.d + ' días</span>', sub: t(p.e1) + ' → ' + t(p.e2) });
