@@ -2759,7 +2759,7 @@
       // agrupadas por tema; un grupo sin tarjetas no muestra su título
       var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        grp('Lo que pasó', partosOcHTML() + salTempHTML() + vovsHTML()) +
+        grp('Lo que pasó', partosOcHTML() + vovsHTML() + salTempHTML()) +
         grp('Lo que viene', probables + proyHTML()) +
         grp('Reproducción', repHTML() + celosPerdidosHTML() + (prenOK() ? prenHTML() : '')) +
         grp('El rodeo', vacasAnioHTML() + idxCardHTML() + (prenOK() ? ccRodeoHTML() : '') + vidaHTML());
