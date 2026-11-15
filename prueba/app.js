@@ -3277,7 +3277,7 @@
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
-      'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Por lote': 'Litros, sólidos y días en leche de cada lote', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
+      'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Por lote': 'Litros y días en leche de cada lote', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
       'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
       'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas', 'atrasados': 'Preñadas con el parto vencido hace más de 30 días',
       'venta': 'Las que cumplen tu criterio de venta', 'insem': 'Liquidación por número de servicio'
@@ -3566,11 +3566,11 @@
       var porLote = lks.length > 1 ? (function () {
         var fl = function (nom, l, cls) {
           var cp = l.filter(function (v) { return v.prev && v.prev[1] > 0; }), d = cp.length ? prom(cp, function (v) { return v.lt - v.prev[1]; }) : null;
-          return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + esc(nom) + '</td><td>' + nf(l.length) + '</td><td><b>' + nf(prom(l, function (v) { return v.lt; }), 1) + '</b>' + (d != null ? ' <small class="' + (d >= 0 ? 'up' : 'dn') + '">' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + '</small>' : '') + '</td>' + (sol != null ? '<td>' + nf(prom(l, function (v) { return v.sol; }), 2) + '</td>' : '') + '<td>' + nf(prom(l, function (v) { return v.del; })) + '</td><td>' + Math.round(l.filter(function (v) { return v.n === 1; }).length * 100 / l.length) + '%</td></tr>';
+          return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + esc(nom) + '</td><td>' + nf(l.length) + '</td><td><b>' + nf(prom(l, function (v) { return v.lt; }), 1) + '</b>' + (d != null ? ' <small class="' + (d >= 0 ? 'up' : 'dn') + '">' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + '</small>' : '') + '</td><td>' + nf(prom(l, function (v) { return v.del; })) + '</td><td>' + Math.round(l.filter(function (v) { return v.n === 1; }).length * 100 / l.length) + '%</td></tr>';
         };
         CLAVE['Por lote'] = lks.length + ' lotes';
         return '<section class="card"><h2>Por lote</h2><p class="cap" style="margin:0 0 8px">Último control' + (C.fecha ? ' (' + A.fmt(C.fecha) + ')' : '') + ' según el lote en que está hoy cada vaca. Al lado de los litros, en verde o rojo, cuánto cambió cada lote desde el control anterior (mismas vacas).</p>' +
-          '<div class="tblw"><table class="tbl lotes"><thead><tr><th>Lote</th><th>Vacas</th><th>L/vaca</th>' + (sol != null ? '<th>Kg sól.</th>' : '') + '<th>DEL</th><th>1ª lact.</th></tr></thead><tbody>' +
+          '<div class="tblw"><table class="tbl lotes"><thead><tr><th>Lote</th><th>Vacas</th><th>L/vaca</th><th>DEL</th><th>1ª lact.</th></tr></thead><tbody>' +
           lks.map(function (k) { return fl(k, LT[k]); }).join('') + fl('Total', V, 'sep') + '</tbody></table></div></section>';
       })() : '';
       var caen = conPrev.filter(function (v) { var d = v.prev[1] - v.lt; return d >= 4 && d / v.prev[1] >= 0.2; }).sort(function (x, y) { return (y.prev[1] - y.lt) / y.prev[1] - (x.prev[1] - x.lt) / x.prev[1]; });
