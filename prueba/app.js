@@ -1918,7 +1918,7 @@
         '<p class="cap">Según ' + SRC() + ' del ' + A.fmt(R.ref) + '. Tocá un cuadro para ver el detalle. Reproducción: tasa de servicio del último ciclo terminado y concepción del último ciclo con resultados (la máxima si todavía no está tactado); en rojo con servicio menor a 50% o concepción menor a 40%, en amarillo con menos de 60% o 45%. Leche: litros por vaca en ordeñe del último mes con control, contra el mismo mes del año anterior (amarillo 5% menos, rojo 10% menos). Vacas preñadas: vacas en ordeñe y secas preñadas sobre las preñadas más las por preñar (sin descarte y con la espera voluntaria cumplida' + (P.E || P.DS ? '; aparte quedan ' + [P.E ? P.E + ' en espera' : '', P.DS ? P.DS + ' vacías con descarte' : ''].filter(Boolean).join(' y ') : '') + '), contra el promedio del mismo día de los 2 años anteriores' + (R.prAv && R.prAv.length === 2 ? ' (' + R.prAv.map(function (v) { return p0(v); }).join(' y ') + ')' : R.prAv ? ' (con historial de un solo año: ' + p0(R.prAv[0]) + ')' : '') + ' (amarillo 5 puntos menos, rojo 10). Último tacto: último día en que se tactaron 5 vacas en ordeñe o más (no cuentan vaquillonas, secas ni registros sueltos, como un aborto cargado como tacto); amarillo desde 21 días, rojo con más de 30.</p>';
     }
     // Celos perdidos: días entre un celo o servicio y el siguiente de cada animal en la temporada (mismo inicio que los ciclos de 21 días).
-    // Un intervalo de dos ciclos (por defecto 34 a 45 días) es un celo que no se vio a los 21 días.
+    // 17 a 24 días: ciclo normal; 25 a 60 días: celo no detectado; más de 60, aparte.
     function celosPerdidosHTML() {
       if (!DB.hist) return '';
       var ini = inicio21(), ref = DB.fecha || today(); if (ini > ref) return '';
@@ -1928,11 +1928,9 @@
       Object.keys(porDia).forEach(function (d) { if (porDia[d] >= 5 && (!ut || d > ut)) ut = d; });
       var vista = state.cpVista || 'tacto'; if (vista === 'tacto' && !ut) vista = 'zafra';
       var corte = vista === 'tacto' ? ut : null;
-      var mn = +(getP('cpmin') || 34), mx = +(getP('cpmax') || 45); if (!(mn > 25)) mn = 34; if (!(mx >= mn)) mx = mn + 11;
-      var M2 = Math.max(66, mx + 11); // dos ciclos perdidos hasta ~66 días; más largo, probable pérdida embrionaria o anestro
-      var B = [['Menos de 18 días', function (d) { return d < 18; }], ['18 a 24 días (un ciclo)', function (d) { return d >= 18 && d <= 24; }], ['25 a ' + (mn - 1) + ' días', function (d) { return d >= 25 && d < mn; }],
-        [mn + ' a ' + mx + ' días (un celo perdido)', function (d) { return d >= mn && d <= mx; }, 1], [(mx + 1) + ' a ' + M2 + ' días (dos celos perdidos)', function (d) { return d > mx && d <= M2; }, 2],
-        ['Más de ' + M2 + ' días (pérdida embrionaria o anestro)', function (d) { return d > M2; }]];
+      // 17 a 24 días = ciclo normal; 25 a 60 = celo no detectado (todo cuenta como falla de detección); más de 60, aparte
+      var B = [['Menos de 17 días', function (d) { return d < 17; }], ['17 a 24 días (ciclo normal)', function (d) { return d >= 17 && d <= 24; }],
+        ['25 a 60 días (celo no detectado)', function (d) { return d >= 25 && d <= 60; }, 1], ['Más de 60 días', function (d) { return d > 60; }]];
       var cnt = B.map(function () { return [0, 0]; }), tot = [0, 0], perd = [], vacas = {};
       var an = DB.animales.map(function (a) { return { a: a, h: DB.hist[a.rp] }; }).concat((DB.bajas || []).map(function (b) { return { a: b, h: DB.hist[b.key], baja: true }; }));
       an.forEach(function (x) {
@@ -1949,24 +1947,23 @@
         }
       });
       if (vista === 'zafra' && tot[0] < 10) return '';
-      var nP = cnt[3][0] + cnt[3][1] + cnt[4][0] + cnt[4][1], T = tot[0] + tot[1], pc = function (n, d) { return d ? nf(n / d * 100, 1) + '%' : '–'; };
-      CLAVE['Celos perdidos'] = nP + ' intervalos de ' + mn + ' a ' + M2 + ' días (' + pc(nP, T) + ' de ' + T + ') · ' + Object.keys(vacas).length + ' animales';
+      var nP = cnt[2][0] + cnt[2][1], nN = cnt[1][0] + cnt[1][1], T = tot[0] + tot[1], pc = function (n, d) { return d ? nf(n / d * 100, 1) + '%' : '–'; };
+      CLAVE['Celos perdidos'] = 'ciclo normal (17 a 24 días) ' + pc(nN, tot[0] + tot[1]) + ' · celo no detectado (25 a 60 días) ' + nP + ' intervalos (' + pc(nP, T) + ' de ' + T + ') · ' + Object.keys(vacas).length + ' animales';
       var hayQ = false;
       var filas = B.map(function (b, k) { return '<tr' + (b[2] ? ' class="cpk"' : '') + '><td>' + b[0] + '</td><td>' + nf(cnt[k][0]) + ' <small>' + pc(cnt[k][0], tot[0]) + '</small></td>' + (hayQ ? '<td>' + nf(cnt[k][1]) + ' <small>' + pc(cnt[k][1], tot[1]) + '</small></td>' : '') + '</tr>'; }).join('') +
         '<tr class="sep"><td><b>Total intervalos</b></td><td><b>' + nf(tot[0]) + '</b></td>' + (hayQ ? '<td><b>' + nf(tot[1]) + '</b></td>' : '') + '</tr>';
       var L = perd.filter(function (p) { return !p.x.baja; }).sort(function (a, b) { return a.e2[0] < b.e2[0] ? 1 : -1; });
       var ab = !!state.abiertas.cperd, lista = L.slice(0, ab ? L.length : 8).map(function (p) {
         var t = function (e) { return (e[1] === 'C' ? 'Celo ' : 'Serv. ') + A.fmt(e[0]).slice(0, 5); };
-        return rowHTML(p.x.a, { right: '<span class="when late">' + p.d + ' días</span>', sub: t(p.e1) + ' → ' + t(p.e2) + ' · ' + (p.n === 2 ? 'dos celos' : 'un celo') });
+        return rowHTML(p.x.a, { right: '<span class="when late">' + p.d + ' días</span>', sub: t(p.e1) + ' → ' + t(p.e2) });
       }).join('') + (L.length > 8 ? '<button class="btn more" data-a="ver" data-k="cperd">' + (ab ? 'Ver menos' : 'Ver las ' + L.length) + '</button>' : '');
       return '<section class="card"><h2>Celos perdidos</h2>' +
         '<div class="filters cpv">' + [['tacto', 'Desde el último tacto'], ['zafra', 'Toda la zafra']].map(function (v) { return '<button class="fchip plain" data-cpv="' + v[0] + '" aria-pressed="' + (vista === v[0]) + '"' + (v[0] === 'tacto' && !ut ? ' disabled' : '') + '>' + v[1] + '</button>'; }).join('') + '</div>' +
         '<p class="secnote" style="margin:6px 0 0">' + (vista === 'tacto' ? 'Repeticiones después del tacto del ' + A.fmt(ut) + '.' : 'Toda la zafra, desde el ' + A.fmt(ini) + '.') + ' Solo vacas (sin vaquillonas).</p>' +
-        (T ? '' : '<p class="hint">Todavía no hay repeticiones después del último tacto.</p>') + '<div class="kpis kpis2"><div><b>' + pc(nP, T) + '</b><span>Con celo perdido (' + mn + ' a ' + M2 + ' días) · ' + nP + ' de ' + T + '</span></div><div><b>' + Object.keys(vacas).length + '</b><span>Vacas con celo perdido</span></div></div>' +
-        '<div class="cprng">Celo perdido de <input type="number" inputmode="numeric" id="cpmin" value="' + mn + '" min="26" max="60"> a <input type="number" inputmode="numeric" id="cpmax" value="' + mx + '" min="27" max="70"> días</div>' +
+        (T ? '' : '<p class="hint">Todavía no hay repeticiones después del último tacto.</p>') + '<div class="kpis kpis2"><div><b>' + pc(nN, T) + '</b><span>Ciclo normal (17 a 24 días) · ' + nN + ' de ' + T + '</span></div><div><b>' + pc(nP, T) + '</b><span>Celo no detectado (25 a 60 días) · ' + nP + ' de ' + T + ' · ' + Object.keys(vacas).length + ' vacas</span></div></div>' +
         '<table class="tbl"><thead><tr><th>Días entre celos o servicios</th><th>Vacas</th>' + (hayQ ? '<th>Vaquill.</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
-        (L.length ? '<h3 class="vh3">Con celo perdido</h3>' + lista : '') +
-        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Zafra: desde el ' + A.fmt(ini) + ' (el mismo inicio de los ciclos de 21 días) hasta el ' + A.fmt(ref) + '. Desde el último tacto: solo los celos o servicios después del tacto' + (ut ? ' del ' + A.fmt(ut) : '') + ' (el día más reciente con 5 vacas o más tactadas en ordeñe), contando los días desde el celo o servicio anterior. Solo vacas: las vaquillonas (lactancia 0) no entran. Para cada vaca, los días entre un celo o servicio y el siguiente, sin parto en el medio; también cuentan las vacas que después se vendieron o murieron (no van en la lista). Un intervalo de ' + mn + ' a ' + mx + ' días son dos ciclos: el celo de los 21 días no se vio o no se anotó. De ' + (mx + 1) + ' a ' + M2 + ' días son tres ciclos: dos celos sin ver; los dos cuentan como celo perdido. Más de ' + M2 + ' días ya no se toma como celo perdido: suele ser una pérdida embrionaria o una vaca en anestro (revisar al tacto). El rango del celo perdido se cambia arriba.</p></details></section>';
+        (L.length ? '<h3 class="vh3">Celo no detectado (25 a 60 días)</h3>' + lista : '') +
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Zafra: desde el ' + A.fmt(ini) + ' (el mismo inicio de los ciclos de 21 días) hasta el ' + A.fmt(ref) + '. Desde el último tacto: solo los celos o servicios después del tacto' + (ut ? ' del ' + A.fmt(ut) : '') + ' (el día más reciente con 5 vacas o más tactadas en ordeñe), contando los días desde el celo o servicio anterior. Solo vacas: las vaquillonas (lactancia 0) no entran. Para cada vaca, los días entre un celo o servicio y el siguiente, sin parto en el medio; también cuentan las vacas que después se vendieron o murieron (no van en la lista). De 17 a 24 días es un ciclo normal: el celo siguiente se vio a tiempo. De 25 a 60 días cuenta todo como celo no detectado (uno o más celos que no se vieron o no se anotaron). Más de 60 días va aparte.</p></details></section>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
@@ -3276,7 +3273,7 @@
     }
     // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
     var DESC = {
-      'Partos': 'Vacas y vaquillonas, mes a mes', 'Salidas tempranas': 'Vendidas o muertas antes de los 60 días de paridas', 'Celos perdidos': 'Vacas que repitieron a los dos ciclos', 'Vacas por año': 'Ordeñe y vaca masa promedio, año a año', 'Calendario sanitario': 'El plan del año, mes a mes', 'sancal': 'El plan del año, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
+      'Partos': 'Vacas y vaquillonas, mes a mes', 'Salidas tempranas': 'Vendidas o muertas antes de los 60 días de paridas', 'Celos perdidos': 'Ciclo normal y celos no detectados entre servicios', 'Vacas por año': 'Ordeñe y vaca masa promedio, año a año', 'Calendario sanitario': 'El plan del año, mes a mes', 'sancal': 'El plan del año, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
