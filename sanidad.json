@@ -68,13 +68,13 @@
     },
     {
      "n": "Vaquillonas: Clostridios + Reproductiva",
-     "t": "mes",
+     "t": "fecha",
      "g": [
-      "vaquillona"
+      "vaca"
      ],
-     "m": [
-      4,
-      5
+     "f": [
+      "15/04",
+      "15/05"
      ]
     },
     {
