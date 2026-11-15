@@ -2759,7 +2759,7 @@
       // agrupadas por tema; un grupo sin tarjetas no muestra su título
       var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
-        grp('Lo que pasó', partosOcHTML() + salTempHTML() + vovsHTML()) +
+        grp('Lo que pasó', partosOcHTML() + vovsHTML() + salTempHTML()) +
         grp('Lo que viene', probables + proyHTML()) +
         grp('Reproducción', repHTML() + celosPerdidosHTML() + (prenOK() ? prenHTML() : '')) +
         grp('El rodeo', vacasAnioHTML() + idxCardHTML() + (prenOK() ? ccRodeoHTML() : '') + vidaHTML());
@@ -3277,7 +3277,7 @@
       'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
-      'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
+      'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Por lote': 'Litros y días en leche de cada lote', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
       'Top 5 del control': 'Las que más litros dieron', 'Cayeron más': 'Las que bajaron 20% o más', 'Por lactancia y por tercio': 'Litros según lactancia y días en leche',
       'tactarvq': 'Servidas sin tacto posterior', 'secar': 'Preñadas cerca del parto', 'partos': 'Partos probables de las próximas semanas', 'atrasados': 'Preñadas con el parto vencido hace más de 30 días',
       'venta': 'Las que cumplen tu criterio de venta', 'insem': 'Liquidación por número de servicio'
@@ -3560,6 +3560,19 @@
         var l = V.filter(f[1]); return l.length ? '<tr' + (i === 3 ? ' class="sep"' : '') + '><td>' + f[0] + '</td>' + grupo(l) + '</tr>' : '';
       }).join('');
       var tabla = '<section class="card"><h2>Por lactancia y por tercio</h2><table class="tbl"><thead><tr><th></th><th>Vacas</th><th>L/vaca</th><th>Kg sól.</th></tr></thead><tbody>' + filas + '</tbody></table></section>';
+      // por lote: el lote (rodeo) de cada vaca según el respaldo, con el último control
+      var LT = {}; V.forEach(function (v) { var k = v.a.rod || 'Sin lote'; (LT[k] = LT[k] || []).push(v); });
+      var lks = Object.keys(LT).sort(function (x, y) { return x === 'Sin lote' ? 1 : y === 'Sin lote' ? -1 : x.localeCompare(y, 'es', { numeric: true }); });
+      var porLote = lks.length > 1 ? (function () {
+        var fl = function (nom, l, cls) {
+          var cp = l.filter(function (v) { return v.prev && v.prev[1] > 0; }), d = cp.length ? prom(cp, function (v) { return v.lt - v.prev[1]; }) : null;
+          return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + esc(nom) + '</td><td>' + nf(l.length) + '</td><td><b>' + nf(prom(l, function (v) { return v.lt; }), 1) + '</b>' + (d != null ? ' <small class="' + (d >= 0 ? 'up' : 'dn') + '">' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + '</small>' : '') + '</td><td>' + nf(prom(l, function (v) { return v.del; })) + '</td><td>' + Math.round(l.filter(function (v) { return v.n === 1; }).length * 100 / l.length) + '%</td></tr>';
+        };
+        CLAVE['Por lote'] = lks.length + ' lotes';
+        return '<section class="card"><h2>Por lote</h2><p class="cap" style="margin:0 0 8px">Último control' + (C.fecha ? ' (' + A.fmt(C.fecha) + ')' : '') + ' según el lote en que está hoy cada vaca. Al lado de los litros, en verde o rojo, cuánto cambió cada lote desde el control anterior (mismas vacas).</p>' +
+          '<div class="tblw"><table class="tbl lotes"><thead><tr><th>Lote</th><th>Vacas</th><th>L/vaca</th><th>DEL</th><th>1ª lact.</th></tr></thead><tbody>' +
+          lks.map(function (k) { return fl(k, LT[k]); }).join('') + fl('Total', V, 'sep') + '</tbody></table></div></section>';
+      })() : '';
       var caen = conPrev.filter(function (v) { var d = v.prev[1] - v.lt; return d >= 4 && d / v.prev[1] >= 0.2; }).sort(function (x, y) { return (y.prev[1] - y.lt) / y.prev[1] - (x.prev[1] - x.lt) / x.prev[1]; });
       var caida = C.ant ? '<section class="card"><h2>Cayeron más · ' + caen.length + ' vacas</h2><p class="cap" style="margin:0 0 8px">Bajaron 20% o más (y al menos 4 L) respecto del control del ' + A.fmt(C.ant) + '.</p>' +
         (caen.length ? caen.slice(0, 40).map(function (v) { var pc = Math.round((v.prev[1] - v.lt) / v.prev[1] * 100); return rowHTML(v.a, { right: '<span class="when late">−' + pc + '%</span>', sub: nf(v.prev[1], 1) + ' → ' + nf(v.lt, 1) + ' L · ' + v.del + ' días en leche' }); }).join('') : '<p class="hint">Ninguna vaca cayó tanto.</p>') + '</section>' : '';
@@ -3571,7 +3584,7 @@
             sub: (i + 1) + 'º · ' + (pv != null ? 'antes ' + nf(pv, 1) + ' L (' + (d >= 0 ? '+' : '−') + nf(Math.abs(d), 1) + ')' : 'sin control anterior') + ' · ' + v.del + ' días en leche · ' + (v.n === 1 ? '1ª lactancia' : v.n + 'ª lactancia') });
         }).join('') + '</section>';
       var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
-      return '<h1 class="ptitle">Leche</h1>' + res + grp('Evolución', evolHTML() + curvasHTML()) + grp('Las vacas', top5 + caida + tabla);
+      return '<h1 class="ptitle">Leche</h1>' + res + grp('Evolución', evolHTML() + curvasHTML()) + grp('Las vacas', porLote + top5 + caida + tabla);
     }
 
     /* ----- activación por tambo: links firmados por el Dr. Mauro Torterolo ----- */
