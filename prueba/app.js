@@ -1583,8 +1583,8 @@
     function mesesStack(mv, mq) {
       var tot = mv.map(function (m, i) { return m.n + mq[i].n; });
       var max = Math.max.apply(null, tot); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
-      // solo del primer al último mes con partos (los meses vacíos de las puntas no se muestran)
-      var i0 = 0, i1 = tot.length - 1; while (!tot[i0]) i0++; while (!tot[i1]) i1--;
+      // desde este mes hasta el último mes con partos (los meses vacíos del final no se muestran; los del medio quedan con su raya)
+      var i0 = 0, i1 = tot.length - 1; while (!tot[i1]) i1--;
       mv = mv.slice(i0, i1 + 1); mq = mq.slice(i0, i1 + 1); tot = tot.slice(i0, i1 + 1);
       var nM = mv.length, W = 320, H = 150, padx = 6, gap = 5, bw = Math.min((W - padx * 2 - gap * (nM - 1)) / nM, 40), s = '', k = (H - 48) / max;
       var x0 = (W - (nM * bw + (nM - 1) * gap)) / 2;
