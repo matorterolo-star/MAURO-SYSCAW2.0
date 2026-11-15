@@ -1583,9 +1583,13 @@
     function mesesStack(mv, mq) {
       var tot = mv.map(function (m, i) { return m.n + mq[i].n; });
       var max = Math.max.apply(null, tot); if (!max) return '<p class="hint">No hay partos probables en los próximos 12 meses.</p>';
-      var W = 320, H = 150, padx = 6, gap = 5, bw = (W - padx * 2 - gap * 11) / 12, s = '', k = (H - 48) / max;
+      // solo del primer al último mes con partos (los meses vacíos de las puntas no se muestran)
+      var i0 = 0, i1 = tot.length - 1; while (!tot[i0]) i0++; while (!tot[i1]) i1--;
+      mv = mv.slice(i0, i1 + 1); mq = mq.slice(i0, i1 + 1); tot = tot.slice(i0, i1 + 1);
+      var nM = mv.length, W = 320, H = 150, padx = 6, gap = 5, bw = Math.min((W - padx * 2 - gap * (nM - 1)) / nM, 40), s = '', k = (H - 48) / max;
+      var x0 = (W - (nM * bw + (nM - 1) * gap)) / 2;
       mv.forEach(function (m, i) {
-        var x = padx + i * (bw + gap), base = H - 26, hv = m.n * k, hq = mq[i].n * k;
+        var x = x0 + i * (bw + gap), base = H - 26, hv = m.n * k, hq = mq[i].n * k;
         if (!mesReal(m)) { s += '<text class="mlbl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + m.label + '</text>'; return; }
         if (tot[i]) {
           if (hv) s += '<rect class="mbv" x="' + x.toFixed(1) + '" y="' + (base - hv).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hv.toFixed(1) + '"><title>' + m.label + ': ' + m.n + ' vacas</title></rect>';
