@@ -731,6 +731,194 @@
      ]
     }
    ]
+  },
+  "F28": {
+   "t": "El Terruño Sc",
+   "f": "2026-11-16",
+   "items": [
+    {
+     "n": "Sanidad",
+     "t": "mes",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ],
+     "m": [
+      3,
+      7,
+      11
+     ]
+    },
+    {
+     "n": "Aftosa",
+     "t": "mes",
+     "g": [
+      "vaca"
+     ],
+     "m": [
+      4
+     ]
+    },
+    {
+     "n": "Querato",
+     "t": "mes",
+     "g": [
+      "vaca"
+     ],
+     "m": [
+      9
+     ]
+    },
+    {
+     "n": "Secas: Ultrachoice + Saguaypicida + Diar 7",
+     "t": "pre",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ],
+     "d1": 65,
+     "d2": 55,
+     "x": "Al secar"
+    },
+    {
+     "n": "Preparto: Diar 7",
+     "t": "pre",
+     "g": [
+      "vaca",
+      "vaquillona"
+     ],
+     "d1": 30,
+     "d2": 21,
+     "x": "Al entrar al preparto"
+    },
+    {
+     "n": "Vaquillonas: Sanidad",
+     "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
+     "m": [
+      11
+     ]
+    },
+    {
+     "n": "Vaquillonas: Antiparasitario + Saguaypicida",
+     "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
+     "m": [
+      3,
+      9
+     ]
+    },
+    {
+     "n": "Vaquillonas: Ultrachoice + Reproductiva",
+     "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
+     "m": [
+      4,
+      5
+     ]
+    },
+    {
+     "n": "Recría: Aftosa",
+     "t": "mes",
+     "g": [
+      "ternera"
+     ],
+     "m": [
+      11
+     ],
+     "x": "Según campaña"
+    },
+    {
+     "n": "Recría: Antiparasitario + Saguaypicida",
+     "t": "mes",
+     "g": [
+      "ternera"
+     ],
+     "m": [
+      9
+     ]
+    },
+    {
+     "n": "Recría: Querato",
+     "t": "mes",
+     "g": [
+      "ternera"
+     ],
+     "m": [
+      9
+     ]
+    },
+    {
+     "n": "Desleche: Neumosan + Ultrachoice",
+     "t": "edad",
+     "g": [
+      "ternera"
+     ],
+     "d1": 2,
+     "d2": 3,
+     "x": "Al deslechar"
+    },
+    {
+     "n": "Caravana Mosca",
+     "t": "mes",
+     "g": [
+      "vaca",
+      "vaquillona",
+      "ternera"
+     ],
+     "m": [
+      11
+     ]
+    },
+    {
+     "n": "Reproductiva",
+     "t": "mes",
+     "g": [
+      "vaca"
+     ],
+     "m": [
+      5,
+      10
+     ]
+    },
+    {
+     "n": "Querato",
+     "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
+     "m": [
+      9
+     ]
+    },
+    {
+     "n": "Ultrachoice",
+     "t": "mes",
+     "g": [
+      "ternera"
+     ],
+     "m": [
+      8
+     ]
+    },
+    {
+     "n": "Rb51 Gen año anterior",
+     "t": "mes",
+     "g": [
+      "vaquillona"
+     ],
+     "m": [
+      1,
+      4
+     ]
+    }
+   ]
   }
  }
 }
