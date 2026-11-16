@@ -5551,7 +5551,11 @@
     listo.then(function () { setTimeout(sanFetch, 600); });
     root.addEventListener('online', sanFetch);
     root.addEventListener('online', revisarBloqueos);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) revisarBloqueos(); });
+    // al volver a la app (el iPhone deja la página abierta y no la recarga): si pasaron más de 10 minutos, se buscan datos nuevos del link
+    var ultBusca = Date.now();
+    function buscarAlVolver() { if (Date.now() - ultBusca < 600000) return; ultBusca = Date.now(); actualizarDesdeLink(); }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { revisarBloqueos(); buscarAlVolver(); } });
+    root.addEventListener('pageshow', function (e) { if (e.persisted) buscarAlVolver(); });
     var desdeHash = function () { var r = rpDeHash(); if (r) state.rp = r; };
     desdeHash(); render();
     listo.then(function (cambio) { if (cambio) { desdeHash(); render(); } });
