@@ -23,7 +23,7 @@
   var MUERTE8 = /^(death|meteorismo|general injury|hoof\/limb problems|injury\/trauma|fracture|downer cow|wounds and injuries)$/i;
   var SACRIF = /sacrific|muri[oó]|muert|desbolill|ca[ií]da|quebrad/i;
   var VENDE = /frigor|vendid|venta|descarte|remate|feria/i, CONSUMO = /consumo/i;
-  var TABLAS = ['_info.txt', 'BasicAnimal', 'AbstractAnimalEvent', 'XPObjectType', 'EventCalving', 'EventInsemination', 'EventPregCheck', 'EventExit', 'EventCullDecision', 'EventAbortion', 'Semen', 'User', 'PermissionPolicyUser', 'TextLookupItem', 'AbstractGroup', 'AnimalLactationSummary', 'HistoryAnimalDailyData', 'AnimalFarm', 'PedigreeInfo'];
+  var TABLAS = ['_info.txt', 'BasicAnimal', 'AbstractAnimalEvent', 'XPObjectType', 'EventCalving', 'EventInsemination', 'EventPregCheck', 'EventExit', 'EventCullDecision', 'EventAbortion', 'Semen', 'User', 'PermissionPolicyUser', 'TextLookupItem', 'AbstractGroup', 'AnimalLactationSummary', 'HistoryAnimalDailyData', 'AnimalFarm', 'PedigreeInfo', 'EventBCS'];
 
   /* ---------- zip: se leen solo los archivos pedidos ---------- */
   function u16(u, i) { return u[i] | (u[i + 1] << 8); }
@@ -98,7 +98,7 @@
     var E = {}, maxF = '0000';
     V('AbstractAnimalEvent', function (g) { var f = fch(g('DateAndTime')); if (!f) return; E[g('OID')] = { f: f, a: g('BasicAnimal'), t: tipo[g('ObjectType')] || '', ln: +g('LactationNumber') || 0, c: g('Comment') || '' }; });
     var hembra = function (id) { var a = A[id]; return a && a.sex === 2 && a.obj !== 'Bull'; };
-    var G = {}, g = function (id) { return G[id] || (G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [], dia: [] }); };
+    var G = {}, g = function (id) { return G[id] || (G[id] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [], dia: [], cc: [] }); };
     var visto = {}, unico = function (k) { if (visto[k]) return false; visto[k] = 1; return true; };
     var ver = function (f) { if (f > maxF) maxF = f; };
     var insem = {};
@@ -114,6 +114,8 @@
     // DelPro anota un celo con cada inseminación: solo cuentan los celos sin servicio ese día
     Object.keys(G).forEach(function (id) { var x = G[id], sv = {}; x.ev.forEach(function (e) { sv[e[0]] = 1; }); (x.celos || []).forEach(function (f) { if (!sv[f] && unico('C' + id + f)) x.ev.push([f, 'C', '', null]); }); delete x.celos; });
     V('EventPregCheck', function (r) { var e = E[r('OID')]; if (!e || !hembra(e.a) || !unico('T' + e.a + e.f)) return; ver(e.f); g(e.a).ta.push([e.f, r('Result') === '1' ? 1 : 2]); });
+    // condición corporal (escala 1 a 5): EventBCS, unida a la tabla general de eventos por OID
+    V('EventBCS', function (r) { var e = E[r('OID')], v = parseFloat(r('BCSValue')); if (!e || !(v > 0) || !hembra(e.a)) return; g(e.a).cc.push([e.f, Math.round(v * 100) / 100]); });
     V('EventAbortion', function (r) { var e = E[r('OID')]; if (!e || !hembra(e.a)) return; ver(e.f); g(e.a).ab.push(e.f); });
     V('EventCalving', function (r) {
       var e = E[r('OID')]; if (!e || !hembra(e.a) || !unico('P' + e.a + e.f)) return; ver(e.f);
@@ -156,7 +158,7 @@
     if (ctrls.length) { var ult = ctrls[ctrls.length - 1]; if (sem[ult[0]].n < 4) ctrls.pop(); }
 
     Object.keys(G).forEach(function (id) {
-      var x = G[id]; x.pa.sort(cmp); x.ev.sort(cmp); x.ta.sort(cmp); x.ct.sort(cmp); x.ab.sort(); x.sec.sort();
+      var x = G[id]; x.pa.sort(cmp); x.ev.sort(cmp); x.ta.sort(cmp); x.ct.sort(cmp); x.ab.sort(); x.sec.sort(); x.cc.sort(cmp);
       x.pa.forEach(function (p, i) { if (!p[1]) p[1] = i ? x.pa[i - 1][1] + 1 : 1; });
       x.pa.forEach(function (p, i) {
         var np = x.pa[i + 1], hasta = np ? np[0] : '9999';
@@ -176,7 +178,7 @@
       delete x.dia;
     });
 
-    var fantasmas = [], animales = [], hist = {}, bajas = [], vacio = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [] }, usados = {};
+    var fantasmas = [], animales = [], hist = {}, bajas = [], vacio = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [], cc: [] }, usados = {};
     var pa2 = function (P) { return P.filter(function (p) { return !/^A/.test(p[2] || ''); }).map(function (p) { return [p[0], p[5] || null]; }); }, VL = [];
     var rpDe = function (id) { var a = A[id]; return a ? a.num || a.reg || null : null; };
     Object.keys(A).forEach(function (id) {
@@ -192,7 +194,7 @@
         bajas.push({ key: key, rp: rp, nombre: a.nom || null, cat: catB, u: null, dFecha: null, bFecha: bF, bTipo: tipoB, bCausa: s.m || null });
         var paB = x.pa.filter(function (p) { return p[0] >= desdeHist; }); if (!paB.length && x.pa.length) paB = [x.pa[x.pa.length - 1]];
         var dB = paB.length ? paB[0][0] : '0000', dE = function (e) { return e[0] >= dB; }, nros = paB.map(function (p) { return p[1]; });
-        hist[key] = { mv: null, pa: paB, ev: x.ev.filter(dE), ta: x.ta.filter(dE), la: x.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: x.ct.filter(dE), ab: x.ab.filter(function (f) { return f >= dB; }), ult: true, fn: a.fn, ma: ma, pd: pd, vit: null };
+        hist[key] = { mv: null, ech: x.cc.filter(dE).length ? x.cc.filter(dE) : null, pa: paB, ev: x.ev.filter(dE), ta: x.ta.filter(dE), la: x.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: x.ct.filter(dE), ab: x.ab.filter(function (f) { return f >= dB; }), ult: true, fn: a.fn, ma: ma, pd: pd, vit: null };
         return;
       }
       // activa en DelPro pero con más de 3 años y ningún registro en 2 años (nunca se le dio la baja): no va a la libreta
@@ -227,7 +229,7 @@
         dLac: lp && (cat === 'vaca' || cat === 'seca') ? diffDays(ref, lp[0]) : null,
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
-      hist[rp] = { mv: null, ec: null, pa: x.pa, ev: x.ev, ta: x.ta, la: x.la, ct: x.ct, ab: x.ab, fn: a.fn, ma: ma, pd: pd, vit: null };
+      hist[rp] = { mv: null, ec: x.cc.length ? x.cc[x.cc.length - 1] : null, ech: (function () { var c = x.cc.filter(function (e) { return e[0] >= desdeHist; }); return c.length ? c : null; })(), pa: x.pa, ev: x.ev, ta: x.ta, la: x.la, ct: x.ct, ab: x.ab, fn: a.fn, ma: ma, pd: pd, vit: null };
     });
     animales.sort(function (p, q) { return p.rp.localeCompare(q.rp, 'es', { numeric: true }); });
     bajas.sort(function (p, q) { return (q.bFecha || '') < (p.bFecha || '') ? -1 : 1; });
