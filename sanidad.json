@@ -792,16 +792,6 @@
      "x": "Al entrar al preparto"
     },
     {
-     "n": "Vaquillonas: Sanidad",
-     "t": "mes",
-     "g": [
-      "vaquillona"
-     ],
-     "m": [
-      11
-     ]
-    },
-    {
      "n": "Vaquillonas: Antiparasitario + Saguaypicida",
      "t": "mes",
      "g": [
