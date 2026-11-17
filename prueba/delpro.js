@@ -159,6 +159,8 @@
 
     Object.keys(G).forEach(function (id) {
       var x = G[id]; x.pa.sort(cmp); x.ev.sort(cmp); x.ta.sort(cmp); x.ct.sort(cmp); x.ab.sort(); x.sec.sort(); x.cc.sort(cmp);
+      // control de la vaca: un dato por mes (la última semana de cada mes), como un control lechero mensual
+      x.ct = x.ct.filter(function (c, i, L) { return i === L.length - 1 || L[i + 1][0].slice(0, 7) !== c[0].slice(0, 7); });
       x.pa.forEach(function (p, i) { if (!p[1]) p[1] = i ? x.pa[i - 1][1] + 1 : 1; });
       x.pa.forEach(function (p, i) {
         var np = x.pa[i + 1], hasta = np ? np[0] : '9999';
