@@ -79,6 +79,7 @@
     });
     var G = {}; H.forEach(function (a) { G[a.g] = { pa: [], ev: [], ta: [], la: [], ct: [], ab: [], sec: [], baja: null, desc: null, ec: null, ctAll: [] }; });
     var maxF = '0000';
+    var partosH = [];
     filas(db, 'select EventoGUID, AnimalGUID, EventoFch, TipoEventoId from Evento where EventoEstadoId <> 2').forEach(function (r) {
       var g = G[r[1]], f = fch(r[2]), id = r[0], t = r[3]; if (!g || !f) return;
       if (f > maxF && t !== T.BAJA) maxF = f;
@@ -87,6 +88,7 @@
         var tp = D(id, 'TIPOPARTO', 'i').toUpperCase(), s1 = D(id, 'TERNEROSX1', 't').toUpperCase(), s2 = D(id, 'TERNEROSX2', 't').toUpperCase();
         var res = /ABORTO/.test(tp) ? 'A' : (s1 === 'H' || s1 === 'M' ? s1 : '') + (s2 === 'H' || s2 === 'M' ? '/' + s2 : '');
         g.pa.push([f, D(id, 'LACTANCIA', 'n') || 0, res, toro[D(id, 'PADREANIMALGUID', 't')] || '', null, null]);
+        if (/H/.test(res)) partosH.push({ mg: r[1], f: f, v: Object.keys(dato[id] || {}).map(function (k) { return String(dato[id][k].t || dato[id][k].i || '').trim(); }).filter(Boolean) });
       } else if (t === T.SERVICIO) g.ev.push([f, 'S', toro[D(id, 'TOROGUID', 't')] || '', ins[D(id, 'INSEMINADORID', 'n')] || null]);
       else if (t === T.CELO) g.ev.push([f, 'C', '', null]);
       else if (t === T.TACTO) { var e = D(id, 'ESTADOVACA', 'n'); if (e) g.ta.push([f, e]); }
@@ -137,6 +139,18 @@
     H.forEach(function (a) { G[a.g].ta.forEach(function (t) { if (!codes[t[1]]) codes[t[1]] = ['Estado ' + t[1], 'Estado ' + t[1] + ' (FOSAPP)', '']; }); });
 
     var animales = [], hist = {}, bajas = [];
+    // madre de cada hembra: columna de madre en Animal si la base la tiene; si no, la cría anotada en el parto
+    // (un dato del parto que es el GUID, el número o el RP de una hembra nacida dentro de los 7 días del parto)
+    var maOf = {}, porG = {}, porId = {};
+    H.forEach(function (a) { porG[a.g] = a; if (a.rp) (porId[a.rp] = porId[a.rp] || []).push(a); });
+    try {
+      var colM = filas(db, 'pragma table_info(Animal)').map(function (c) { return c[1]; }).filter(function (c) { return /madre/i.test(c); })[0];
+      if (colM) filas(db, 'select AnimalGUID, ' + colM + ' from Animal').forEach(function (r) { var m = r[1] != null ? String(r[1]).trim() : ''; if (!m) return; var M = porG[m] || (porId[m] || [])[0]; if (M && M.rp && M.g !== r[0]) maOf[r[0]] = M.rp; });
+    } catch (e) {}
+    partosH.forEach(function (P) {
+      var M = porG[P.mg]; if (!M || !M.rp) return;
+      P.v.forEach(function (v) { (porG[v] ? [porG[v]] : porId[v] || []).forEach(function (c) { if (c.g !== P.mg && c.fn && Math.abs(diffDays(c.fn, P.f)) <= 7 && !maOf[c.g]) maOf[c.g] = M.rp; }); });
+    });
     var pa2 = function (P) { return P.filter(function (p) { return !/^A/.test(p[2] || ''); }).map(function (p) { return [p[0], p[5] || null]; }); }, VL = [];
     H.forEach(function (a) {
       var g = G[a.g], rp = a.rp; if (!rp) return;
@@ -150,8 +164,8 @@
         if (!bF || bF >= desdeHist) {
           var paB = g.pa.filter(function (p) { return p[0] >= desdeHist; }); if (!paB.length && g.pa.length) paB = [g.pa[g.pa.length - 1]];
           var dB = paB.length ? paB[0][0] : '0000', dE = function (e) { return e[0] >= dB; }, nros = paB.map(function (p) { return p[1]; });
-          hist[key] = { mv: null, pa: paB, ev: g.ev.filter(dE), ta: g.ta.filter(dE), la: g.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: g.ct.filter(dE), ult: true, fn: a.fn, ma: null, pd: null, vit: null };
-        } else hist[key] = { pa: [], ev: [], ta: [], la: [], ct: [], fn: a.fn, ma: null, pd: null, vit: null, corto: true };
+          hist[key] = { mv: null, pa: paB, ev: g.ev.filter(dE), ta: g.ta.filter(dE), la: g.la.filter(function (l) { return nros.indexOf(l[0]) >= 0; }), ct: g.ct.filter(dE), ult: true, fn: a.fn, ma: maOf[a.g] || null, pd: null, vit: null };
+        } else hist[key] = { pa: [], ev: [], ta: [], la: [], ct: [], fn: a.fn, ma: maOf[a.g] || null, pd: null, vit: null, corto: true };
         return;
       }
       var lp = g.pa.length ? g.pa[g.pa.length - 1] : null, lpf = lp ? lp[0] : '0000';
@@ -182,7 +196,7 @@
         dLac: lp && (cat === 'vaca' || cat === 'seca') ? diffDays(ref, lp[0]) : null,
         prodLts: curLac ? curLac[1] : null, mej: mejs.length ? Math.max.apply(null, mejs) : null
       });
-      hist[rp] = { mv: null, ec: g.ec, pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: a.fn, ma: null, pd: null, vit: null };
+      hist[rp] = { mv: null, ec: g.ec, pa: g.pa, ev: g.ev, ta: g.ta, la: g.la, ct: g.ct, ab: g.ab, fn: a.fn, ma: maOf[a.g] || null, pd: null, vit: null };
     });
     animales.sort(function (x, y) { return x.rp.localeCompare(y.rp, 'es', { numeric: true }); });
     bajas.sort(function (x, y) { return (y.bFecha || '') < (x.bFecha || '') ? -1 : 1; });
