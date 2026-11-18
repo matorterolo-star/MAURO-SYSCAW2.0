@@ -2873,7 +2873,7 @@
     function lecturaHTML() {
       if (!esVet() || esOperario() || !DB.hist || !DB.animales.length) return '';
       var L = lecturaDatos(); if (!L.length) return '';
-      CLAVE['Lectura del tambo'] = L[0].t + ': ' + L[0].x;
+      // sin dato clave: en la imagen repetiría la primera frase
       return '<section class="card lect"><h2>Lectura del tambo</h2><p class="lsub">Solo preñeces confirmadas por tacto</p>' +
         L.map(function (l) { return '<div class="lln"><i class="ldot ' + l.c + '"></i><p><b>' + esc(l.t) + ':</b> ' + esc(l.x) + '</p></div>'; }).join('') +
         '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Estaciones: verano dic–feb, otoño mar–may, invierno jun–ago, primavera sep–nov. Partos: preñeces confirmadas por tacto, contra los partos reales de la misma estación del año anterior (si la estación todavía no está toda confirmada, se dice cuántos hay hasta ahora). Ordeñe: el mismo cálculo de "Rodeo por mes", promedio de la estación, contra el promedio real de la misma estación del año anterior. Tendencia: cada una de las últimas estaciones contra la misma del año anterior. Reposición: vacas con al menos un parto vendidas o muertas en los últimos 2 años, llevado a un año, contra las vaquillonas preñadas que figuran hoy en el programa. Verde: mejor que el año anterior o alcanza; rojo: peor o falta; amarillo: para mirar; gris: parecido.</p></details></section>';
