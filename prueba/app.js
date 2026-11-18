@@ -4278,7 +4278,10 @@
        veterinario sube datos nuevos, la app los toma sola al abrirse con internet. */
     var GH_REPO = 'matorterolo-star/MAURO-SYSCAW2.0';
     function ghToken() { try { return localStorage.getItem('libreta:gh') || ''; } catch (e) { return ''; } }
-    function dirDatos() { return /\/prueba\//.test(location.pathname) ? 'prueba/datos/' : 'datos/'; }
+    // los datos de los links van siempre a la carpeta de la app oficial (datos/), también si se suben o se abren desde /prueba/:
+    // así el productor recibe los datos nuevos aunque el veterinario los actualice desde la versión de prueba
+    function dirDatos() { return 'datos/'; }
+    function urlDatos(id) { return baseApp().replace(/prueba\/$/, '') + 'datos/' + id + '.bin'; }
     function baseApp() { return location.href.split('#')[0].split('?')[0].replace(/index\.html$/, ''); }
     function lnkMeta(id) { try { return JSON.parse(localStorage.getItem('libreta:lnk:' + id) || 'null'); } catch (e) { return null; } }
     function pedirToken() {
@@ -4413,7 +4416,7 @@
     }
     // bajar y descifrar los datos de un link
     function bajarLibreta(id, k) {
-      return fetch('datos/' + id + '.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) { var e = new Error(r.status === 404 ? 'Los datos todavía no están publicados. Probá de nuevo en un par de minutos.' : 'No pude bajar los datos (' + r.status + ').'); e.noPublicado = r.status === 404; throw e; } return r.arrayBuffer(); })
+      return fetch(urlDatos(id), { cache: 'no-cache' }).then(function (r) { if (!r.ok) { var e = new Error(r.status === 404 ? 'Los datos todavía no están publicados. Probá de nuevo en un par de minutos.' : 'No pude bajar los datos (' + r.status + ').'); e.noPublicado = r.status === 404; throw e; } return r.arrayBuffer(); })
         .then(function (buf) { return crypto.subtle.importKey('raw', unb64u(k), 'AES-GCM', false, ['decrypt']).then(function (key) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(buf, 0, 12) }, key, new Uint8Array(buf, 12)); }); })
         .then(function (plano) { return new Response(new Blob([plano]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); })
         .then(function (t) { var o = JSON.parse(t), d = o.d; d.unidades = d.unidades || []; d.sel = null; d.unidadesSel = []; return { subido: o.subido || '', d: d }; });
