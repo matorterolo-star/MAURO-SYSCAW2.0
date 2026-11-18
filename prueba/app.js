@@ -3161,6 +3161,18 @@
       var avg = function (l) { return l.length ? l.reduce(function (a, b) { return a + b; }, 0) / l.length : null; };
       return { segs: segs, spc: avg(spc), iep: avg(iep), pcon: avg(pcon), n: iep.length };
     }
+    // hijas de cada vaca (por la madre anotada en cualquier programa), para nombrar la cría hembra en el parto
+    var CRIAS = { k: null, m: null };
+    function criasDe(rp) {
+      var k = (DB.guardada || 0) + '|' + DB.animales.length + '|' + (DB.bajas || []).length;
+      if (CRIAS.k !== k) {
+        var M = {};
+        DB.animales.forEach(function (x) { var hh = DB.hist[x.rp]; if (hh && hh.ma && hh.fn) (M[hh.ma] = M[hh.ma] || []).push({ rp: x.rp, ir: x.rp, fn: hh.fn }); });
+        (DB.bajas || []).forEach(function (b) { var hh = DB.hist[b.key]; if (hh && hh.ma && hh.fn) (M[hh.ma] = M[hh.ma] || []).push({ rp: b.rp, ir: b.key, fn: hh.fn }); });
+        CRIAS = { k: k, m: M };
+      }
+      return CRIAS.m[rp] || [];
+    }
     function histHTML(a, h) {
       var t = today(), R = resumenHist(h), segs = R.segs.slice().reverse();
       var dec = function (x, d) { return x == null ? '–' : x.toLocaleString('es-UY', { maximumFractionDigits: d, minimumFractionDigits: d }); };
@@ -3180,7 +3192,12 @@
         var li = [];
         if (s.parto) {
           var pt = s.parto, cria = criaTxt(pt[2]);
-          li.push('<li class="parto"><span class="f">' + A.fmt(pt[0]) + '</span><span><b>Parto ' + pt[1] + '</b>' + (cria ? ' · ' + esc(cria) : '') + (pt[3] ? ' · ' + esc(pt[3]) : '') + '</span><span class="d"></span></li>');
+          // cría hembra registrada (nacida dentro de los 7 días del parto): su caravana, con link a su ficha
+          var hij = criasDe(a.rp).filter(function (c) { return Math.abs(A.diffDays(c.fn, pt[0])) <= 7; });
+          var hTxt = hij.map(function (c) { return 'Hembra ' + (byRp(c.ir) ? '<button class="lnk" data-rp="' + esc(c.ir) + '">' + esc(c.rp) + '</button>' : esc(c.rp)); }).join(' y ');
+          if (hij.length) { var mac = String(pt[2] || '').split('/').filter(function (x) { return x === 'M'; }).length; cria = hTxt + (mac ? ' y ' + (mac === 1 ? 'Macho' : mac + ' machos') : ''); }
+          else cria = cria ? esc(cria) : '';
+          li.push('<li class="parto"><span class="f">' + A.fmt(pt[0]) + '</span><span><b>Parto ' + pt[1] + '</b>' + (cria ? ' · ' + cria : '') + (pt[3] ? ' · ' + esc(pt[3]) : '') + '</span><span class="d"></span></li>');
         }
         s.items.forEach(function (it) {
           var dpp = s.parto ? A.diffDays(it.f, s.parto[0]) : null, cls, txt;
