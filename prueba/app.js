@@ -2768,6 +2768,116 @@
         '<table class="tbl vpatbl"><thead><tr><th>Año</th><th>Ordeñe</th>' + (hayS ? '<th>Secas</th><th>Masa</th>' : '') + '<th>Crec. ordeñe</th>' + (hayS ? '<th>Crec. masa</th>' : '') + '</tr></thead><tbody>' + filas + '</tbody></table>' +
         '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">' + (V.fuente === 'anim' ? 'Con los partos, secados y bajas de todas las vacas ' + (/^base/.test(SRCbase()) ? 'de la ' : 'del ') + SRCbase() + ' (también las que se fueron hace años): cuántas vacas había en ordeñe y secas cada día, promediado por mes y después por año. No depende del control lechero. El primer año con partos anotados queda afuera, porque las vacas que ya estaban no tienen su parto cargado. Si falta la fecha de secado, se toma 60 días antes del parto siguiente.' : 'Promedio de los controles lecheros de cada año: vacas ordeñadas y secas de cada control, primero por mes y después por año.' + ' Volvé a cargar la base o el respaldo del tambo para calcularlo con los animales, sin depender del control lechero.') + ' Vaca masa = en ordeñe + secas. Crecimiento: contra el año anterior. ' + (V0.length > V.length ? 'Se muestran los últimos ' + V.length + ' años; la historia empieza en ' + V0[0].y + '.' : 'Historia desde ' + pri.y + '.') + (hay ? ' * Año en curso, hasta ' + MESL[V[V.length - 1].mU - 1] + ': se compara con los mismos meses del año anterior.' : '') + (inc ? ' ** Año con menos de 10 meses de controles.' : '') + ' El % de cada barra es el crecimiento de ' + (hayS ? 'la vaca masa' : 'las vacas en ordeñe') + '. "Por año": cuánto creció (o bajó, en rojo) por año en promedio entre el primer año y el último completo.</p></details></section>';
     }
+    /* ----- Lectura del tambo (solo veterinario): lo que dicen los números, en frases -----
+       Solo con lo confirmado: partos de preñeces confirmadas por tacto, ordeñe proyectado como en "Rodeo por mes",
+       vaquillonas tal como están cargadas. Compara por estación del año (no un mes suelto). */
+    var EST = [['ver', 'Verano'], ['oto', 'Otoño'], ['inv', 'Invierno'], ['pri', 'Primavera']];
+    function estDe(key) { var y = +key.slice(0, 4), m = +key.slice(5, 7); return m === 12 ? { i: 0, y: y + 1 } : { i: m <= 2 ? 0 : m <= 5 ? 1 : m <= 8 ? 2 : 3, y: y }; }
+    function estMeses(e) { var M = [[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]][e.i]; return M.map(function (m) { return (m === 12 ? e.y - 1 : e.y) + '-' + pad2(m); }); }
+    function estSig(e, n) { var i = e.i + n, y = e.y; while (i > 3) { i -= 4; y++; } while (i < 0) { i += 4; y--; } return { i: i, y: y }; }
+    function estLbl(e) { return EST[e.i][1] + ' ' + String(e.y).slice(2); }
+    function finMes(key) { var y = +key.slice(0, 4), m = +key.slice(5, 7); return key + '-' + pad2(new Date(y, m, 0).getDate()); }
+    // vacas en ordeñe promedio de un mes pasado: historia larga del respaldo si está, si no los partos, secados y bajas
+    function ordMesPasado(key, minMes) {
+      var H = DB.vovsH;
+      if (H && H.u && H.desde) {
+        var y0 = +H.desde.slice(0, 4), m0 = +H.desde.slice(5, 7), i = (+key.slice(0, 4) - y0) * 12 + (+key.slice(5, 7) - 1) - (m0 - 1), s = null;
+        Object.keys(H.u).forEach(function (u) {
+          if (DB.sel && DB.sel.length && DB.sel.indexOf(+u) < 0 && DB.sel.indexOf(u) < 0) return;
+          var x = H.u[u][i]; if (x && x[0] != null) s = (s || 0) + x[0];
+        });
+        if (s) return s;
+      }
+      if (minMes && key < minMes) return null;
+      var r = vovsMeses([{ key: key }]); return r.vo[0];
+    }
+    var LECC = { k: null, r: null };
+    function lecturaDatos() {
+      var ref = DB.fecha || today(), hoy = today(), lim = limReal(), refK = ref.slice(0, 7);
+      var k = (DB.guardada || 0) + '|' + (DB.sel ? DB.sel.join(',') : '') + '|' + hoy + '|' + (state.simDesc ? 1 : 0);
+      if (LECC.k === k) return LECC.r;
+      var minMes = rangoVO().minMes, L = [], dh = DB.desdeHist || null;
+      var avg = function (v) { return v.length && v.every(function (x) { return x != null; }) ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; };
+      var dif = function (a, b) { return b ? (a / b - 1) * 100 : null; };
+      var pc = function (v) { return nf(Math.abs(Math.round(v))) + '\u00a0%'; };
+      // 1) partos de la estación que viene, contra la misma estación del año pasado
+      var pas = {}, fut = {};
+      infLista().forEach(function (x) { x.h.pa.forEach(function (p) { if (/^A/.test(p[2] || '') || p[0] > ref || !enSel(unidadEn(x, p[0]))) return; var kk = p[0].slice(0, 7); pas[kk] = (pas[kk] || 0) + 1; }); });
+      DB.animales.forEach(function (a) {
+        if (a.estado !== 'prenada' || a.cat === 'ternera') return;
+        var P = A.derive(a, ref).partoProb; if (!P || P < ref || P > lim) return;
+        var kk = P.slice(0, 7); fut[kk] = (fut[kk] || 0) + 1;
+      });
+      var e0 = estDe(refK), cand = [];
+      for (var n = 1; n <= 3; n++) {
+        var e = estSig(e0, n), M = estMeses(e), Ma = estMeses({ i: e.i, y: e.y - 1 });
+        if (M[0] + '-01' > lim) break;
+        var full = finMes(M[2]) <= lim, nf0 = M.reduce(function (s, kk) { return s + (fut[kk] || 0); }, 0);
+        var okA = (!dh || Ma[0] + '-01' >= dh) && finMes(Ma[2]) <= ref, na = okA ? Ma.reduce(function (s, kk) { return s + (pas[kk] || 0); }, 0) : null;
+        cand.push({ e: e, full: full, n: nf0, na: na });
+      }
+      // la estación que más pesó el año pasado (la parición fuerte del tambo); si no hay comparación, la que tiene más partos confirmados
+      var cP = cand.filter(function (c) { return c.na; }).sort(function (a, b) { return b.na - a.na; })[0] || cand.slice().sort(function (a, b) { return b.n - a.n; })[0];
+      if (cP && (cP.n || cP.na)) {
+        var la = estLbl({ i: cP.e.i, y: cP.e.y - 1 }).toLowerCase(), d = cP.na ? dif(cP.n, cP.na) : null;
+        if (cP.full && d != null) L.push({ c: Math.abs(d) < 5 ? 'eq' : d > 0 ? 'ok' : 'mal', t: estLbl(cP.e), x: nf(cP.n) + ' partos confirmados, ' + (Math.abs(d) < 0.5 ? 'igual que' : pc(d) + (d > 0 ? ' más que' : ' menos que')) + ' los ' + nf(cP.na) + ' del ' + la + '.' });
+        else if (cP.full) L.push({ c: 'eq', t: estLbl(cP.e), x: nf(cP.n) + ' partos confirmados.' });
+        else L.push({ c: cP.na && cP.n >= cP.na ? 'ok' : 'eq', t: estLbl(cP.e), x: 'ya hay ' + nf(cP.n) + ' partos confirmados' + (cP.na ? ' (el ' + la + ' tuvo ' + nf(cP.na) + ')' : '') + '; faltan tactar las servidas que parirían en esa estación.' });
+      }
+      // 2) vacas en ordeñe: promedio de la próxima estación completa que ya está confirmada (igual que "Rodeo por mes")
+      var sal = null;
+      if (state.simDesc === undefined) state.simDesc = getP('simdesc') === '1';
+      if (state.simDesc) { var MD = modeloDescarte(); if (MD && MD.L != null) { sal = {}; salidasDescarte(MD).forEach(function (x) { sal[x.a.rp] = x.f; }); } }
+      var P = A.proyeccion(DB.animales, hoy, 10, lim, sal), pm = {};
+      P.forEach(function (r, i) { if (i && r.okSec) pm[r.anio + '-' + pad2(A.MESES.indexOf(r.label) + 1)] = r.ord; });
+      for (var n2 = 1; n2 <= 3; n2++) {
+        var eo = estSig(estDe(hoy.slice(0, 7)), n2), Mo = estMeses(eo), vf = avg(Mo.map(function (kk) { return pm[kk] != null ? pm[kk] : null; }));
+        if (vf == null) continue;
+        var va = avg(estMeses({ i: eo.i, y: eo.y - 1 }).map(function (kk) { return kk < refK ? ordMesPasado(kk, minMes) : null; })), d2 = va ? dif(vf, va) : null;
+        L.push({ c: d2 == null || Math.abs(d2) < 3 ? 'eq' : d2 > 0 ? 'ok' : 'mal', t: estLbl(eo), x: 'promedio de ' + nf(vf) + ' vacas en ordeñe' + (d2 != null ? ', ' + (Math.abs(d2) < 0.5 ? 'igual que' : pc(d2) + (d2 > 0 ? ' más que' : ' menos que')) + ' el ' + estLbl({ i: eo.i, y: eo.y - 1 }).toLowerCase() + ' (' + nf(va) + ')' : '') + (sal ? '' : ', sin descontar descartes') + '.' });
+        break;
+      }
+      // 3) tendencia: las últimas 4 estaciones completas contra la misma estación del año anterior
+      var tl = [];
+      for (var n3 = 1; n3 <= 4; n3++) {
+        var et = estSig(e0, -n3), a1 = avg(estMeses(et).map(function (kk) { return ordMesPasado(kk, minMes); })), a0 = avg(estMeses({ i: et.i, y: et.y - 1 }).map(function (kk) { return ordMesPasado(kk, minMes); }));
+        if (a1 == null || !a0) break; tl.push(dif(a1, a0));
+      }
+      if (tl.length >= 3) {
+        var up = tl.filter(function (v) { return v > 2; }).length, dn = tl.filter(function (v) { return v < -2; }).length, md = tl.reduce(function (a, b) { return a + b; }, 0) / tl.length;
+        L.push(up >= tl.length - 1 ? { c: 'ok', t: 'Tendencia', x: 'el rodeo en ordeñe viene creciendo: ' + up + ' de las últimas ' + tl.length + ' estaciones por encima del año anterior (' + pc(md) + ' en promedio).' }
+          : dn >= tl.length - 1 ? { c: 'mal', t: 'Tendencia', x: 'el rodeo en ordeñe viene bajando: ' + dn + ' de las últimas ' + tl.length + ' estaciones por debajo del año anterior (' + pc(md) + ' en promedio).' }
+          : { c: 'eq', t: 'Tendencia', x: 'el rodeo en ordeñe viene estable: las últimas ' + tl.length + ' estaciones, cerca del año anterior.' });
+      }
+      // 4) reposición: vacas adultas que salen por año contra las vaquillonas preñadas que hay hoy en el programa
+      var d0 = dh && dh > A.addDays(ref, -730) ? dh : A.addDays(ref, -730), dias = A.diffDays(ref, d0), nb = 0;
+      if (dias >= 330) {
+        (DB.bajas || []).forEach(function (b) {
+          if (!b.bFecha || b.bFecha <= d0 || b.bFecha > ref) return;
+          var h = DB.hist[b.key], adulta = h && h.pa ? h.pa.some(function (pp) { return pp[0] <= b.bFecha; }) : (b.cat === 'vaca' || b.cat === 'seca');
+          if (adulta) nb++;
+        });
+        var nec = Math.round(nb / dias * 365), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; }), qp = Q.filter(function (a) { return a.estado === 'prenada'; }).length, qn = Q.length - qp;
+        if (nec > 0) {
+          var falta = nec - qp, otras = qn ? ' Hay además ' + nf(qn) + (qn === 1 ? ' vaquillona sin preñar.' : ' vaquillonas sin preñar.') : '';
+          L.push(falta > 0 ? { c: 'mal', t: 'Reposición', x: 'salen unas ' + nf(nec) + ' vacas por año. Con las vaquillonas que hay hoy en el programa (' + nf(qp) + (qp === 1 ? ' preñada' : ' preñadas') + '), ' + (falta === 1 ? 'falta 1.' : 'faltan ' + nf(falta) + '.') + otras }
+            : { c: 'ok', t: 'Reposición', x: 'salen unas ' + nf(nec) + ' vacas por año y hay ' + nf(qp) + ' vaquillonas preñadas: alcanzan.' + otras });
+        }
+      }
+      // 5) vacas en ordeñe con muchos días de paridas y sin preñez confirmada
+      var vac = DB.animales.filter(function (a) { return (a.cat === 'vaca' || !a.cat) && a.estado !== 'prenada' && !a.rech && a.pFecha && A.diffDays(ref, a.pFecha) > 200; });
+      if (vac.length) { var sv = vac.filter(function (a) { return a.estado === 'servida'; }).length; L.push({ c: 'at', t: 'Sin preñar', x: nf(vac.length) + (vac.length === 1 ? ' vaca en ordeñe' : ' vacas en ordeñe') + ' con más de 200 días de paridas y sin preñez confirmada' + (sv ? ' (' + nf(sv) + ' servidas, esperando tacto)' : '') + '.' }); }
+      LECC = { k: k, r: L };
+      return L;
+    }
+    function lecturaHTML() {
+      if (!esVet() || esOperario() || !DB.hist || !DB.animales.length) return '';
+      var L = lecturaDatos(); if (!L.length) return '';
+      CLAVE['Lectura del tambo'] = L[0].t + ': ' + L[0].x;
+      return '<section class="card lect"><h2>Lectura del tambo</h2><p class="lsub">Solo preñeces confirmadas por tacto</p>' +
+        L.map(function (l) { return '<div class="lln"><i class="ldot ' + l.c + '"></i><p><b>' + esc(l.t) + ':</b> ' + esc(l.x) + '</p></div>'; }).join('') +
+        '<details class="nota"><summary>Cómo se calcula</summary><p class="cap">Estaciones: verano dic–feb, otoño mar–may, invierno jun–ago, primavera sep–nov. Partos: preñeces confirmadas por tacto, contra los partos reales de la misma estación del año anterior (si la estación todavía no está toda confirmada, se dice cuántos hay hasta ahora). Ordeñe: el mismo cálculo de "Rodeo por mes", promedio de la estación, contra el promedio real de la misma estación del año anterior. Tendencia: cada una de las últimas estaciones contra la misma del año anterior. Reposición: vacas con al menos un parto vendidas o muertas en los últimos 2 años, llevado a un año, contra las vaquillonas preñadas que figuran hoy en el programa. Verde: mejor que el año anterior o alcanza; rojo: peor o falta; amarillo: para mirar; gris: parecido.</p></details></section>';
+    }
     function rodeoTodasHTML() {
       var h = today(), V = DB.animales.filter(function (a) { return a.cat === 'vaca' || a.cat === 'seca' || !a.cat; }), Q = DB.animales.filter(function (a) { return a.cat === 'vaquillona'; });
       var rv = A.resumen(V, h), rq = A.resumen(Q, h);
@@ -2786,7 +2896,7 @@
       var grp = function (t, html) { return html ? '<p class="grp">' + t + '</p><div class="glist">' + html + '</div>' : ''; };
       return '<h1 class="ptitle">Rodeo</h1>' + catsHTML() +
         grp('Lo que pasó', partosOcHTML() + vovsHTML() + salTempHTML()) +
-        grp('Lo que viene', probables + proyHTML()) +
+        grp('Lo que viene', lecturaHTML() + probables + proyHTML()) +
         grp('Reproducción', repHTML() + celosPerdidosHTML() + (prenOK() ? prenHTML() : '')) +
         grp('El rodeo', vacasAnioHTML() + idxCardHTML() + (prenOK() ? ccRodeoHTML() : '') + vidaHTML());
     }
@@ -3300,7 +3410,7 @@
     // qué hay adentro de cada tarjeta o lista: una línea gris debajo del título
     var DESC = {
       'Partos': 'Vacas y vaquillonas, mes a mes', 'Salidas tempranas': 'Vendidas o muertas antes de los 60 días de paridas', 'Celos perdidos': 'Ciclo normal y celos no detectados entre servicios', 'Vacas por año': 'Ordeñe y vaca masa promedio, año a año', 'Calendario sanitario': 'El plan del año, mes a mes', 'sancal': 'El plan del año, mes a mes', 'Producción': 'Litros por vaca y días en leche del último control', 'Por rodeo': 'Animales y preñadas en cada rodeo', 'Reproducción de vaquillonas': 'Concepción, preñez y servicios por zafra', 'Ordeñe y secas': 'Cómo vinieron los últimos 12 meses',
-      'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
+      'Lectura del tambo': 'Lo que dicen los números, en palabras', 'Partos por mes': 'Los partos que se vienen', 'Rodeo por mes': 'Ordeñe, secas y preparto que se vienen',
       'Ciclos de 21 días': 'Servicio y concepción de cada ciclo', 'Comparar zafras': 'Los indicadores de cada zafra, lado a lado',
       'Índice del tambo': 'Las mejores y las peores vacas', 'Condición corporal': 'Al secado, al parto, a los 30 días y en la lactancia',
       'Últimos 12 meses': 'Litros y sólidos por vaca, mes a mes', 'Por lote': 'Litros y días en leche de cada lote', 'Curva de lactancia': 'Primíparas y multíparas según días en leche',
