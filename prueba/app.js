@@ -2041,13 +2041,32 @@
       return '<div class="c21pq ' + K.col + '"><div class="c21h"><b>¿Por qué ' + (K.col === 'ok' ? 'está en verde' : K.col === 'at' ? 'está en amarillo' : K.col === 'mal' ? 'está en rojo' : 'está en gris') + ' el ciclo ' + c.n + '?</b><small>' + A.fmt(c.ini).slice(0, 5) + ' al ' + A.fmt(c.fin).slice(0, 5) + '</small></div><p class="c21res">' + res + '</p>' +
         P.map(function (q) { return '<div class="lln"><i class="ldot ' + q.c + '"></i><div><p><b>' + esc(q.t) + ':</b> ' + esc(q.x) + '</p>' + (q.l || '') + '</div></div>'; }).join('') + '</div>';
     }
-    function ciclosPanelHTML(C, hab) {
+    function ciclosPanelHTML(C, hab, habP) {
       if (!esVet() || esOperario() || !C.length) return '';
       var ab = state.cicloPq, sel = C.filter(function (c) { return c.n === ab; })[0];
-      return '<div class="c21"><p class="c21t">Tocá un ciclo para ver por qué está de ese color</p><div class="c21chips">' + C.map(function (c) {
-        var K = cicloColor(c), v = c.cerrado ? Math.round(c.aptas ? c.pren / c.aptas * 100 : 0) + '%' : (K.ts != null ? Math.round(K.ts) + '%' : '–');
-        return '<button class="c21c ' + K.col + (c.cerrado ? '' : ' enc') + '" data-a="c21" data-n="' + c.n + '" aria-pressed="' + (ab === c.n) + '"><small>C' + c.n + '</small><b>' + v + '</b><small>' + (c.cerrado ? 'preñez' : 'servicio') + '</small></button>';
-      }).join('') + '</div>' + (sel ? cicloPqHTML(sel, C.svs.filter(function (s) { return s.c === sel.n; }), hab) : '') + '</div>';
+      var cerr = C.filter(function (c) { return c.cerrado; });
+      if (habP == null && cerr.length) { var a0 = 0, p0 = 0; cerr.forEach(function (c) { a0 += c.aptas; p0 += c.pren; }); if (a0) habP = p0 / a0 * 100; }
+      var n = C.length, W = 320, H = 150, mt = 20, mb = 20, bw = Math.min(30, (W - 8) / n * 0.72), paso = (W - 8) / n;
+      var mx = Math.max(20, habP || 0); cerr.forEach(function (c) { var v = c.aptas ? c.pren / c.aptas * 100 : 0; if (v > mx) mx = v; }); mx *= 1.12;
+      var Y = function (v) { return mt + (1 - v / mx) * (H - mt - mb); }, COL = { ok: 'var(--prenada)', at: 'var(--gold)', mal: 'var(--vacia)', eq: 'var(--bar)' };
+      var g = '';
+      if (habP != null) g += '<line x1="0" x2="' + W + '" y1="' + Y(habP).toFixed(1) + '" y2="' + Y(habP).toFixed(1) + '" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"/><text class="mlbl" x="' + (W - 2) + '" y="' + (Y(habP) - 4).toFixed(1) + '" text-anchor="end">habitual ' + Math.round(habP) + '%</text>';
+      C.forEach(function (c, i) {
+        var K = cicloColor(c), x = 4 + paso * i + (paso - bw) / 2, cx = (x + bw / 2).toFixed(1), on = ab === c.n;
+        g += '<g data-a="c21" data-n="' + c.n + '" role="button" tabindex="0" aria-pressed="' + on + '" style="cursor:pointer"><rect x="' + (4 + paso * i).toFixed(1) + '" y="0" width="' + paso.toFixed(1) + '" height="' + H + '" fill="transparent"/>';
+        if (c.cerrado) {
+          var v = c.aptas ? c.pren / c.aptas * 100 : 0, y = Y(v);
+          g += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(2, H - mb - y).toFixed(1) + '" rx="3" fill="' + COL[K.col] + '"' + (on ? ' stroke="var(--navy)" stroke-width="2.5"' : '') + '/><text class="val" x="' + cx + '" y="' + (y - 5).toFixed(1) + '" text-anchor="middle">' + Math.round(v) + '</text>';
+        } else {
+          var y2 = H - mb - 22;
+          g += '<rect x="' + x.toFixed(1) + '" y="' + y2 + '" width="' + bw.toFixed(1) + '" height="22" rx="3" fill="none" stroke="' + COL[K.col] + '" stroke-width="' + (on ? 2.5 : 1.5) + '" stroke-dasharray="3 2"/>';
+        }
+        g += '<text class="mlbl" x="' + cx + '" y="' + (H - 5) + '" text-anchor="middle"' + (on ? ' style="font-weight:700;fill:var(--ink)"' : '') + '>' + c.n + '</text></g>';
+      });
+      return '<div class="c21"><h3 class="vh3">Preñez por ciclo</h3><p class="c21t">Tocá una barra para ver por qué está de ese color</p>' +
+        '<svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Preñez por ciclo de 21 días">' + g + '</svg>' +
+        '<p class="cap">Punteadas: ciclos sin tactar del todo o que todavía no terminaron. Verde, amarillo o rojo según la tasa de servicio y la concepción del ciclo.</p>' +
+        (sel ? cicloPqHTML(sel, C.svs.filter(function (s) { return s.c === sel.n; }), hab) : '') + '</div>';
     }
     function repHTML() {
       if (DB.fuente !== 'syscaw' || !DB.hist) return '';
@@ -2059,11 +2078,12 @@
       var T = { aptas: 0, serv: 0, pren: 0, sOk: 0, sMal: 0 }, nCerr = 0;
       C.forEach(function (c) { if (!c.cerrado) return; nCerr++; ['aptas', 'serv', 'pren', 'sOk', 'sMal'].forEach(function (k) { T[k] += c[k]; }); });
       // referencia: concepción promedio de la temporada anterior (mismo inicio, un año antes); si no hay, los ciclos cerrados de esta
-      var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4), hab = null, habTxt = '';
+      var iniAnt = (+ini.slice(0, 4) - 1) + ini.slice(4), hab = null, habTxt = '', habP = null;
       if (iniAnt >= (DB.desdeHist != null ? DB.desdeHist : A.addDays(ref, -730))) {
         var CA = A.ciclos21(an, esPren, iniAnt, pev, A.addDays(ini, -1)), ok = 0, mal = 0, na = 0;
         CA.svs.forEach(function (s) { if (s.r === 'ok') ok++; else if (s.r === 'mal') mal++; });
         if (ok + mal >= 30) { hab = ok / (ok + mal) * 100; habTxt = 'temporada ' + A.fmt(iniAnt).slice(-4); }
+        var apA = 0, prA = 0; CA.forEach(function (c) { if (c.cerrado) { apA += c.aptas; prA += c.pren; } }); if (apA >= 100) habP = prA / apA * 100;
       }
       if (hab == null && T.sOk + T.sMal) { hab = T.sOk / (T.sOk + T.sMal) * 100; habTxt = 'los ciclos cerrados de esta temporada'; }
       var hayRojo = false;
@@ -2094,10 +2114,10 @@
         '<div class="secsel"><span>Espera voluntaria</span>' + PEVS.map(function (n) { return '<button class="fchip plain" data-pev="' + n + '" aria-pressed="' + (pev === n) + '">' + n + '</button>'; }).join('') + '<span>días <small>(' + pevTxt + ')</small></span></div>' +
         (C.length ? '<div class="kpis"><div><b>' + p(T.serv, T.aptas) + '</b><span>Tasa de servicio</span></div><div><b>' + p(T.sOk, T.sOk + T.sMal) + '</b><span>Tasa de concepción</span></div><div class="tp"><b>' + p(T.pren, T.aptas) + '</b><span>Tasa de preñez</span></div></div>' +
           '<p class="cap">Promedio de los ' + nCerr + ' ciclos cerrados.</p>' +
-          ciclosPanelHTML(C, hab) +
           torosHTML(C.svs) +
           '<p class="cap ralhint">Tocá la concepción de un ciclo para verla por toro e inseminador' + (hayRojo ? ' (en los ⚠ en rojo, también el aviso)' : '') + '.</p>' +
           '<table class="tbl rtbl"><thead><tr><th>Ciclo</th><th>Aptas</th><th>Servicio</th><th>Concep.</th><th>Conc. máx.</th><th>Preñez</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+          ciclosPanelHTML(C, hab, habP) +
           '<p class="cap">Vacas con al menos una lactancia (sin vaquillonas). <b>Aptas:</b> vacas vacías que cumplen ' + pev + ' días posparto dentro del ciclo, no marcadas como descarte programado y en el rodeo, más toda vaca servida en el ciclo aunque no haya cumplido la espera (como SysCaw). Una vaca servida en un ciclo anterior no es apta hasta que se la vuelva a servir o el tacto dé vacía (ahí cuenta para atrás). <b>Servicio:</b> aptas servidas / aptas. <b>Concepción:</b> servicios que preñaron / servicios con resultado conocido. <b>Conc. máx.:</b> lo mejor que puede dar el ciclo, contando como preñadas todas las servidas que no volvieron a servirse ni dieron vacía al tacto (no retorno). Solo cuenta servicios con al menos 24 días, para darles tiempo a repetir. <b style="color:var(--bad,#c0392b)">En rojo:</b> en los ciclos ya tactados (cerrados y con no más del 10% de sus servicios sin tacto) se marca la concepción; en los ciclos en curso o tactados en parte, la concepción máxima, cuando queda más de 10 puntos por debajo de la concepción habitual del tambo' + (habTxt ? ' (' + habTxt + ': ' + Math.round(hab) + '%)' : '') + '. <b>Alerta de toro o inseminador:</b> aparece cuando uno con 20 servicios o más en la temporada queda más de 10 puntos por debajo del resto en concepción máxima. <b>Preñez:</b> aptas que quedaron preñadas en el ciclo / aptas. Un ciclo queda <b>en curso</b> hasta que hay tacto 28 días después de que termina' + (C.ultTacto && C.ultTacto > '0000' ? ' (último tacto: ' + A.fmt(C.ultTacto) + ')' : '') + '.</p>' +
           '<button class="despbtn" data-a="repti" aria-expanded="' + !!state.repTI + '"><span>Concepción en el período por toro e inseminador</span><span class="chev">' + (state.repTI ? 'ocultar' : 'ver') + '</span></button>' +
           (state.repTI ? tiHTML(C.svs, 'Del ' + A.fmt(ini) + ' al ' + A.fmt(C[C.length - 1].fin < ref ? C[C.length - 1].fin : ref) + ' · ' + C.length + ' ciclos', 5, 'data-a="repti"') : '')
