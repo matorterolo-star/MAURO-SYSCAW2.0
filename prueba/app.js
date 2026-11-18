@@ -362,7 +362,9 @@
   }
   function setSecado(n) { SECADO = n; api.SECADO = n; }
   /* ===== índice del tambo: reproducción (70%) + leche (30%), comparado contra el propio tambo ===== */
-  var IDX_W = { da: 30, spc: 15, pc: 10, pe: 15, le: 30 };
+  // parto a primer celo fuera del índice (nov 2026): la mayoría de los tambos no anota celos y ese tramo ya está en los días abiertos;
+  // se sigue calculando y la ficha lo muestra como dato, sin puntos. El anestro se mira en el ¿Por qué? de los ciclos de 21 días
+  var IDX_W = { da: 35, spc: 20, pc: 0, pe: 15, le: 30 };
   function idxMedia(v) { var s = 0; v.forEach(function (x) { s += x; }); return v.length ? s / v.length : null; }
   function idxDesv(v, m) { if (v.length < 2) return null; var s = 0; v.forEach(function (x) { s += (x - m) * (x - m); }); return Math.sqrt(s / (v.length - 1)); }
   function idxZ(x, m, sd) { if (x == null || !sd) return null; var z = (x - m) / sd; return Math.max(-3, Math.min(3, z)); }
@@ -558,7 +560,7 @@
     // celos poco anotados: el dato parto–primer celo pesa menos
     var cobCelo = nPc ? nCelo / nPc : 0;
     var w = { da: IDX_W.da, spc: IDX_W.spc, pc: IDX_W.pc * Math.min(1, cobCelo / 0.5), pe: IDX_W.pe, le: IDX_W.le };
-    var resto = IDX_W.pc - w.pc; w.da += resto * IDX_W.da / (IDX_W.da + IDX_W.spc); w.spc += resto * IDX_W.spc / (IDX_W.da + IDX_W.spc);
+    var resto = IDX_W.pc - w.pc; if (resto > 0) { w.da += resto * IDX_W.da / (IDX_W.da + IDX_W.spc); w.spc += resto * IDX_W.spc / (IDX_W.da + IDX_W.spc); }
     vacas.forEach(function (V) {
       V.m = { da: idxMedia(V.da), spc: idxMedia(V.spc), pc: idxMedia(V.pc), pe: V.gestConf ? V.perd / V.gestConf : null };
       var zs = V.le.map(function (r) { return r.z; }).filter(function (z) { return z != null; });
@@ -3093,10 +3095,10 @@
         return '<button class="fchip" data-iv="' + v[0] + '" aria-pressed="' + (ver === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
       return '<section class="card"><h2>Índice del tambo</h2>' +
-        '<p class="cap" style="margin:0 0 10px">100 = promedio de las ' + r.n + ' vacas de este tambo. Toda la vida de cada vaca: días abiertos, servicios por concepción, parto a primer celo y leche a 305 días (' + (r.usaSol ? 'comparada en kg de sólidos' : r.hayAn ? 'comparada en litros: los análisis de sólidos no son regulares' : 'en litros, sin análisis de sólidos') + ').</p>' + chips +
+        '<p class="cap" style="margin:0 0 10px">100 = promedio de las ' + r.n + ' vacas de este tambo. Toda la vida de cada vaca: días abiertos (35%), servicios por concepción (20%), pérdidas de gestación (15%) y leche a 305 días (30%, ' + (r.usaSol ? 'comparada en kg de sólidos' : r.hayAn ? 'comparada en litros: los análisis de sólidos no son regulares' : 'en litros, sin análisis de sólidos') + ').</p>' + chips +
         L.slice(0, lim).map(function (V) { return rowHTML(V.a, { right: idxNum(V), sub: (ver === 'todas' ? V.puesto + 'º · ' : '') + idxMini(V, r) }); }).join('') +
         (L.length > lim ? '<button class="btn more" data-a="idxmas">Mostrar más (' + (L.length - lim) + ' restantes)</button>' : '') +
-        (r.celoBajo ? '<p class="cap">En este tambo se anotan pocos celos, así que el dato parto a primer celo pesa menos (' + Math.round(r.pesos.pc) + '%).</p>' : '') + '</section>';
+        '</section>';
     }
     function idxFichaHTML(a) {
       if (esOperario()) return '';
@@ -3115,6 +3117,8 @@
         return '<div class="ixc"><div class="ixl"><span>' + c[1] + ': <b>' + c[2] + '</b> <small>(tambo ' + c[3] + ')</small></span><b class="' + (p >= 0 ? 'up' : 'dn') + '">' + (p >= 0 ? '+' : '−') + nf(Math.abs(p), 1) + '</b></div>' +
           '<div class="ixt"><i class="' + (p >= 0 ? 'up' : 'dn') + '" style="' + (p >= 0 ? 'left:50%' : 'right:50%') + ';width:' + w.toFixed(1) + '%"></i></div></div>';
       }).join('');
+      // parto a primer celo o servicio: solo como dato, no suma ni resta puntos
+      if (V.m.pc != null) bar += '<div class="ixc"><div class="ixl"><span>Parto a primer celo o servicio: <b>' + nf1(V.m.pc) + ' d</b> <small>(tambo ' + nf(r.prom.pc) + ')</small></span><small class="ixinf" style="white-space:nowrap">sin puntos</small></div></div>';
       return '<section class="card"><div class="ixhead"><h2>Índice del tambo</h2>' + idxNum(V) + '</div>' +
         '<p class="cap" style="margin:-4px 0 8px">Puesto ' + V.puesto + ' de ' + r.n + (V.mejorQue != null ? ' · mejor que el ' + Math.min(99, V.mejorQue) + '% de las vacas del tambo' : '') + ' · ' + V.nLac + (V.nLac === 1 ? ' lactancia evaluada' : ' lactancias evaluadas') + (V.conf < 1 ? ' (cuenta ' + Math.round(V.conf * 100) + '% hasta tener 3)' : '') + '</p>' + bar +
         '<p class="cap">' + (r.usaSol ? 'La leche se compara en kg de sólidos.' : 'La leche se compara en litros' + (r.hayAn ? ' (en este tambo los análisis de sólidos no son regulares).' : '.')) +
