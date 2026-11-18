@@ -3435,14 +3435,20 @@
       return cargarH2C().then(function (h2c) {
         return h2c(w, { scale: 2.7, backgroundColor: '#EEF2F7', logging: false,
           onclone: function (doc) { Array.prototype.forEach.call(doc.styleSheets, function (sh) { var rs; try { rs = sh.cssRules; } catch (e) { return; } for (var q = rs.length - 1; q >= 0; q--) if (rs[q].media && /dark/.test(rs[q].media.mediaText)) sh.deleteRule(q); }); sinColorMix(doc); } });
-      }).then(function (cv) { w.remove(); marcaAgua(cv); return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); }, function (e) { w.remove(); throw e; });
+      }).then(function (cv) { var rc = selloDonde(w); w.remove(); marcaAgua(cv, rc); return new Promise(function (ok) { cv.toBlob(ok, 'image/png'); }); }, function (e) { w.remove(); throw e; });
     }
-    // marca de agua: la firma repetida en diagonal, muy tenue, sobre toda la imagen (aunque la recorten, sigue estando)
-    function marcaAgua(cv) {
-      var g = cv.getContext('2d'), k = 2.7, dx = 190 * k, dy = 90 * k, D = Math.sqrt(cv.width * cv.width + cv.height * cv.height);
-      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.translate(cv.width / 2, cv.height / 2); g.rotate(-25 * Math.PI / 180);
-      g.font = '500 ' + Math.round(13 * k) + 'px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif'; g.fillStyle = 'rgba(18,39,74,0.07)'; g.textBaseline = 'middle';
-      for (var y = -D / 2, f = 0; y < D / 2; y += dy, f++) for (var x = -D / 2 + (f % 2 ? dx / 2 : 0); x < D / 2; x += dx) g.fillText('Dr. Mauro Torterolo', x, y);
+    // marca de agua: sello chico "MT" en la esquina de abajo a la derecha de la tarjeta (si no hay tarjeta, de la imagen)
+    function selloDonde(w) {
+      var W = w.getBoundingClientRect(), c = w.querySelector('.shcard') || w, r = c.getBoundingClientRect();
+      return { x: r.right - W.left, y: r.bottom - W.top, k: 2.7 };
+    }
+    function marcaAgua(cv, rc) {
+      var g = cv.getContext('2d'), k = rc ? rc.k : 2.7, R = 24 * k;
+      var cx = rc ? (rc.x - 8 - 26) * k : cv.width - 34 * k, cy = rc ? (rc.y - 6 - 26) * k : cv.height - 34 * k;
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 0.16;
+      g.beginPath(); g.arc(cx, cy, R, 0, 2 * Math.PI); g.lineWidth = 2 * k; g.strokeStyle = '#12274A'; g.stroke();
+      g.fillStyle = '#12274A'; g.font = '500 ' + Math.round(17 * k) + 'px Georgia,"Times New Roman",serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('MT', cx, cy + 1 * k);
       g.restore();
     }
     // que: 'g' gráfico, 't' tabla, 'gt' las dos, 'todo' la tarjeta entera
