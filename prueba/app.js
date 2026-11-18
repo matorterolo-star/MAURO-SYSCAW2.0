@@ -515,7 +515,9 @@
         // topes para que una vaca muy extrema no desarme la escala del resto
         if (da != null && da > 0) { V.da.push(Math.min(da, 300)); V.nLac++; }
         if (spc) V.spc.push(Math.min(spc, 6));
-        if (pc != null && pc > 0) V.pc.push(Math.min(pc, 150));
+        // parto al primer celo o servicio: solo en las lactancias que cuentan en días abiertos y nunca más que esos días
+        // (una lactancia en curso todavía vacía y con menos de 150 días no entra en días abiertos: tampoco acá)
+        if (pc != null && pc > 0 && da != null && da > 0) V.pc.push(Math.min(pc, da, 150));
         var l = null; h.la.forEach(function (x) { if (x[0] === p[1]) l = x; });
         // leche: a 305 días; si la lactancia cerró antes de 305 días SysCaw no lo calcula y se usa su total. La lactancia en curso cuenta solo con 305 días cumplidos
         var lit305 = l ? (l[2] || (np ? l[1] : null)) : null;
