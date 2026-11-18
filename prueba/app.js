@@ -2867,6 +2867,9 @@
       // 5) vacas en ordeñe con muchos días de paridas y sin preñez confirmada
       var vac = DB.animales.filter(function (a) { return (a.cat === 'vaca' || !a.cat) && a.estado !== 'prenada' && !a.rech && a.pFecha && A.diffDays(ref, a.pFecha) > 200; });
       if (vac.length) { var sv = vac.filter(function (a) { return a.estado === 'servida'; }).length; L.push({ c: 'at', t: 'Sin preñar', x: nf(vac.length) + (vac.length === 1 ? ' vaca en ordeñe' : ' vacas en ordeñe') + ' con más de 200 días de paridas y sin preñez confirmada' + (sv ? ' (' + nf(sv) + ' servidas, esperando tacto)' : '') + '.' }); }
+      // de lo bueno a lo malo: verde, gris, amarillo y rojo al final (dentro de cada color, el orden de siempre)
+      var ORD = { ok: 0, eq: 1, at: 2, mal: 3 };
+      L = L.map(function (l, i) { l.i = i; return l; }).sort(function (a, b) { return ORD[a.c] - ORD[b.c] || a.i - b.i; });
       LECC = { k: k, r: L };
       return L;
     }
