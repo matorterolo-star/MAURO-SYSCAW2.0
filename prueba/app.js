@@ -3086,17 +3086,58 @@
     }
     function idxNum(V) { return '<b class="ixn' + (V.tier ? ' ix-' + V.tier : '') + '">' + V.idx + '</b>'; }
     var MEDALLA = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 2h8l-2 6h-4z" fill="currentColor" opacity=".55"/><circle cx="12" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 12l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z" fill="currentColor"/></svg>';
+    /* ----- índice por toro padre (solo veterinario): promedio de las hijas, reproducción y leche por separado ----- */
+    function padreDe(a) {
+      var h = DB.hist[a.rp]; if (!h) return null;
+      if (h.pd) return String(h.pd).trim() || null;
+      // sin padre en el animal (FOSAPP): el toro anotado en el parto de la madre en que nació
+      var hm = h.ma ? DB.hist[h.ma] : null, t = null;
+      if (hm && h.fn) (hm.pa || []).forEach(function (p) { if (!t && p[3] && Math.abs(A.diffDays(p[0], h.fn)) <= 7) t = String(p[3]).trim(); });
+      return t || null;
+    }
+    function idxTorosHTML(r) {
+      var G = {}, sinP = 0;
+      r.vacas.forEach(function (V) { var t = padreDe(V.a); if (!t) { sinP++; return; } (G[t] = G[t] || []).push(V); });
+      var rep = function (V) { var s = null; ['da', 'spc', 'pe'].forEach(function (k) { if (V.pts[k] != null) s = (s || 0) + V.pts[k]; }); return s; };
+      var prom = function (L, f) { var v = L.map(f).filter(function (x) { return x != null; }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; };
+      var T = Object.keys(G).map(function (t) { var L = G[t]; return { t: t, L: L, n: L.length, ix: prom(L, function (V) { return V.idx; }), re: prom(L, rep), le: prom(L, function (V) { return V.pts.le; }) }; });
+      var V5 = T.filter(function (x) { return x.n >= 5; }).sort(function (a, b) { return b.ix - a.ix; }), chicos = T.length - V5.length;
+      var sel = state.idxToro && G[state.idxToro] ? state.idxToro : null;
+      if (sel) {
+        var X = T.filter(function (x) { return x.t === sel; })[0], H = G[sel].slice().sort(function (a, b) { return b.raw - a.raw; });
+        return '<button class="btn" data-a="ixtoros" style="margin:0 0 8px">‹ Todos los toros</button><p class="cap" style="margin:0 0 6px"><b>' + esc(sel) + '</b> · ' + X.n + (X.n === 1 ? ' hija' : ' hijas') + ' con índice · promedio ' + Math.round(X.ix) + '</p>' +
+          H.map(function (V) { return rowHTML(V.a, { right: idxNum(V), sub: V.puesto + 'º · ' + idxMini(V, r) }); }).join('');
+      }
+      var sg = function (v) { if (v == null) return '<span class="itc">–</span>'; var k = Math.round(v); return '<span class="itc ' + (k >= 1 ? 'up' : k <= -1 ? 'dn' : '') + '">' + (k > 0 ? '+' : k < 0 ? '−' : '') + Math.abs(k) + '</span>'; };
+      var out = !V5.length ? '<p class="cap">Ningún toro tiene todavía 5 hijas o más con índice en este tambo.</p>'
+        : '<div class="itor"><div class="ith"><span>Toro · hijas</span><span class="itc">Reprod.</span><span class="itc">Leche</span><span class="itc ix">Índice</span></div>' +
+          V5.map(function (x) { var k = Math.round(x.ix); return '<button class="itr" data-a="ixtoro" data-tor="' + esc(x.t) + '"><span class="itn"><b>' + esc(x.t) + '</b> <small>· ' + x.n + '</small></span>' + sg(x.re) + sg(x.le) + '<span class="itc ix ' + (k >= 101 ? 'up' : k <= 99 ? 'dn' : '') + '">' + k + '</span></button>'; }).join('') + '</div>';
+      // madres e hijas: hijas de madres del 10% mejor contra el resto, y la correlación entre los dos índices
+      var P = []; r.vacas.forEach(function (V) { var h = DB.hist[V.a.rp], M = h && h.ma ? r.por[h.ma] : null; if (M) P.push([M, V]); });
+      var nota = '';
+      if (P.length >= 15) {
+        var tp = P.filter(function (q) { return q[0].tier === 'top'; }), ot = P.filter(function (q) { return q[0].tier !== 'top'; });
+        var mx = prom(P, function (q) { return q[0].idx; }), my = prom(P, function (q) { return q[1].idx; }), sxy = 0, sxx = 0, syy = 0;
+        P.forEach(function (q) { var dx = q[0].idx - mx, dy = q[1].idx - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; });
+        var cor = sxx && syy ? sxy / Math.sqrt(sxx * syy) : null;
+        if (tp.length >= 5 && ot.length >= 5) nota += 'Hijas de madres del 10% mejor: promedian ' + Math.round(prom(tp, function (q) { return q[1].idx; })) + ' (' + tp.length + '), contra ' + Math.round(prom(ot, function (q) { return q[1].idx; })) + ' del resto (' + ot.length + '). ';
+        if (cor != null) nota += 'Correlación entre el índice de la madre y el de la hija: ' + nf(cor, 2) + ' en ' + P.length + ' pares (' + (Math.abs(cor) < 0.1 ? 'casi nula' : Math.abs(cor) < 0.3 ? 'baja' : Math.abs(cor) < 0.5 ? 'moderada' : 'alta') + ').';
+      }
+      return out + (nota ? '<p class="cap" style="margin-top:10px">' + nota + '</p>' : '') +
+        '<p class="cap">Promedio del índice de las hijas de cada toro, con 5 hijas o más' + (chicos ? ' (' + chicos + (chicos === 1 ? ' toro con menos queda afuera' : ' toros con menos quedan afuera') + ')' : '') + '. Reproducción y leche: puntos promedio que suman o restan sus hijas. Con menos de 10 hijas la diferencia puede ser azar' + (sinP ? '; ' + sinP + ' vacas sin padre anotado' : '') + '.</p>';
+    }
     function idxCardHTML() {
       var r = IDX(); if (!r) return '';
       var ver = state.idxVer || 'top';
       var L = ver === 'top' ? r.vacas.slice(0, r.k10) : ver === 'peor' ? r.vacas.slice(-r.k10).reverse() : r.vacas;
       var lim = ver === 'todas' ? (state.idxN || 40) : L.length;
-      var chips = '<div class="filters" role="group" aria-label="Ranking">' + [['top', 'Mejores 10%'], ['peor', 'Peores 10%'], ['todas', 'Todas (' + r.n + ')']].map(function (v) {
+      var vet = esVet() && !esOperario(); if (ver === 'toro' && !vet) ver = 'top';
+      var chips = '<div class="filters" role="group" aria-label="Ranking">' + [['top', 'Mejores 10%'], ['peor', 'Peores 10%'], ['todas', 'Todas (' + r.n + ')']].concat(vet ? [['toro', 'Por toro']] : []).map(function (v) {
         return '<button class="fchip" data-iv="' + v[0] + '" aria-pressed="' + (ver === v[0]) + '">' + v[1] + '</button>';
       }).join('') + '</div>';
       return '<section class="card"><h2>Índice del tambo</h2>' +
         '<p class="cap" style="margin:0 0 10px">100 = promedio de las ' + r.n + ' vacas de este tambo. Toda la vida de cada vaca: días abiertos (35%), servicios por concepción (20%), pérdidas de gestación (15%) y leche a 305 días (30%, ' + (r.usaSol ? 'comparada en kg de sólidos' : r.hayAn ? 'comparada en litros: los análisis de sólidos no son regulares' : 'en litros, sin análisis de sólidos') + ').</p>' + chips +
-        L.slice(0, lim).map(function (V) { return rowHTML(V.a, { right: idxNum(V), sub: (ver === 'todas' ? V.puesto + 'º · ' : '') + idxMini(V, r) }); }).join('') +
+        (ver === 'toro' ? idxTorosHTML(r) : L.slice(0, lim).map(function (V) { return rowHTML(V.a, { right: idxNum(V), sub: (ver === 'todas' ? V.puesto + 'º · ' : '') + idxMini(V, r) }); }).join('')) +
         (L.length > lim ? '<button class="btn more" data-a="idxmas">Mostrar más (' + (L.length - lim) + ' restantes)</button>' : '') +
         '</section>';
     }
@@ -5630,7 +5671,7 @@
       if ((el = e.target.closest('[data-desp]'))) { state.desp = state.desp || {}; state.desp[el.dataset.desp] = !state.desp[el.dataset.desp]; render(); return; }
       if ((el = e.target.closest('[data-im]'))) { state.infModo = el.dataset.im; render(); return; }
       if ((el = e.target.closest('[data-ev]'))) { state.evMed = el.dataset.ev; render(); return; }
-      if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; render(); return; }
+      if ((el = e.target.closest('[data-iv]'))) { state.idxVer = el.dataset.iv; state.idxN = 40; state.idxToro = null; render(); return; }
       if ((el = e.target.closest('[data-v]'))) { state.ventana = +el.dataset.v; render(); return; }
       if ((el = e.target.closest('[data-go]'))) { state.filtro = el.dataset.go; state.q = ''; state.n = 60; setTab('buscar'); return; }
       if ((el = e.target.closest('[data-k]'))) { state.abiertas[el.dataset.k] = !state.abiertas[el.dataset.k]; render(); return; }
@@ -5645,6 +5686,8 @@
       else if (a === 'back') back();
       else if (a === 'mas') { state.n += 60; updateResults(); }
       else if (a === 'idxmas') { state.idxN = (state.idxN || 40) + 60; render(); }
+      else if (a === 'ixtoro') { state.idxToro = b.dataset.tor; render(); }
+      else if (a === 'ixtoros') { state.idxToro = null; render(); }
       else if (a === 'ajustes') openSheet('Ajustes');
       else if (a === 'cerrar') closeSheet();
       else if (a === 'guardar') guardarSheet();
